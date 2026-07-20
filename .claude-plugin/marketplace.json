@@ -1,0 +1,40 @@
+{
+  "name": "regionalstatistik-skills",
+  "owner": {
+    "name": "Sebastian Schürmann",
+    "email": "sebs@2xs.org"
+  },
+  "metadata": {
+    "description": "German regional official-statistics skills powered by the regionalstatistik-cli (Regionaldatenbank Deutschland GENESIS API)"
+  },
+  "plugins": [
+    {
+      "name": "regionalstatistik",
+      "source": "./",
+      "description": "Find the right regional-statistics object, fetch and decode its data by Kreis or Gemeinde, and export tables to CSV/Excel — over the Regionaldatenbank Deutschland GENESIS API via the regionalstatistik-cli.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Sebastian Schürmann",
+        "email": "sebs@2xs.org"
+      },
+      "license": "AGPL-3.0-or-later",
+      "repository": "https://github.com/maschinenlesbar-org/regionalstatistik-cli",
+      "homepage": "https://github.com/maschinenlesbar-org/regionalstatistik-cli#readme",
+      "category": "government",
+      "keywords": [
+        "regionalstatistik",
+        "regionaldatenbank",
+        "genesis",
+        "genesis-online",
+        "statistik",
+        "official-statistics",
+        "regional-statistics",
+        "kreise",
+        "gemeinden",
+        "germany",
+        "opendata",
+        "bund.dev"
+      ]
+    }
+  ]
+}

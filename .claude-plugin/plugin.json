@@ -1,0 +1,26 @@
+{
+  "name": "regionalstatistik",
+  "version": "0.1.0",
+  "description": "German regional official-statistics skills powered by the regionalstatistik-cli (Regionaldatenbank Deutschland GENESIS API).",
+  "author": {
+    "name": "Sebastian Schürmann",
+    "email": "sebs@2xs.org"
+  },
+  "license": "AGPL-3.0-or-later",
+  "repository": "https://github.com/maschinenlesbar-org/regionalstatistik-cli",
+  "homepage": "https://github.com/maschinenlesbar-org/regionalstatistik-cli#readme",
+  "keywords": [
+    "regionalstatistik",
+    "regionaldatenbank",
+    "genesis",
+    "genesis-online",
+    "statistik",
+    "official-statistics",
+    "regional-statistics",
+    "kreise",
+    "gemeinden",
+    "germany",
+    "opendata",
+    "bund.dev"
+  ]
+}
