@@ -1,0 +1,20 @@
+# The only repo-specific texts of the website. Everything else comes from the
+# repository: the English intro from README.md, the commands from the built CLI.
+
+# How the API is accessed: open | key (env: VAR) | account (token, user, password: VARs)
+access:
+  type: account
+  token: REGIONALSTATISTIK_API_TOKEN
+  user: REGIONALSTATISTIK_USERNAME
+  password: REGIONALSTATISTIK_PASSWORD
+
+de:
+  # German version of the README's intro paragraph. Keep it in step with README.md.
+  intro: >-
+    Ein TypeScript-**API-Client mit CLI** für die GENESIS-REST-API der **Regionaldatenbank
+    Deutschland** (Version 2020) unter
+    [www.regionalstatistik.de](https://www.regionalstatistik.de) – die Datenbank der amtlichen
+    Regionalstatistik, betrieben von den Statistischen Ämtern des Bundes und der Länder. Sie
+    enthält die amtlichen Zahlen **unterhalb** der Bundesebene bis hinunter zu
+    Regierungsbezirk, **Kreis** und **Gemeinde** – Bevölkerung, Beschäftigung, Wahlen,
+    Flächennutzung und vieles mehr, gegliedert nach den amtlichen Regionalschlüsseln AGS/ARS.

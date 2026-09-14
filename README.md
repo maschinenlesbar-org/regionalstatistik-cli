@@ -1,5 +1,7 @@
 # regionalstatistik-cli
 
+**Website:** [English](https://maschinenlesbar-org.github.io/regionalstatistik-cli/) · [Deutsch](https://maschinenlesbar-org.github.io/regionalstatistik-cli/de/) — command reference, guides and API docs
+
 A TypeScript **API client and CLI** for the **Regionaldatenbank Deutschland**
 GENESIS REST API (version 2020) at
 [www.regionalstatistik.de](https://www.regionalstatistik.de) — Germany's
