@@ -1,7 +1,7 @@
 # Skills
 
-`regionalstatistik-cli` ships **Claude Code Agent Skills** as a plugin
-marketplace, so Claude can drive the `regstat` CLI for common regional
+`regionalstatistik-cli` ships **Claude Code Agent Skills** as a Claude Code
+plugin, so Claude can drive the `regstat` CLI for common regional
 official-statistics tasks. The skills **validate** that the `regstat` CLI is on
 your PATH and tell you if it is missing — they never install anything.
 
@@ -23,11 +23,18 @@ They compose: **finder → data-fetch** (or **→ table-download**).
 
 ## Installing the plugin
 
-This repo is a Claude Code plugin marketplace (`.claude-plugin/marketplace.json`
-+ `.claude-plugin/plugin.json` + `skills/`). Add it as a marketplace in Claude
-Code to enable the three skills. The `skills/` and `.claude-plugin/` files are
-**not** shipped in the npm tarball — the published package is the client/CLI
-only.
+This repo is a Claude Code plugin (`.claude-plugin/plugin.json` + `skills/`),
+published as `regionalstatistik` in the
+[maschinenlesbar.org plugin marketplace](https://github.com/maschinenlesbar-org/plugins).
+Install it inside Claude Code to enable the three skills:
+
+```
+/plugin marketplace add maschinenlesbar-org/plugins
+/plugin install regionalstatistik@maschinenlesbar
+```
+
+The `skills/` and `.claude-plugin/` files are **not** shipped in the npm tarball
+— the published package is the client/CLI only.
 
 The data these skills surface belongs to the Statistische Ämter des Bundes und
 der Länder, under DL-DE-BY-2.0 — see [DATA_LICENSE.md](DATA_LICENSE.md). Cite
