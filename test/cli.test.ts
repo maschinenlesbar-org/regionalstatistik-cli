@@ -299,6 +299,17 @@ test("a commander usage error (bad option value) exits 2, not 1", async () => {
   assert.equal(cli.mt.calls.length, 0);
 });
 
+test("--timeout accepts up to the largest timer Node supports", async () => {
+  const cli = makeCli(() => jsonResponse(fx.whoami));
+  assert.equal(await run(["--timeout", "2147483647", "hello"], cli.deps), 0);
+  assert.equal(cli.mt.last().timeoutMs, 2_147_483_647);
+
+  const over = makeCli(() => jsonResponse(fx.whoami));
+  assert.equal(await run(["--timeout", "2147483648", "hello"], over.deps), 2);
+  assert.equal(over.mt.calls.length, 0);
+  assert.match(over.err.join("\n"), /Must be <= 2147483647/);
+});
+
 test("a missing required argument exits 2", async () => {
   const cli = makeCli(() => jsonResponse(fx.findResult));
   assert.equal(await run([...TOKEN, "find"], cli.deps), 2);
