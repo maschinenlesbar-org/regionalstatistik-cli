@@ -99,7 +99,7 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
       "max list results for find/catalogue (1..25000; ignored by data/metadata)",
       parseBoundedInt(1, 25000),
     )
-    .option("--timeout <ms>", "per-request timeout in ms (0 = no timeout)", parseIntArg)
+    .option("--timeout <ms>", "time limit per request in ms, whole response included (0 = no timeout)", parseIntArg)
     .option("--user-agent <ua>", "User-Agent header value", parseHeaderValue)
     .option(
       "--max-retries <n>",
