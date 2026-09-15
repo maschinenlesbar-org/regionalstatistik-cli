@@ -1,5 +1,9 @@
 # regionalstatistik-cli
 
+[![CI](https://github.com/maschinenlesbar-org/regionalstatistik-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/maschinenlesbar-org/regionalstatistik-cli/actions/workflows/ci.yml)
+[![Release](https://github.com/maschinenlesbar-org/regionalstatistik-cli/actions/workflows/release.yml/badge.svg)](https://github.com/maschinenlesbar-org/regionalstatistik-cli/actions/workflows/release.yml)
+[![npm](https://img.shields.io/npm/v/@maschinenlesbar.org/regionalstatistik-cli)](https://www.npmjs.com/package/@maschinenlesbar.org/regionalstatistik-cli)
+
 **Website:** [English](https://maschinenlesbar-org.github.io/regionalstatistik-cli/) · [Deutsch](https://maschinenlesbar-org.github.io/regionalstatistik-cli/de/) — command reference, guides and API docs
 
 A TypeScript **API client and CLI** for the **Regionaldatenbank Deutschland**
