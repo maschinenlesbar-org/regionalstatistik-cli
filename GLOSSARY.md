@@ -100,8 +100,9 @@ with 401/404:
 In a `data/table` CSV, a cell may be a status symbol instead of a number:
 `-` (nothing to report / genuine zero context), `.` (unknown/secret — common at
 Gemeinde level due to statistical confidentiality), `...` (not yet available),
-`/` (not meaningful), `x` (not applicable), `()` (limited informative value),
-`p` (provisional), `r` (revised), `s` (estimated).
+`/` (no figure: value not reliable enough), `x` (no meaningful statement
+possible), `()` (limited informative value), `p` (provisional), `r` (revised),
+`s` (estimated).
 
 ## Auth terms
 

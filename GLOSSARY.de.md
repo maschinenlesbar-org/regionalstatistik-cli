@@ -99,8 +99,9 @@ dieselbe Struktur mit 401/404:
 In einer CSV aus `data/table` kann eine Zelle statt einer Zahl ein Statuszeichen enthalten:
 `-` (nichts vorhanden / tatsächlich null), `.` (unbekannt oder geheim – auf
 Gemeindeebene wegen der statistischen Geheimhaltung häufig), `...` (noch nicht verfügbar),
-`/` (nicht sinnvoll), `x` (nicht zutreffend), `()` (eingeschränkter Aussagewert),
-`p` (vorläufig), `r` (berichtigt), `s` (geschätzt).
+`/` (keine Angabe, da Zahlenwert nicht sicher genug), `x` (keine sinnvolle Aussage
+möglich), `()` (eingeschränkter Aussagewert), `p` (vorläufig), `r` (berichtigt),
+`s` (geschätzt).
 
 ## Begriffe zur Authentifizierung
 
