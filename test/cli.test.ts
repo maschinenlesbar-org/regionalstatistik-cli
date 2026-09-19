@@ -138,6 +138,37 @@ test("a blank <term> on find is rejected before any request", async () => {
   assert.equal(cli.mt.calls.length, 0);
 });
 
+// A blank filter/selection/code (often an unset shell variable) is never
+// meaningful: it must be a usage error before any request, not an empty
+// `area=` / `selection=` sent in the POST body.
+const BLANK_CASES: { label: string; argv: string[] }[] = [
+  { label: "catalogue [selection]", argv: ["catalogue", "tables", ""] },
+  { label: "catalogue [selection] (whitespace)", argv: ["catalogue", "cubes", "   "] },
+  { label: "catalogue --area", argv: ["catalogue", "tables", "12411*", "--area", ""] },
+  { label: "catalogue --type", argv: ["catalogue", "values", "--type", ""] },
+  { label: "metadata --area", argv: ["metadata", "table", "12411-01-01-4", "--area", ""] },
+  { label: "data --area", argv: ["data", "table", "12411-01-01-4", "--area", ""] },
+  { label: "data --start-year", argv: ["data", "table", "12411-01-01-4", "--start-year", ""] },
+  { label: "data --end-year (whitespace)", argv: ["data", "cube", "X", "--end-year", "  "] },
+  { label: "data --region-var", argv: ["data", "table", "X", "--region-var", ""] },
+  { label: "data --region-key", argv: ["data", "tablefile", "X", "--region-key", ""] },
+  { label: "data --contents", argv: ["data", "timeseries", "X", "--contents", ""] },
+  { label: "data --stand", argv: ["data", "result", "X", "--stand", ""] },
+  ...[1, 2, 3, 4, 5].flatMap((i) => [
+    { label: `data --class-var${i}`, argv: ["data", "table", "X", `--class-var${i}`, ""] },
+    { label: `data --class-key${i}`, argv: ["data", "cubefile", "X", `--class-key${i}`, ""] },
+  ]),
+];
+
+for (const { label, argv } of BLANK_CASES) {
+  test(`a blank value for ${label} is rejected before any request`, async () => {
+    const cli = makeCli(() => jsonResponse(fx.tablesList));
+    const code = await run([...TOKEN, ...argv], cli.deps);
+    assert.notEqual(code, 0);
+    assert.equal(cli.mt.calls.length, 0);
+  });
+}
+
 test("--pagelength above the server cap (25000) is rejected client-side", async () => {
   const cli = makeCli(() => jsonResponse(fx.tablesList));
   const code = await run([...TOKEN, "--pagelength", "25001", "catalogue", "tables"], cli.deps);

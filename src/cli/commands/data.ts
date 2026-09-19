@@ -37,21 +37,21 @@ const FILE_SUBS: { name: string; desc: string; run: FileFn }[] = [
 /** Add the shared data-selection filter options to a command. */
 function addDataOptions(cmd: Command): Command {
   cmd
-    .option("--area <area>", "data area")
-    .option("--start-year <year>", "earliest year (YYYY)")
-    .option("--end-year <year>", "latest year (YYYY)")
+    .option("--area <area>", "data area", parseNonEmpty)
+    .option("--start-year <year>", "earliest year (YYYY)", parseNonEmpty)
+    .option("--end-year <year>", "latest year (YYYY)", parseNonEmpty)
     .option("--timeslices <n>", "number of time slices from the end", parseIntArg)
-    .option("--region-var <code>", "regional level variable (e.g. KREISE, GEMEIN)")
-    .option("--region-key <key>", "regional key: AGS/ARS code(s), `*` wildcard ok (e.g. `08*`, `08221`)")
-    .option("--contents <labels>", "restrict to these value labels (comma-separated)")
-    .option("--stand <date>", "only data newer than this date (DD.MM.YYYY)")
+    .option("--region-var <code>", "regional level variable (e.g. KREISE, GEMEIN)", parseNonEmpty)
+    .option("--region-key <key>", "regional key: AGS/ARS code(s), `*` wildcard ok (e.g. `08*`, `08221`)", parseNonEmpty)
+    .option("--contents <labels>", "restrict to these value labels (comma-separated)", parseNonEmpty)
+    .option("--stand <date>", "only data newer than this date (DD.MM.YYYY)", parseNonEmpty)
     .option("--structure", "include the dimension structure tree")
     .option("--transpose", "transpose rows and columns")
     .option("--compress", "compress repeated labels");
   for (let i = 1; i <= 5; i++) {
     cmd
-      .option(`--class-var${i} <code>`, `classifying variable ${i} code`)
-      .option(`--class-key${i} <key>`, `classifying key ${i} (value selection)`);
+      .option(`--class-var${i} <code>`, `classifying variable ${i} code`, parseNonEmpty)
+      .option(`--class-key${i} <key>`, `classifying key ${i} (value selection)`, parseNonEmpty);
   }
   return cmd;
 }

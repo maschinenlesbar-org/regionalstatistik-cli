@@ -6,7 +6,7 @@ import { Option, type Command } from "commander";
 import type { CliDeps } from "../io.js";
 import type { RegionalstatistikClient } from "../../client/client.js";
 import type { CatalogueParams } from "../../client/params.js";
-import { action, commonListParams, renderJson } from "../shared.js";
+import { action, commonListParams, parseNonEmpty, renderJson } from "../shared.js";
 
 type CatalogueFn = (client: RegionalstatistikClient, params: CatalogueParams) => Promise<unknown>;
 
@@ -50,14 +50,15 @@ export function registerCatalogueCommands(program: Command, deps: CliDeps): void
 
   for (const sub of SUBS) {
     cat
-      .command(`${sub.name} [selection]`)
+      .command(sub.name)
       .description(sub.desc)
-      .option("--area <area>", "data area (default server-side; try `all`)")
+      .argument("[selection]", "code selection, `*` wildcard ok (e.g. `12411*`)", parseNonEmpty)
+      .option("--area <area>", "data area (default server-side; try `all`)", parseNonEmpty)
       .addOption(
         new Option("--search-criterion <c>", "field `selection` matches").choices(["Code", "Content"]),
       )
       .addOption(new Option("--sort-criterion <c>", "result sort order").choices(["Code", "Content"]))
-      .option("--type <type>", "object subtype filter")
+      .option("--type <type>", "object subtype filter", parseNonEmpty)
       .action(
         action(deps, async ({ client, global, opts }, [selection]) => {
           renderJson(deps, global, await sub.run(client, buildParams(opts, selection, global)));

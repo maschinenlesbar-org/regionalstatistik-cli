@@ -33,7 +33,7 @@ export function registerMetadataCommands(program: Command, deps: CliDeps): void 
       .command(sub.name)
       .description(sub.desc)
       .argument("<name>", "object code (must be non-empty)", parseNonEmpty)
-      .option("--area <area>", "data area")
+      .option("--area <area>", "data area", parseNonEmpty)
       .action(
         action(deps, async ({ client, global, opts }, [name]) => {
           const params: MetadataParams = {};
