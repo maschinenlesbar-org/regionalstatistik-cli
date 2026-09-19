@@ -10,8 +10,13 @@ description: >
   regional topic into a concrete object code before pulling numbers. Searches
   with find, narrows with catalogue, and confirms the structure with metadata —
   handing back the exact code and the regional variables to filter by.
-version: 1.0.0
-userInvocable: true
+compatibility: >
+  Requires the `regstat` CLI (npm package
+  @maschinenlesbar.org/regionalstatistik-cli) on PATH, installed by the user;
+  the skill never installs it. Uses jq for JSON filtering. Network access to
+  www.regionalstatistik.de. Needs a registered GENESIS account: --token or
+  REGIONALSTATISTIK_API_TOKEN, or --username/--password or
+  REGIONALSTATISTIK_USERNAME/REGIONALSTATISTIK_PASSWORD.
 ---
 
 # Regionalstatistik Statistics Finder
@@ -25,6 +30,8 @@ needed to slice by district or municipality.
 ## Tooling
 
 This skill drives the `regstat` command. **Before anything else, validate it is available** — run `command -v regstat` (or `regstat --version`). If it is not on your PATH, STOP and inform the user that the `regstat` CLI (`@maschinenlesbar.org/regionalstatistik-cli`) is not installed — installing it is their responsibility; never install it yourself, and do not fall back to `npx` or a local `node dist/...` build.
+
+This skill also filters JSON with `jq`. **Validate it too** — run `command -v jq`. If it is missing, inform the user that `jq` is not installed — installing it is their responsibility; never install it yourself — and carry on without it: filter the CLI output with `node -e` instead (Node is already on your PATH, since the CLI runs on it).
 
 **Credentials are required** for everything except `regstat hello`. The Regionaldatenbank needs a free registered account (mandatory since May 2025). Supply a login via `REGIONALSTATISTIK_USERNAME` + `REGIONALSTATISTIK_PASSWORD` (or `--username`/`--password`), or an API token via `REGIONALSTATISTIK_API_TOKEN` (or `--token`) if the account has one. There is **no bundled credential** — register at https://www.regionalstatistik.de/genesis/online. A command run without credentials exits `2` with guidance: stop and tell the user rather than retrying. Confirm access with `regstat logincheck`.
 
