@@ -1,7 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { RequestEngine, redactUrl } from "../src/client/engine.js";
-import { RegionalstatistikApiError, RegionalstatistikParseError } from "../src/client/errors.js";
+import {
+  RegionalstatistikApiError,
+  RegionalstatistikNetworkError,
+  RegionalstatistikParseError,
+} from "../src/client/errors.js";
 import { makeMockTransport, jsonResponse, rawResponse, bodyOf } from "./helpers.js";
 import * as fx from "./fixtures.js";
 
@@ -336,5 +340,32 @@ test("a base URL with embedded userinfo does not leak into the error message", a
   await assert.rejects(
     () => e.postJson("/find/find", {}, { username: "TOK" }),
     (err) => err instanceof RegionalstatistikApiError && !/SECRETUSER|HUNTER2/.test(err.message),
+  );
+});
+
+test("rejects a non-http(s) base URL at construction, even with a custom transport", () => {
+  for (const baseUrl of ["file:///etc/passwd", "ftp://example.org"]) {
+    const mt = makeMockTransport(() => jsonResponse(fx.whoami));
+    assert.throws(
+      () => new RequestEngine({ baseUrl, transport: mt.transport }),
+      (err) => err instanceof RegionalstatistikNetworkError && /Unsupported protocol/.test(err.message),
+    );
+    assert.equal(mt.calls.length, 0);
+  }
+});
+
+test("rejects an unparseable base URL at construction", () => {
+  const mt = makeMockTransport(() => jsonResponse(fx.whoami));
+  assert.throws(
+    () => new RequestEngine({ baseUrl: "not a url", transport: mt.transport }),
+    (err) => err instanceof RegionalstatistikNetworkError && /Invalid base URL/.test(err.message),
+  );
+  assert.equal(mt.calls.length, 0);
+});
+
+test("a rejected base URL does not echo embedded credentials", () => {
+  assert.throws(
+    () => new RequestEngine({ baseUrl: "ftp://SECRETUSER:HUNTER2@example.org" }),
+    (err) => err instanceof RegionalstatistikNetworkError && !/SECRETUSER|HUNTER2/.test(err.message),
   );
 });

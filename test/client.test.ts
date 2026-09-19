@@ -7,6 +7,7 @@ import {
 import { makeMockTransport, jsonResponse, bodyOf, type MockTransport } from "./helpers.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
 import * as fx from "./fixtures.js";
+import { RegionalstatistikNetworkError } from "../src/client/errors.js";
 
 function client(
   responder: (req: HttpRequest) => HttpResponse,
@@ -106,4 +107,21 @@ test("a blank token is treated as unset (no credential header)", async () => {
   const { c, mt } = client(() => jsonResponse(fx.tablesList), { token: "   " });
   await c.catalogue.tables({});
   assert.equal(mt.last().headers?.["username"], undefined);
+});
+
+test("a non-http(s) base URL is rejected before any request carries credentials", () => {
+  for (const baseUrl of ["file:///etc/passwd", "ftp://example.org"]) {
+    const mt = makeMockTransport(() => jsonResponse(fx.whoami));
+    assert.throws(
+      () =>
+        new RegionalstatistikClient({
+          baseUrl,
+          username: "USER",
+          password: "PASS",
+          transport: mt.transport,
+        }),
+      RegionalstatistikNetworkError,
+    );
+    assert.equal(mt.calls.length, 0);
+  }
 });
