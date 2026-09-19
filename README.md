@@ -121,6 +121,20 @@ The client is usable independently of the CLI. Errors are typed
   [LICENSING.md](LICENSING.md). External code contributions are not accepted
   ([CONTRIBUTING.md](CONTRIBUTING.md)); bug reports and forks are welcome.
 
+## Claude Code skills
+
+Three [Agent Skills](SKILLS.md) teach Claude Code to use this CLI for real questions:
+turn a regional topic into an object code (**regionalstatistik-statistics-finder**), fetch its
+numbers by region and year (**regionalstatistik-data-fetch**), and export tables to CSV or
+Excel (**regionalstatistik-table-download**). Install them from the maschinenlesbar.org marketplace:
+
+```
+/plugin marketplace add maschinenlesbar-org/plugins
+/plugin install regionalstatistik@maschinenlesbar
+```
+
+See **[SKILLS.md](SKILLS.md)** for details.
+
 ## Development
 
 ```bash
