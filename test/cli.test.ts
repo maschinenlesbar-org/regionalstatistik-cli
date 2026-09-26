@@ -568,6 +568,26 @@ test("a non-http(s) --base-url is rejected at parse time with exit 2", async () 
   assert.equal(cli.mt.calls.length, 0);
 });
 
+test("a --base-url with a query, fragment or surrounding whitespace is a usage error", async () => {
+  for (const [url, pattern] of [
+    ["http://127.0.0.1:18130/ok?username=leak", /query \(\?\) or fragment \(#\)/],
+    ["http://127.0.0.1:18130/ok#frag", /query \(\?\) or fragment \(#\)/],
+    [" https://www.regionalstatistik.de", /surrounding whitespace/],
+  ] as const) {
+    const cli = makeCli(() => jsonResponse(fx.findResult));
+    const code = await run([...TOKEN, "--base-url", url, "find", "x"], cli.deps);
+    assert.equal(code, 2, url);
+    assert.equal(cli.mt.calls.length, 0);
+    assert.match(cli.err.join("\n"), pattern);
+  }
+});
+
+test("a --base-url with a path prefix still works", async () => {
+  const cli = makeCli(() => jsonResponse(fx.findResult));
+  assert.equal(await run([...TOKEN, "--base-url", "http://mirror.test/regio/", "find", "x"], cli.deps), 0);
+  assert.equal(cli.mt.last().url, "http://mirror.test/regio/genesisws/rest/2020/find/find");
+});
+
 test("a --base-url with embedded userinfo is rejected at parse time", async () => {
   const cli = makeCli(() => jsonResponse(fx.whoami));
   const code = await run(["--base-url", "https://USER:PASS@www.regionalstatistik.de", "hello"], cli.deps);

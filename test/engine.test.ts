@@ -426,6 +426,15 @@ test("rejects a non-http(s) base URL at construction, even with a custom transpo
   }
 });
 
+test("a base URL with a query or fragment is rejected at construction", () => {
+  for (const baseUrl of ["https://example.test/?x=1", "https://example.test/#f"]) {
+    assert.throws(
+      () => new RequestEngine({ baseUrl }),
+      (err) => err instanceof RegionalstatistikNetworkError && /must not contain a query or fragment/.test(err.message),
+    );
+  }
+});
+
 test("rejects an unparseable base URL at construction", () => {
   const mt = makeMockTransport(() => jsonResponse(fx.whoami));
   assert.throws(

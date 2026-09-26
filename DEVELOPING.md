@@ -173,7 +173,9 @@ narrow the selection (`--start-year`/`--end-year`/`--timeslices`/
   rate-limits on *concurrency* (logincheck reports killing requests beyond ~10
   parallel on this host) and does not reliably emit `429`/`503`, so this path is
   largely inert — keep it, don't rely on it.
-- **`--base-url`** accepts only `http:`/`https:` and refuses embedded userinfo.
+- **`--base-url`** accepts only `http:`/`https:` and refuses embedded userinfo,
+  a query, a fragment and surrounding whitespace (paths are appended as a string;
+  the engine rejects a query/fragment for library users too).
   Pointing it at the sibling DESTATIS/Zensus installations is possible but out
   of scope; note they use the **uppercase** `/genesisWS` path, so cross-pointing
   mostly 404s — use the right sibling CLI instead. The data terms also differ
