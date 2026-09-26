@@ -13,11 +13,11 @@ import {
   parseIntArg,
   parseBoundedInt,
   parseCredential,
+  CREDENTIAL_ENV,
   parseHeaderValue,
   parseNonEmpty,
   parseBaseUrl,
 } from "./shared.js";
-import { RegionalstatistikUsageError } from "../client/errors.js";
 import { registerHelloCommands } from "./commands/hello.js";
 import { registerFindCommand } from "./commands/find.js";
 import { registerCatalogueCommands } from "./commands/catalogue.js";
@@ -50,28 +50,21 @@ export const defaultDeps: CliDeps = {
 };
 
 /**
- * Read a credential env var and validate it like the matching flag. A missing,
- * empty, or whitespace-only value is treated as unset (returns undefined) so it
- * never seeds a blank credential; any other value is used exactly as set (never
- * trimmed into a different credential).
+ * Read a credential env var. A missing, empty, or whitespace-only value is
+ * treated as unset (returns undefined) so it never seeds a blank credential; any
+ * other value is used exactly as set (never trimmed into a different credential).
  *
- * Env values are seeded via setOptionValue, which does NOT run commander's
- * value-parsers, so an env credential otherwise skips the check that flag values
- * get. Run it through parseCredential here and re-raise a rejection (control
- * characters, characters above U+00FF, leading/trailing whitespace) as a typed
- * usage error (exit 2) naming the variable — never its value — instead of letting
- * it reach Node's HTTP layer as an opaque ERR_INVALID_CHAR "Unexpected error".
+ * The value is NOT validated here: env values are seeded via setOptionValue,
+ * which skips commander's value-parsers, and a malformed one must not break
+ * `--help`, `--version`, `hello` or a run whose flag overrides it. `action()`
+ * (shared.ts) checks an env credential with parseCredential only when the
+ * command is about to send it, and names the variable — never its value.
  */
 function readEnv(env: Record<string, string | undefined>, name: string): string | undefined {
   const raw = env[name];
   if (typeof raw !== "string") return undefined;
   if (raw.trim().length === 0) return undefined;
-  try {
-    return parseCredential(raw);
-  } catch (err) {
-    const reason = err instanceof Error ? err.message : "Value is not a valid header value.";
-    throw new RegionalstatistikUsageError(reason.replace(/^Value/, `Environment variable ${name}`));
-  }
+  return raw;
 }
 
 export function buildProgram(deps: CliDeps = defaultDeps): Command {
@@ -133,9 +126,9 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
   // commander treats these as the option's value, which an explicit flag on the
   // command line overrides during parse: flag > env var > unset, per field.
   const env = deps.env ?? process.env;
-  const tokenEnv = readEnv(env, "REGIONALSTATISTIK_API_TOKEN");
-  const userEnv = readEnv(env, "REGIONALSTATISTIK_USERNAME");
-  const passEnv = readEnv(env, "REGIONALSTATISTIK_PASSWORD");
+  const tokenEnv = readEnv(env, CREDENTIAL_ENV.token);
+  const userEnv = readEnv(env, CREDENTIAL_ENV.username);
+  const passEnv = readEnv(env, CREDENTIAL_ENV.password);
   if (tokenEnv !== undefined) program.setOptionValue("token", tokenEnv);
   if (userEnv !== undefined) program.setOptionValue("username", userEnv);
   if (passEnv !== undefined) program.setOptionValue("password", passEnv);

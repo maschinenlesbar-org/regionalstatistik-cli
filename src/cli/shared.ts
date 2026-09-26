@@ -144,6 +144,13 @@ export interface ResolvedCredentials {
   present: boolean;
 }
 
+/** The env var behind each credential option. */
+export const CREDENTIAL_ENV = {
+  token: "REGIONALSTATISTIK_API_TOKEN",
+  username: "REGIONALSTATISTIK_USERNAME",
+  password: "REGIONALSTATISTIK_PASSWORD",
+} as const;
+
 /** Which credential options were given as flags on the command line (not seeded from env). */
 export interface CredentialSources {
   token?: boolean;
@@ -301,12 +308,7 @@ function rootCommand(command: Command): Command {
 function warnArgvCredentials(deps: CliDeps, command: Command): void {
   const root = rootCommand(command);
   const flagged: string[] = [];
-  const check: Array<{ opt: string; env: string }> = [
-    { opt: "token", env: "REGIONALSTATISTIK_API_TOKEN" },
-    { opt: "username", env: "REGIONALSTATISTIK_USERNAME" },
-    { opt: "password", env: "REGIONALSTATISTIK_PASSWORD" },
-  ];
-  for (const { opt, env } of check) {
+  for (const [opt, env] of Object.entries(CREDENTIAL_ENV)) {
     if (root.getOptionValueSource(opt) === "cli") flagged.push(`--${opt} (env ${env})`);
   }
   if (flagged.length > 0) {
@@ -314,6 +316,26 @@ function warnArgvCredentials(deps: CliDeps, command: Command): void {
       `Warning: credential(s) passed on the command line are visible in the process ` +
         `list and shell history. Prefer the environment variable(s): ${flagged.join(", ")}.`,
     );
+  }
+}
+
+/**
+ * Validate the credentials about to be sent that came from an env var. A flag
+ * value was already checked by its commander parser; an env value is seeded
+ * unchecked (see program.ts readEnv) so that a malformed one only fails the run
+ * that would actually send it — never `--help`, `--version`, `hello` or a run
+ * whose flag overrides it. The rejection names the variable, never its value.
+ */
+function checkEnvCredentials(root: Command, creds: ResolvedCredentials): void {
+  for (const key of ["token", "username", "password"] as const) {
+    const value = creds[key];
+    if (value === undefined || root.getOptionValueSource(key) === "cli") continue;
+    try {
+      parseCredential(value);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : "Value is not a valid header value.";
+      throw new RegionalstatistikUsageError(reason.replace(/^Value/, `Environment variable ${CREDENTIAL_ENV[key]}`));
+    }
   }
 }
 
@@ -349,6 +371,7 @@ export function action(
           "A free account is available at https://www.regionalstatistik.de/genesis/online.",
       );
     }
+    if (opts.auth !== false) checkEnvCredentials(root, creds);
     if (creds.present) warnArgvCredentials(deps, command);
     const client = deps.createClient(toClientOptions(global, creds));
     await fn({ client, global, opts: command.opts() }, positionals);

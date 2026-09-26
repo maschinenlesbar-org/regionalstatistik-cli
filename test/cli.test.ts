@@ -248,6 +248,35 @@ test("inner spaces in a credential are sent as given", async () => {
   assert.equal(cli.mt.last().headers?.["password"], "pass with spaces");
 });
 
+test("a malformed env credential does not break --help, --version, hello or an overriding flag", async () => {
+  const bad = `a${String.fromCharCode(0x01)}b`;
+  for (const argv of [["--help"], ["--version"], ["hello"], ["data", "--help"]]) {
+    const cli = makeCli(() => jsonResponse(fx.whoami), {
+      REGIONALSTATISTIK_USERNAME: "u",
+      REGIONALSTATISTIK_PASSWORD: bad,
+    });
+    assert.equal(await run(argv, cli.deps), 0, argv.join(" "));
+    assert.doesNotMatch(cli.err.join("\n"), /Environment variable/);
+  }
+  const flag = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_PASSWORD: bad });
+  assert.equal(await run(["--username", "u", "--password", "good", "logincheck"], flag.deps), 0);
+  assert.equal(flag.mt.last().headers?.["password"], "good");
+
+  const token = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_API_TOKEN: bad });
+  assert.equal(await run(["--username", "u", "--password", "p", "logincheck"], token.deps), 0);
+  assert.equal(token.mt.last().headers?.["username"], "u");
+});
+
+test("a malformed env credential still fails the command that would send it", async () => {
+  const cli = makeCli(() => jsonResponse(fx.loginOk), {
+    REGIONALSTATISTIK_USERNAME: "u",
+    REGIONALSTATISTIK_PASSWORD: `a${String.fromCharCode(0x01)}b`,
+  });
+  assert.equal(await run(["logincheck"], cli.deps), 2);
+  assert.equal(cli.mt.calls.length, 0);
+  assert.equal(cli.err.join("\n"), "Error: Environment variable REGIONALSTATISTIK_PASSWORD contains control characters.");
+});
+
 test("a blank <term> on find is rejected before any request", async () => {
   const cli = makeCli(() => jsonResponse(fx.findResult));
   const code = await run([...TOKEN, "find", "   "], cli.deps);

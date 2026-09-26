@@ -81,7 +81,11 @@ with precedence **flag > env > unset** (`--username`/`--password` seeded from
 `shared.ts:resolveCredentials`). A token wins over username/password, except
 that a `--username`/`--password` *flag* beats an env-only token (commander's
 value source tells flag from env); supplying only one of username/password is a
-`RegionalstatistikUsageError` (exit 2). No
+`RegionalstatistikUsageError` (exit 2). Flag values are checked by their parser
+(`parseCredential`); an env value is seeded unchecked and validated in
+`shared.ts:action()` only when the command is about to send it, so a malformed
+env var never breaks `--help`, `--version`, `hello` or a run whose flag
+overrides it. No
 credential is ever bundled.
 
 **Redirects are NOT followed.** Following a cross-origin redirect would forward

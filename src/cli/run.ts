@@ -27,9 +27,9 @@ function configureTree(command: Command, deps: CliDeps): void {
 
 export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<number> {
   try {
-    // buildProgram is inside the try: seeding env credentials validates them and
-    // may throw a RegionalstatistikUsageError, which must be caught and mapped to
-    // the usage exit code rather than escaping as an uncaught rejection.
+    // buildProgram is inside the try so that anything it throws is mapped to an
+    // exit code rather than escaping as an uncaught rejection. (Env credentials
+    // are validated later, in action(), only when a command sends them.)
     const program = buildProgram(deps);
     configureTree(program, deps);
     await program.parseAsync(argv, { from: "user" });
