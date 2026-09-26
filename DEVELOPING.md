@@ -194,9 +194,11 @@ narrow the selection (`--start-year`/`--end-year`/`--timeslices`/
    your credentials" when a `username` header went out, "refused the request
    without credentials" when none did, and no hint for `hello` (whoami takes
    none). destatis-genesis-cli has the same mapping since 2026-09-26.
-5. **BOM-tolerant HTML detection** in `toApiError` — this host's HTML error
-   pages start with a UTF-8 BOM, which must not defeat the "don't dump HTML to
-   stderr" check.
+5. **BOM tolerance** — this host's HTML error pages start with a UTF-8 BOM,
+   which must not defeat the "don't dump HTML to stderr" check in `toApiError`.
+   A leading BOM is also dropped before every JSON parse (success bodies, error
+   bodies, and the `data/*file` sniff), so a BOM-prefixed status reply is read
+   like a plain one.
 6. **whoami fixture/shape**: live reply has no `User-IP` (typed optional in both
    repos; the fixture here mirrors this host).
 7. **Docs/examples/skills** use regional objects (`12411-01-01-4`, `KREISE`,

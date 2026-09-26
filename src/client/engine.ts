@@ -408,7 +408,9 @@ export class RequestEngine {
     res: RawResponse,
     sent: boolean | undefined,
   ): T {
-    const text = res.data.toString("utf8");
+    // A leading BOM would make JSON.parse fail (this host's HTML error pages carry
+    // one, so a BOM-prefixed JSON reply is plausible too).
+    const text = stripBom(res.data.toString("utf8"));
     // Every GENESIS endpoint answers with a JSON body (the envelope, or the
     // helloworld objects); an empty 200 or a 204 is a broken response, not a
     // result — returning null would print "null" with exit 0.
@@ -502,7 +504,7 @@ export class RequestEngine {
       detail = "unexpected redirect — use the canonical host (default https://www.regionalstatistik.de)";
     } else {
       try {
-        const parsed = JSON.parse(text) as {
+        const parsed = JSON.parse(stripBom(text)) as {
           Status?: { Code?: unknown; Content?: unknown; Type?: unknown } | string | null;
           Code?: unknown;
           Content?: unknown;
@@ -529,7 +531,7 @@ export class RequestEngine {
         // serves a full HTML error page (with a leading BOM, hence the strip)
         // e.g. for a wrong (uppercase `/genesisWS`) API path. The `\s+` collapse
         // leaves ESC/C0 controls intact, so sanitize below.
-        const snippet = text.replace(/^\uFEFF/, "").trim().replace(/\s+/g, " ");
+        const snippet = stripBom(text).trim().replace(/\s+/g, " ");
         if (snippet.length > 0 && !snippet.startsWith("<")) {
           detail = snippet.length > 200 ? `${snippet.slice(0, 200)}…` : snippet;
         }

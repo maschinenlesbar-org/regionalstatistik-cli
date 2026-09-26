@@ -538,6 +538,24 @@ test("a deeply nested response fails pretty-printing cleanly and still prints wi
   else assert.match(compact.err.join("\n"), /Error: The response is nested too deeply to print\./);
 });
 
+test("BOM-prefixed JSON replies are read like plain ones", async () => {
+  const bom = (body: unknown, status = 200) => rawResponse("\uFEFF" + JSON.stringify(body), "application/json", status);
+
+  const ok = makeCli(() => bom(fx.findResult));
+  assert.equal(await run([...TOKEN, "find", "x"], ok.deps), 0);
+  assert.deepEqual(JSON.parse(ok.out.join("\n")), fx.findResult);
+
+  const notFound = makeCli(() => bom(fx.notFound));
+  assert.equal(await run([...TOKEN, "metadata", "table", "x"], notFound.deps), 4);
+  assert.match(notFound.err.join("\n"), /GENESIS status 90/);
+
+  // Wrong credentials (404 + flat Code 2) must not turn into "not found" (exit 4).
+  const badCreds = makeCli(() => bom(fx.flatBadCredentials, 404));
+  assert.equal(await run([...TOKEN, "find", "x"], badCreds.deps), 1);
+  assert.match(badCreds.err.join("\n"), /GENESIS status 2 \(ERROR\) \/ HTTP 404/);
+  assert.match(badCreds.err.join("\n"), /Hint: check your credentials/);
+});
+
 test("--compact prints single-line JSON", async () => {
   const cli = makeCli(() => jsonResponse(fx.tablesList));
   await run([...TOKEN, "--compact", "catalogue", "tables"], cli.deps);
