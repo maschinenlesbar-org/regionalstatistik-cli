@@ -202,6 +202,52 @@ test("a Latin-1 credential (umlaut) is accepted and sent", async () => {
   assert.equal(cli.mt.last().headers?.["password"], "P\u00e4ssw\u00f6rt");
 });
 
+test("a blank --token/--username/--password/--user-agent is a usage error, not a silent unset", async () => {
+  for (const argv of [
+    ["--token", "", "find", "x"],
+    ["--token", " ", "find", "x"],
+    ["--username", "", "--password", "p", "logincheck"],
+    ["--user-agent", "", "hello"],
+  ]) {
+    const cli = makeCli(() => jsonResponse(fx.findResult), {
+      REGIONALSTATISTIK_USERNAME: "u",
+      REGIONALSTATISTIK_PASSWORD: "p",
+    });
+    const code = await run(argv, cli.deps);
+    assert.equal(code, 2, argv.join(" "));
+    assert.equal(cli.mt.calls.length, 0);
+    assert.match(cli.err.join("\n"), /Expected a non-empty value/);
+  }
+});
+
+test("a credential with surrounding whitespace is rejected, not silently trimmed", async () => {
+  const flag = makeCli(() => jsonResponse(fx.loginOk));
+  assert.equal(await run(["--username", " spaced user ", "--password", "p", "logincheck"], flag.deps), 2);
+  assert.equal(flag.mt.calls.length, 0);
+  assert.match(flag.err.join("\n"), /leading or trailing whitespace/);
+
+  const env = makeCli(() => jsonResponse(fx.loginOk), {
+    REGIONALSTATISTIK_USERNAME: "testuser",
+    REGIONALSTATISTIK_PASSWORD: "  pass with trailing space  ",
+  });
+  assert.equal(await run(["logincheck"], env.deps), 2);
+  assert.equal(env.mt.calls.length, 0);
+  assert.match(
+    env.err.join("\n"),
+    /Environment variable REGIONALSTATISTIK_PASSWORD has leading or trailing whitespace/,
+  );
+  assert.doesNotMatch(env.err.join("\n"), /pass with trailing space/);
+});
+
+test("inner spaces in a credential are sent as given", async () => {
+  const cli = makeCli(() => jsonResponse(fx.loginOk), {
+    REGIONALSTATISTIK_USERNAME: "u",
+    REGIONALSTATISTIK_PASSWORD: "pass with spaces",
+  });
+  assert.equal(await run(["logincheck"], cli.deps), 0);
+  assert.equal(cli.mt.last().headers?.["password"], "pass with spaces");
+});
+
 test("a blank <term> on find is rejected before any request", async () => {
   const cli = makeCli(() => jsonResponse(fx.findResult));
   const code = await run([...TOKEN, "find", "   "], cli.deps);

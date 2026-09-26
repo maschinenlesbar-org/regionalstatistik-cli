@@ -199,14 +199,17 @@ export class RegionalstatistikClient {
   constructor(options: RegionalstatistikClientOptions = {}) {
     const { token, username, password, ...engineOptions } = options;
     // Token mode collapses onto the `username` field with no password; otherwise
-    // use the username/password pair. Blank values are treated as unset.
-    const tok = token?.trim();
+    // use the username/password pair. Blank (empty or whitespace-only) values are
+    // treated as unset; any other value is sent exactly as given, never trimmed.
+    const set = (v: string | undefined): string | undefined =>
+      v !== undefined && v.trim() !== "" ? v : undefined;
+    const tok = set(token);
     if (tok) {
       this.username = tok;
       this.password = undefined;
     } else {
-      this.username = username?.trim() || undefined;
-      this.password = password?.trim() || undefined;
+      this.username = set(username);
+      this.password = set(password);
     }
     this.engine = new RequestEngine(engineOptions);
 

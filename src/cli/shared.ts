@@ -66,11 +66,14 @@ export function parseBaseUrl(value: string): string {
  * User-Agent). Node's HTTP layer throws an opaque "Invalid character in header
  * content" at request time for a CR/LF (or any other C0 control or DEL) and for
  * any character above U+00FF, which escaped our typed-error handling as
- * "Unexpected error". Reject those here as a usage error. Tab (0x09) and Latin-1
- * (e.g. "ü") are allowed — exactly what Node sends (as single ISO-8859-1 bytes,
- * not UTF-8). Checked by char code so the source stays free of control bytes.
+ * "Unexpected error". Reject those here as a usage error, along with a blank
+ * value (a blank `--token ""` silently cancelled a valid env token). Tab (0x09)
+ * and Latin-1 (e.g. "ü") are allowed — exactly what Node sends (as single
+ * ISO-8859-1 bytes, not UTF-8). Checked by char code so the source stays free of
+ * control bytes.
  */
 export function parseHeaderValue(value: string): string {
+  parseNonEmpty(value);
   for (let i = 0; i < value.length; i++) {
     const c = value.charCodeAt(i);
     if ((c < 0x20 && c !== 0x09) || c === 0x7f) {
@@ -79,6 +82,24 @@ export function parseHeaderValue(value: string): string {
     if (c > 0xff) {
       throw new InvalidArgumentError("Value contains characters outside Latin-1 (above U+00FF).");
     }
+  }
+  return value;
+}
+
+/**
+ * commander value-parser for a credential (`--token`, `--username`, `--password`,
+ * and the env vars): a valid header value (see parseHeaderValue) with no leading
+ * or trailing whitespace. An HTTP header cannot carry those — the receiving
+ * server strips them as optional whitespace — so a password such as
+ * "  pass  " could never be sent as typed. Rejecting it beats silently
+ * trimming it into a different password.
+ */
+export function parseCredential(value: string): string {
+  parseHeaderValue(value);
+  if (value !== value.trim()) {
+    throw new InvalidArgumentError(
+      "Value has leading or trailing whitespace, which an HTTP header cannot carry.",
+    );
   }
   return value;
 }
@@ -109,10 +130,9 @@ export interface GlobalOptions {
   force?: boolean;
 }
 
-function trimmed(value: string | undefined): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const t = value.trim();
-  return t.length > 0 ? t : undefined;
+/** A non-blank string option value, unchanged; undefined otherwise. */
+function nonBlank(value: string | undefined): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
 /** Credentials resolved from the global options (flags already seeded from env). */
@@ -146,11 +166,11 @@ export function resolveCredentials(
   fromCli: CredentialSources = {},
 ): ResolvedCredentials {
   const pairFromCli = !fromCli.token && (fromCli.username === true || fromCli.password === true);
-  const token = pairFromCli ? undefined : trimmed(global.token);
+  const token = pairFromCli ? undefined : nonBlank(global.token);
   if (token) return { token, present: true };
 
-  const username = trimmed(global.username);
-  const password = trimmed(global.password);
+  const username = nonBlank(global.username);
+  const password = nonBlank(global.password);
   if (username && password) return { username, password, present: true };
   if (username || password) {
     throw new RegionalstatistikUsageError(
@@ -169,7 +189,7 @@ export function toClientOptions(
   const options: RegionalstatistikClientOptions = {};
   if (global.baseUrl !== undefined) options.baseUrl = global.baseUrl;
   if (global.timeout !== undefined) options.timeoutMs = global.timeout;
-  const ua = trimmed(global.userAgent);
+  const ua = nonBlank(global.userAgent);
   if (ua !== undefined) options.userAgent = ua;
   if (global.maxRetries !== undefined) options.maxRetries = global.maxRetries;
   if (global.maxResponseBytes !== undefined) options.maxResponseBytes = global.maxResponseBytes;

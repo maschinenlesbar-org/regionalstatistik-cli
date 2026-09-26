@@ -103,6 +103,12 @@ test("data.tableFile posts to the file endpoint and returns raw bytes", async ()
   assert.deepEqual(res.data, zip);
 });
 
+test("a non-blank credential is sent exactly as given, never trimmed", async () => {
+  const { c, mt } = client(() => jsonResponse(fx.tablesList), { username: "u", password: " pass with spaces " });
+  await c.catalogue.tables({});
+  assert.equal(mt.last().headers?.["password"], " pass with spaces ");
+});
+
 test("a blank token is treated as unset (no credential header)", async () => {
   const { c, mt } = client(() => jsonResponse(fx.tablesList), { token: "   " });
   await c.catalogue.tables({});

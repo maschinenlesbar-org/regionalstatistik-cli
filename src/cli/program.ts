@@ -9,7 +9,14 @@ import type { CliDeps } from "./io.js";
 import { defaultIO } from "./io.js";
 import { RegionalstatistikClient } from "../client/client.js";
 import { MAX_TIMEOUT_MS } from "../client/http.js";
-import { parseIntArg, parseBoundedInt, parseHeaderValue, parseNonEmpty, parseBaseUrl } from "./shared.js";
+import {
+  parseIntArg,
+  parseBoundedInt,
+  parseCredential,
+  parseHeaderValue,
+  parseNonEmpty,
+  parseBaseUrl,
+} from "./shared.js";
 import { RegionalstatistikUsageError } from "../client/errors.js";
 import { registerHelloCommands } from "./commands/hello.js";
 import { registerFindCommand } from "./commands/find.js";
@@ -43,24 +50,24 @@ export const defaultDeps: CliDeps = {
 };
 
 /**
- * Read a credential env var, trimmed, and validate it as an HTTP header value. A
- * missing, empty, or whitespace-only value is treated as unset (returns
- * undefined) so it never seeds a blank credential.
+ * Read a credential env var and validate it like the matching flag. A missing,
+ * empty, or whitespace-only value is treated as unset (returns undefined) so it
+ * never seeds a blank credential; any other value is used exactly as set (never
+ * trimmed into a different credential).
  *
  * Env values are seeded via setOptionValue, which does NOT run commander's
- * value-parsers, so an env credential otherwise skips the header-value check
- * that flag values get. Run it through parseHeaderValue here and re-raise a
- * rejection (control characters, or characters above U+00FF) as a typed usage
- * error (exit 2) naming the variable — never its value — instead of letting it
- * reach Node's HTTP layer as an opaque ERR_INVALID_CHAR "Unexpected error".
+ * value-parsers, so an env credential otherwise skips the check that flag values
+ * get. Run it through parseCredential here and re-raise a rejection (control
+ * characters, characters above U+00FF, leading/trailing whitespace) as a typed
+ * usage error (exit 2) naming the variable — never its value — instead of letting
+ * it reach Node's HTTP layer as an opaque ERR_INVALID_CHAR "Unexpected error".
  */
 function readEnv(env: Record<string, string | undefined>, name: string): string | undefined {
   const raw = env[name];
   if (typeof raw !== "string") return undefined;
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) return undefined;
+  if (raw.trim().length === 0) return undefined;
   try {
-    return parseHeaderValue(trimmed);
+    return parseCredential(raw);
   } catch (err) {
     const reason = err instanceof Error ? err.message : "Value is not a valid header value.";
     throw new RegionalstatistikUsageError(reason.replace(/^Value/, `Environment variable ${name}`));
@@ -82,16 +89,16 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
     )
     .version(VERSION)
     .option("--base-url <url>", "API base URL", parseBaseUrl, "https://www.regionalstatistik.de")
-    .option("--token <token>", "GENESIS API token (env: REGIONALSTATISTIK_API_TOKEN)", parseHeaderValue)
+    .option("--token <token>", "GENESIS API token (env: REGIONALSTATISTIK_API_TOKEN)", parseCredential)
     .option(
       "--username <user>",
       "GENESIS account username (env: REGIONALSTATISTIK_USERNAME)",
-      parseHeaderValue,
+      parseCredential,
     )
     .option(
       "--password <pass>",
       "GENESIS account password (env: REGIONALSTATISTIK_PASSWORD)",
-      parseHeaderValue,
+      parseCredential,
     )
     .addOption(
       new Option("--language <lang>", "response language").choices(["de", "en"]).default("de"),
@@ -122,7 +129,7 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
     .option("--force", "overwrite the --output file if it already exists")
     .showHelpAfterError();
 
-  // Seed each credential flag from its env var (trimmed; blank treated as unset).
+  // Seed each credential flag from its env var (blank treated as unset).
   // commander treats these as the option's value, which an explicit flag on the
   // command line overrides during parse: flag > env var > unset, per field.
   const env = deps.env ?? process.env;
