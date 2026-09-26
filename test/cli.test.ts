@@ -522,6 +522,22 @@ test("an empty 200 reply exits 1 instead of printing null", async () => {
   assert.match(cli.err.join("\n"), /Empty response body from \/genesisws\/rest\/2020\/find\/find/);
 });
 
+test("a deeply nested response fails pretty-printing cleanly and still prints with --compact", async () => {
+  const depth = 200_000;
+  const deep = () => rawResponse("[".repeat(depth) + "]".repeat(depth), "application/json");
+  const pretty = makeCli(deep);
+  assert.equal(await run([...TOKEN, "find", "x"], pretty.deps), 1);
+  assert.deepEqual(pretty.out, []);
+  assert.match(pretty.err.join("\n"), /Error: The response is nested too deeply to pretty-print; try --compact\./);
+
+  // Compact serialisation goes much deeper (it prints this one on current Node);
+  // should a runtime's stack still be too small, it must fail just as cleanly.
+  const compact = makeCli(deep);
+  const code = await run([...TOKEN, "--compact", "find", "x"], compact.deps);
+  if (code === 0) assert.equal(compact.out.join("").length, 2 * depth);
+  else assert.match(compact.err.join("\n"), /Error: The response is nested too deeply to print\./);
+});
+
 test("--compact prints single-line JSON", async () => {
   const cli = makeCli(() => jsonResponse(fx.tablesList));
   await run([...TOKEN, "--compact", "catalogue", "tables"], cli.deps);
