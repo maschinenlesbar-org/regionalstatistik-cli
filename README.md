@@ -44,6 +44,12 @@ over username/password — except that a `--username`/`--password` **flag** beat
 a token from `REGIONALSTATISTIK_API_TOKEN`, so the account you name on the
 command line is the one used. Only `regstat hello` works without credentials.
 
+Credentials travel in HTTP header fields, so they can hold only Latin-1
+characters (up to U+00FF). A character beyond that (`€`, an emoji) is refused
+with exit 2 before anything is sent. Latin-1 characters such as `ä` are sent as
+single ISO-8859-1 bytes, not UTF-8; whether GENESIS accepts an umlaut password
+in that encoding has not been verified.
+
 > **Prefer the environment variables.** A credential passed as a `--token` /
 > `--username` / `--password` **flag** is visible in the process table (`ps`,
 > `/proc`) to other local users and is persisted in your shell history — the

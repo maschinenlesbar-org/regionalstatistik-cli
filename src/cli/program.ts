@@ -48,11 +48,11 @@ export const defaultDeps: CliDeps = {
  * undefined) so it never seeds a blank credential.
  *
  * Env values are seeded via setOptionValue, which does NOT run commander's
- * value-parsers, so an env credential otherwise skips the control-char check
+ * value-parsers, so an env credential otherwise skips the header-value check
  * that flag values get. Run it through parseHeaderValue here and re-raise a
- * control-char rejection as a typed usage error (exit 2) with a clean message,
- * instead of letting a CR/LF reach Node's HTTP layer as an opaque
- * ERR_INVALID_CHAR "Unexpected error".
+ * rejection (control characters, or characters above U+00FF) as a typed usage
+ * error (exit 2) naming the variable — never its value — instead of letting it
+ * reach Node's HTTP layer as an opaque ERR_INVALID_CHAR "Unexpected error".
  */
 function readEnv(env: Record<string, string | undefined>, name: string): string | undefined {
   const raw = env[name];
@@ -61,8 +61,9 @@ function readEnv(env: Record<string, string | undefined>, name: string): string 
   if (trimmed.length === 0) return undefined;
   try {
     return parseHeaderValue(trimmed);
-  } catch {
-    throw new RegionalstatistikUsageError(`Environment variable ${name} contains control characters.`);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : "Value is not a valid header value.";
+    throw new RegionalstatistikUsageError(reason.replace(/^Value/, `Environment variable ${name}`));
   }
 }
 

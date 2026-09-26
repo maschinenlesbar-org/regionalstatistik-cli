@@ -101,3 +101,12 @@ test("enforces maxResponseBytes", async () => {
     },
   );
 });
+
+test("a header value Node cannot send becomes a RegionalstatistikNetworkError, not a raw TypeError", async () => {
+  for (const value of ["p\u20acw", "a\r\nX-Injected: 1"]) {
+    await assert.rejects(
+      () => nodeHttpTransport({ method: "GET", url: "http://127.0.0.1:9/x", headers: { password: value } }),
+      (err) => err instanceof RegionalstatistikNetworkError && /^Invalid request: /.test(err.message),
+    );
+  }
+});

@@ -176,6 +176,32 @@ test("a control character in an env credential is rejected before any request", 
   assert.match(cli.err.join("\n"), /REGIONALSTATISTIK_API_TOKEN contains control characters/);
 });
 
+test("a credential or User-Agent above U+00FF is a usage error, not Unexpected error", async () => {
+  for (const [argv, env] of [
+    [["--username", "u", "--password", "p\u20acw", "logincheck"], {}],
+    [["--token", "tok\u{1F600}", "logincheck"], {}],
+    [["--user-agent", "ua\u20ac", "hello"], {}],
+    [["logincheck"], { REGIONALSTATISTIK_USERNAME: "u", REGIONALSTATISTIK_PASSWORD: "pw\u20ac123" }],
+  ] as const) {
+    const cli = makeCli(() => jsonResponse(fx.loginOk), env);
+    const code = await run([...argv], cli.deps);
+    assert.equal(code, 2, argv.join(" "));
+    assert.equal(cli.mt.calls.length, 0);
+    const errText = cli.err.join("\n");
+    assert.match(errText, /outside Latin-1 \(above U\+00FF\)/);
+    assert.doesNotMatch(errText, /Unexpected error|pw\u20ac123/);
+  }
+  const env = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_USERNAME: "u", REGIONALSTATISTIK_PASSWORD: "pw\u20ac123" });
+  await run(["logincheck"], env.deps);
+  assert.match(env.err.join("\n"), /Environment variable REGIONALSTATISTIK_PASSWORD contains characters outside Latin-1/);
+});
+
+test("a Latin-1 credential (umlaut) is accepted and sent", async () => {
+  const cli = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_USERNAME: "u", REGIONALSTATISTIK_PASSWORD: "P\u00e4ssw\u00f6rt" });
+  assert.equal(await run(["logincheck"], cli.deps), 0);
+  assert.equal(cli.mt.last().headers?.["password"], "P\u00e4ssw\u00f6rt");
+});
+
 test("a blank <term> on find is rejected before any request", async () => {
   const cli = makeCli(() => jsonResponse(fx.findResult));
   const code = await run([...TOKEN, "find", "   "], cli.deps);
