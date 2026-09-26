@@ -216,22 +216,31 @@ export function toClientOptions(
   return options;
 }
 
+/** The usage error for an --output path that already exists (without --force). */
+function refuseOverwrite(path: string): RegionalstatistikUsageError {
+  return new RegionalstatistikUsageError(
+    `Refusing to overwrite existing file "${path}". Pass --force to overwrite, or choose a different --output path.`,
+  );
+}
+
 /**
  * Write bytes to the --output file, guarding against an accidental overwrite and
  * wrapping raw filesystem errors in a typed usage error. Refuses to clobber an
- * existing file unless --force is set (fail-secure: no silent data loss), and
- * turns an ENOENT/EISDIR/EACCES from writeFile into a clean
- * RegionalstatistikUsageError instead of an untyped "Unexpected error: ENOENT: …".
+ * existing file — or to write through a symlink, dangling or not — unless --force
+ * is set (fail-secure: no silent data loss), and turns an ENOENT/EISDIR/EACCES
+ * from writeFile into a clean RegionalstatistikUsageError instead of an untyped
+ * "Unexpected error: ENOENT: …". `action()` already refused an existing path
+ * before the request; this re-check catches one that appeared meanwhile.
  */
 function writeOutputFile(deps: CliDeps, global: GlobalOptions, path: string, data: Buffer): void {
-  if (!global.force && deps.io.fileExists(path)) {
-    throw new RegionalstatistikUsageError(
-      `Refusing to overwrite existing file "${path}". Pass --force to overwrite, or choose a different --output path.`,
-    );
-  }
+  const force = global.force === true;
+  if (!force && deps.io.fileExists(path)) throw refuseOverwrite(path);
   try {
-    deps.io.writeFile(path, data);
+    // Without --force the write is an exclusive create, so a symlink (even a
+    // dangling one) or a file that appeared since the check is refused too.
+    deps.io.writeFile(path, data, force);
   } catch (err) {
+    if (!force && (err as NodeJS.ErrnoException | undefined)?.code === "EEXIST") throw refuseOverwrite(path);
     const reason = err instanceof Error ? err.message : String(err);
     throw new RegionalstatistikUsageError(`Could not write to "${path}": ${reason}`);
   }
@@ -391,6 +400,12 @@ export function action(
     const command = args[args.length - 1] as Command;
     const positionals = args.slice(0, Math.max(0, args.length - 2)) as string[];
     const global = command.optsWithGlobals() as GlobalOptions;
+    // Refuse an existing --output file before any request, so the refusal costs no
+    // download (and no wait up to --timeout). writeOutputFile checks again at write
+    // time with an exclusive create, which also catches a file that appears meanwhile.
+    if (global.output !== undefined && global.force !== true && deps.io.fileExists(global.output)) {
+      throw refuseOverwrite(global.output);
+    }
     // A command that takes no credentials (`hello`) never sends any, so they are
     // not resolved at all: a half-configured or malformed env login must not fail
     // the very connectivity check used to debug it.

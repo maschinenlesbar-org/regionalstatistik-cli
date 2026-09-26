@@ -30,7 +30,7 @@ Global options (valid on any command):
 | `--user-agent <ua>` | User-Agent header |
 | `--compact` | single-line JSON |
 | `-o, --output <file>` | write output (JSON, or a download) to a file instead of stdout |
-| `--force` | overwrite the `--output` file if it already exists (otherwise the write is refused) |
+| `--force` | overwrite the `--output` file if it already exists (otherwise the run is refused before any request is sent — also when a symlink, even a dangling one, sits at that path) |
 
 ## hello / logincheck
 

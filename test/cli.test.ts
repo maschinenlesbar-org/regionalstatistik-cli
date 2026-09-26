@@ -471,6 +471,47 @@ test("--output refuses to overwrite an existing file without --force", async () 
   assert.match(cli.err.join("\n"), /Refusing to overwrite/);
 });
 
+test("an existing -o file is refused before any request is sent", async () => {
+  for (const argv of [
+    ["data", "tablefile", "12411-01-01-4"],
+    ["data", "table", "12411-01-01-4"],
+    ["catalogue", "tables"],
+    ["find", "x"],
+    ["hello"],
+  ]) {
+    const cli = makeCli(() => jsonResponse(fx.tablesList));
+    cli.files.set("exists.zip", Buffer.from("old"));
+    const code = await run([...TOKEN, "-o", "exists.zip", ...argv], cli.deps);
+    assert.equal(code, 2, argv.join(" "));
+    assert.equal(cli.mt.calls.length, 0, argv.join(" "));
+    assert.match(cli.err.join("\n"), /Refusing to overwrite existing file "exists.zip"/);
+    assert.equal(cli.files.get("exists.zip")?.toString("utf8"), "old");
+  }
+});
+
+test("a file that appears between the check and the write (EEXIST) is refused like an existing one", async () => {
+  const cli = makeCli(() => jsonResponse(fx.tablesList));
+  let overwriteFlag: boolean | undefined;
+  cli.deps.io.writeFile = (_p, _d, overwrite) => {
+    overwriteFlag = overwrite;
+    throw Object.assign(new Error("EEXIST: file already exists"), { code: "EEXIST" });
+  };
+  const code = await run([...TOKEN, "-o", "race.json", "catalogue", "tables"], cli.deps);
+  assert.equal(code, 2);
+  assert.equal(overwriteFlag, false);
+  assert.match(cli.err.join("\n"), /Refusing to overwrite existing file "race.json"/);
+});
+
+test("--force writes with overwrite allowed", async () => {
+  const cli = makeCli(() => jsonResponse(fx.tablesList));
+  let overwriteFlag: boolean | undefined;
+  cli.deps.io.writeFile = (_p, _d, overwrite) => {
+    overwriteFlag = overwrite;
+  };
+  assert.equal(await run([...TOKEN, "--force", "-o", "x.json", "catalogue", "tables"], cli.deps), 0);
+  assert.equal(overwriteFlag, true);
+});
+
 test("--force allows overwriting an existing --output file", async () => {
   const cli = makeCli(() => jsonResponse(fx.tablesList));
   cli.files.set("/tmp/out.json", Buffer.from("existing"));
