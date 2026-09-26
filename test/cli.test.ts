@@ -40,6 +40,16 @@ test("hello works without credentials and hits whoami", async () => {
   assert.deepEqual(JSON.parse(cli.out.join("\n")), fx.whoami);
 });
 
+test("hello ignores a half-configured env login (it sends no credentials)", async () => {
+  for (const env of [{ REGIONALSTATISTIK_USERNAME: "onlyuser" }, { REGIONALSTATISTIK_PASSWORD: "onlypass" }]) {
+    const cli = makeCli(() => jsonResponse(fx.whoami), env);
+    assert.equal(await run(["hello"], cli.deps), 0);
+    assert.equal(cli.mt.last().headers?.["username"], undefined);
+    assert.equal(cli.mt.last().headers?.["password"], undefined);
+    assert.deepEqual(cli.err, []);
+  }
+});
+
 test("a credential-required command with no credentials exits 2 and issues no request", async () => {
   const cli = makeCli(() => jsonResponse(fx.tablesList));
   const code = await run(["catalogue", "tables", "12411"], cli.deps);

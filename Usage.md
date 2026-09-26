@@ -35,7 +35,7 @@ Global options (valid on any command):
 ## hello / logincheck
 
 ```bash
-regstat hello           # helloworld/whoami — needs NO credentials
+regstat hello           # helloworld/whoami — needs NO credentials (ignores any set)
 regstat logincheck      # helloworld/logincheck — validates your credentials
 ```
 

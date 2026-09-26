@@ -346,7 +346,8 @@ function checkEnvCredentials(root: Command, creds: ResolvedCredentials): void {
  *
  * Commander invokes actions as (arg1, ..., argN, options, command); we slice off
  * the trailing options object and command instance to recover the positionals.
- * Pass `{ auth: false }` for commands that do not need credentials (e.g. `hello`).
+ * Pass `{ auth: false }` for commands that take no credentials (e.g. `hello`):
+ * the credential options are then ignored entirely and nothing is sent.
  */
 export function action(
   deps: CliDeps,
@@ -357,22 +358,28 @@ export function action(
     const command = args[args.length - 1] as Command;
     const positionals = args.slice(0, Math.max(0, args.length - 2)) as string[];
     const global = command.optsWithGlobals() as GlobalOptions;
-    const root = rootCommand(command);
-    const creds = resolveCredentials(global, {
-      token: root.getOptionValueSource("token") === "cli",
-      username: root.getOptionValueSource("username") === "cli",
-      password: root.getOptionValueSource("password") === "cli",
-    });
-    if (opts.auth !== false && !creds.present) {
-      throw new RegionalstatistikUsageError(
-        "This command needs credentials. Set --username/--password " +
-          "(env REGIONALSTATISTIK_USERNAME / REGIONALSTATISTIK_PASSWORD) " +
-          "or --token (env REGIONALSTATISTIK_API_TOKEN). " +
-          "A free account is available at https://www.regionalstatistik.de/genesis/online.",
-      );
+    // A command that takes no credentials (`hello`) never sends any, so they are
+    // not resolved at all: a half-configured or malformed env login must not fail
+    // the very connectivity check used to debug it.
+    let creds: ResolvedCredentials = { present: false };
+    if (opts.auth !== false) {
+      const root = rootCommand(command);
+      creds = resolveCredentials(global, {
+        token: root.getOptionValueSource("token") === "cli",
+        username: root.getOptionValueSource("username") === "cli",
+        password: root.getOptionValueSource("password") === "cli",
+      });
+      if (!creds.present) {
+        throw new RegionalstatistikUsageError(
+          "This command needs credentials. Set --username/--password " +
+            "(env REGIONALSTATISTIK_USERNAME / REGIONALSTATISTIK_PASSWORD) " +
+            "or --token (env REGIONALSTATISTIK_API_TOKEN). " +
+            "A free account is available at https://www.regionalstatistik.de/genesis/online.",
+        );
+      }
+      checkEnvCredentials(root, creds);
+      warnArgvCredentials(deps, command);
     }
-    if (opts.auth !== false) checkEnvCredentials(root, creds);
-    if (creds.present) warnArgvCredentials(deps, command);
     const client = deps.createClient(toClientOptions(global, creds));
     await fn({ client, global, opts: command.opts() }, positionals);
   };
