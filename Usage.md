@@ -128,6 +128,12 @@ server returns a **ZIP** wrapper; the bytes are written as-is to `-o <file>` (or
 stdout). `ffcsv` is a tidy/flat CSV with English headers; `datencsv` is the
 default.
 
+A JSON or empty reply is never written as a download: it is a GENESIS status the
+server sent instead of the file. The CLI recognises it by its content (a body
+starting with `{`), whatever the Content-Type says, then writes nothing and exits
+non-zero — **4** for `Status.Code 104` (no object with that code) or `90`, **1**
+for anything else (credentials, `98` too large, an empty body).
+
 ```bash
 regstat data tablefile 12411-01-01-4 --region-key "08*" --format ffcsv -o bevoelkerung-bw.zip
 ```
@@ -139,12 +145,14 @@ regstat data tablefile 12411-01-01-4 --region-key "08*" --format ffcsv -o bevoel
 | `0` | success (help/version included); also an **empty result** — see note |
 | `1` | API/logical error (including auth failures — Code 15/2), network or parse error |
 | `2` | usage error (missing/partial credentials, bad flags/arguments, unknown command) |
-| `4` | object not found — logical `Status.Code 90`, or an HTTP 404 without a GENESIS code (see note) |
+| `4` | object not found — logical `Status.Code 90`, or an HTTP 404 without a GENESIS code (see note), and a `data <kind>file` download for a code that does not exist (`Status.Code 104`) |
 
 > **A missing object code usually does not exit 4.** Looking up a code that does
 > not exist on `metadata`/`data` typically returns `Status.Code 104` — a valid
 > **empty** result, so the CLI exits **0**, the same as an empty
-> `catalogue`/`find` search. To detect "no such object" in a script, inspect
+> `catalogue`/`find` search. (A `data <kind>file` download is the exception:
+> there `104` means there is nothing to download, so it exits **4** and writes no
+> file.) To detect "no such object" in a script, inspect
 > `Status.Code` in the payload, not the exit code.
 
 > **A 404 is not always "not found" on this host.** Wrong credentials come back

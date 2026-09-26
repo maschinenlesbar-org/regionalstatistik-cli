@@ -139,6 +139,36 @@ function assertHttpScheme(baseUrl: string): void {
   }
 }
 
+/** The `{ Code, Content, Type }` status object of a GENESIS reply. */
+interface GenesisStatus {
+  Code?: unknown;
+  Content?: unknown;
+  Type?: unknown;
+}
+
+/**
+ * Find the GENESIS status in a parsed body: the envelope's `Status` object, or a
+ * flat top-level `{ Code, Content, Type }` (the auth-failure shape). Returns
+ * undefined for anything else — including helloworld/logincheck, whose `Status`
+ * is a plain string, and whoami, which has neither.
+ */
+function genesisStatus(parsed: unknown): GenesisStatus | undefined {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+  const top = parsed as GenesisStatus & { Status?: unknown };
+  if (top.Status !== undefined) {
+    return top.Status && typeof top.Status === "object" && !Array.isArray(top.Status)
+      ? (top.Status as GenesisStatus)
+      : undefined;
+  }
+  if (typeof top.Code === "number" && typeof top.Type === "string") return top;
+  return undefined;
+}
+
+/** Drop a leading UTF-8 byte order mark (this host puts one on its HTML error pages). */
+function stripBom(text: string): string {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
 export class RequestEngine {
   private readonly baseUrl: string;
   private readonly transport: Transport;
@@ -248,9 +278,20 @@ export class RequestEngine {
 
   /**
    * POST form-encoded params and return the raw bytes (file / binary downloads).
-   * If the server answered with JSON instead of the expected binary (e.g. a
-   * credential or "too large" error on a `data/*file` endpoint), the logical
-   * `Status` is checked so the failure surfaces cleanly.
+   *
+   * A `data/*file` endpoint answers with a file (a ZIP wrapper), so a JSON or
+   * empty reply is never a download: it is a GENESIS status the server sent
+   * instead of the file (a credential, "too large" or "no such object" reply),
+   * and handing it back would let a caller save `{"Status":…}` as `x.zip`.
+   *  - an empty body → `RegionalstatistikParseError`;
+   *  - a JSON body with a GENESIS status (enveloped or flat) → the logical-error
+   *    mapping (90, 98, error `Type`), and otherwise a `RegionalstatistikApiError`
+   *    with that status — including `104` ("keine Objekte"), which for a download
+   *    means "no such object" (`isNotFound`, exit 4 in the CLI);
+   *  - any other JSON, or a body labelled JSON that does not parse →
+   *    `RegionalstatistikParseError`.
+   * A body counts as JSON when its Content-Type says so or it starts with `{`
+   * (after an optional UTF-8 BOM), whatever the Content-Type claims.
    */
   async postRaw(
     path: string,
@@ -259,17 +300,42 @@ export class RequestEngine {
     authHeaders: Record<string, string>,
   ): Promise<RawResponse> {
     const res = await this.request("POST", path, { params, accept, authHeaders });
-    if (/json/i.test(res.contentType)) {
-      const text = res.data.toString("utf8");
-      try {
-        const parsed = JSON.parse(text) as unknown;
-        this.checkLogicalStatus("POST", this.buildUrl(path), text, parsed);
-      } catch (err) {
-        if (err instanceof RegionalstatistikApiError) throw err;
-        // Not parseable / not an envelope — fall through and return the bytes.
-      }
+    if (res.data.length === 0) {
+      throw new RegionalstatistikParseError(`Empty response body from ${path}: expected a file download.`);
     }
-    return res;
+    const jsonType = /json/i.test(res.contentType);
+    const text = stripBom(res.data.toString("utf8"));
+    if (!jsonType && !text.trimStart().startsWith("{")) return res;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch (cause) {
+      if (!jsonType) return res; // starts with "{" but is not JSON: a real file
+      throw new RegionalstatistikParseError(
+        `Expected a file download from ${path}, got an unparseable reply labelled ${res.contentType}.`,
+        { cause },
+      );
+    }
+    const url = this.buildUrl(path);
+    this.checkLogicalStatus("POST", url, text, parsed);
+    const s = genesisStatus(parsed);
+    if (s === undefined) {
+      throw new RegionalstatistikParseError(
+        `Expected a file download from ${path}, got a JSON reply without a GENESIS status.`,
+      );
+    }
+    const code = typeof s.Code === "number" ? s.Code : undefined;
+    const type = typeof s.Type === "string" ? sanitizeServerText(s.Type) : undefined;
+    const content = typeof s.Content === "string" ? sanitizeServerText(s.Content) : undefined;
+    throw new RegionalstatistikApiError({
+      method: "POST",
+      url: redactUrl(url),
+      body: text,
+      ...(code !== undefined ? { code } : {}),
+      ...(type !== undefined ? { statusType: type } : {}),
+      detail: `${content ? `${content} — ` : ""}the server sent this status instead of a file`,
+    });
   }
 
   private decodeJson<T>(method: "GET" | "POST", path: string, res: RawResponse): T {
@@ -310,22 +376,10 @@ export class RequestEngine {
     body: string,
     parsed: unknown,
   ): void {
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
-    const top = parsed as { Status?: unknown; Code?: unknown; Content?: unknown; Type?: unknown };
-
-    let s: { Code?: unknown; Content?: unknown; Type?: unknown };
-    if (top.Status !== undefined) {
-      // helloworld/logincheck put a plain string in `Status`; only the object
-      // form carries a logical `Code` worth inspecting.
-      if (!top.Status || typeof top.Status !== "object") return;
-      s = top.Status as { Code?: unknown; Content?: unknown; Type?: unknown };
-    } else if (typeof top.Code === "number" && typeof top.Type === "string") {
-      // Flat (envelope-less) status object — the auth-failure shape.
-      s = top;
-    } else {
-      return;
-    }
-
+    // helloworld/logincheck put a plain string in `Status`; only the object form
+    // (or the flat auth-failure shape) carries a logical `Code` worth inspecting.
+    const s = genesisStatus(parsed);
+    if (s === undefined) return;
     const code = typeof s.Code === "number" ? s.Code : undefined;
     if (code === undefined || code === CODE_EMPTY) return;
 

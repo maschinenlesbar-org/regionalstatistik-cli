@@ -75,9 +75,9 @@ will scramble the terminal.
 The CLI prints a stderr confirmation like
 `Wrote 40213 bytes to bevoelkerung-bw.zip (Content-Type: application/zip)`.
 Relay that to the user: the **path**, the **byte count**, and the **format**.
-If the byte count is suspiciously small (a few hundred bytes), the "download"
-may actually be a JSON error the CLI surfaced — check the exit code and re-read
-the message.
+Report success only on exit `0`: when GENESIS sends a status reply instead of
+the file, the CLI writes nothing, prints the `GENESIS status …` message and
+exits non-zero.
 
 ```
 Wrote bevoelkerung-bw.zip — 40,213 bytes, ffcsv (zipped).
@@ -95,10 +95,11 @@ Unzip with: unzip bevoelkerung-bw.zip
   large tables — narrow with `--region-key` and the year filters; the async job
   flow is not supported. Gemeinde-level exports without a region filter hit
   this quickly.
-- **Not found is exit 4** (`Status.Code 90`) — re-check the code. But an auth
+- **Not found is exit 4.** A code that does not exist comes back as
+  `GENESIS status 104 … the server sent this status instead of a file` (rarely
+  `Status.Code 90`) and nothing is written — re-resolve the code with
+  **regionalstatistik-statistics-finder**. But an auth
   failure with wrong credentials exits **1** (GENESIS Code 2, oddly on HTTP
   404) — read the message before re-resolving anything.
 - **Confirm the path and don't silently overwrite** — this skill writes to the
   user's filesystem; the CLI refuses existing targets without `--force`.
-- A tiny output file usually means an error envelope was returned instead of
-  the ZIP — verify before telling the user it succeeded.

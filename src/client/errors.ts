@@ -70,11 +70,17 @@ export class RegionalstatistikApiError extends RegionalstatistikError {
    * (requested object not found), or a transport-level HTTP 404 that did NOT
    * carry a contradicting GENESIS code in its body — the live server answers
    * wrong credentials with HTTP 404 + `{ Code: 2, ... }`, which is an auth
-   * problem, not a missing object. Lets the CLI map a genuine miss to a
-   * distinct exit code for scripting.
+   * problem, not a missing object. Also code 104 ("keine Objekte"), which the
+   * engine raises only for a file download (`postRaw`) — on the JSON endpoints
+   * 104 is a valid empty result and never thrown. Lets the CLI map a genuine
+   * miss to a distinct exit code for scripting.
    */
   get isNotFound(): boolean {
-    return this.code === 90 || (this.httpStatus === 404 && this.code === undefined);
+    return (
+      this.code === 90 ||
+      this.code === 104 ||
+      (this.httpStatus === 404 && this.code === undefined)
+    );
   }
 
   /**

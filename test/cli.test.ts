@@ -4,7 +4,7 @@ import { run } from "../src/cli/run.js";
 import { RegionalstatistikClient } from "../src/client/client.js";
 import type { CliDeps } from "../src/cli/io.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
-import { makeMockTransport, jsonResponse, bodyOf } from "./helpers.js";
+import { makeMockTransport, jsonResponse, rawResponse, bodyOf } from "./helpers.js";
 import * as fx from "./fixtures.js";
 
 function makeCli(
@@ -239,6 +239,31 @@ test("a not-found (Status.Code 90) exits 4", async () => {
   const cli = makeCli(() => jsonResponse(fx.notFound));
   const code = await run([...TOKEN, "metadata", "table", "99999-99-99-4"], cli.deps);
   assert.equal(code, 4);
+});
+
+test("data tablefile with a Status.Code 104 reply (unknown code) exits 4 and writes no file", async () => {
+  const cli = makeCli(() => jsonResponse(fx.emptyResult));
+  const code = await run([...TOKEN, "data", "tablefile", "99999-99", "-o", "t.zip"], cli.deps);
+  assert.equal(code, 4);
+  assert.equal(cli.files.size, 0);
+  assert.match(cli.err.join("\n"), /GENESIS status 104/);
+  assert.doesNotMatch(cli.err.join("\n"), /Wrote/);
+});
+
+test("data tablefile with an error reply labelled text/plain exits non-zero and writes no file", async () => {
+  const cli = makeCli(() => rawResponse(JSON.stringify(fx.genericError), "text/plain;charset=UTF-8"));
+  const code = await run([...TOKEN, "data", "tablefile", "12411-01-01-4", "-o", "t.zip"], cli.deps);
+  assert.equal(code, 1);
+  assert.equal(cli.files.size, 0);
+  assert.match(cli.err.join("\n"), /GENESIS status -1 \(Fehler\)/);
+});
+
+test("data tablefile with an empty body exits 1 and writes no file", async () => {
+  const cli = makeCli(() => rawResponse("", "application/zip"));
+  const code = await run([...TOKEN, "data", "tablefile", "12411-01-01-4", "-o", "t.zip"], cli.deps);
+  assert.equal(code, 1);
+  assert.equal(cli.files.size, 0);
+  assert.match(cli.err.join("\n"), /Empty response body/);
 });
 
 test("--output writes JSON to a file and keeps stdout clean", async () => {

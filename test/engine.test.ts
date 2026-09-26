@@ -318,6 +318,76 @@ test("postRaw surfaces a flat JSON auth error served on a file endpoint", async 
   );
 });
 
+test("postRaw raises a Status.Code 104 reply on a file endpoint as not-found (no download)", async () => {
+  const mt = makeMockTransport(() => rawResponse(JSON.stringify(fx.emptyResult), "application/json;charset=UTF-8"));
+  const e = new RequestEngine({ transport: mt.transport });
+  await assert.rejects(
+    () => e.postRaw("/data/tablefile", "application/zip", { name: "99999-99" }, { username: "TOK" }),
+    (err) => {
+      assert.ok(err instanceof RegionalstatistikApiError);
+      assert.equal(err.code, 104);
+      assert.ok(err.isNotFound);
+      assert.match(err.message, /GENESIS status 104 \(Information\)/);
+      assert.match(err.message, /instead of a file/);
+      return true;
+    },
+  );
+});
+
+test("postRaw raises non-error statuses (Information, Warnung, success) — JSON is never a download", async () => {
+  for (const body of [fx.warning, fx.dataTable, envelopeWith(12, "Information"), envelopeWith(5, "Warnung")]) {
+    const mt = makeMockTransport(() => jsonResponse(body));
+    const e = new RequestEngine({ transport: mt.transport });
+    await assert.rejects(
+      () => e.postRaw("/data/tablefile", "application/zip", { name: "1" }, { username: "TOK" }),
+      (err) => err instanceof RegionalstatistikApiError && err.code !== undefined && !err.isNotFound,
+    );
+  }
+});
+
+test("postRaw sniffs a GENESIS reply whatever its Content-Type, and after a BOM", async () => {
+  const envelope90 = JSON.stringify(fx.notFound);
+  for (const [body, type, code] of [
+    [envelope90, "text/plain;charset=UTF-8", 90],
+    [JSON.stringify(fx.tooLarge), "application/octet-stream", 98],
+    [JSON.stringify(fx.flatBadCredentials), "text/plain", 2],
+    ["\uFEFF" + envelope90, "application/json", 90],
+    ["\uFEFF" + envelope90, "application/zip", 90],
+  ] as const) {
+    const mt = makeMockTransport(() => rawResponse(body, type));
+    const e = new RequestEngine({ transport: mt.transport });
+    await assert.rejects(
+      () => e.postRaw("/data/tablefile", "application/zip", { name: "1" }, { username: "TOK" }),
+      (err) => err instanceof RegionalstatistikApiError && err.code === code,
+      `${type}: ${body.slice(0, 20)}`,
+    );
+  }
+});
+
+test("postRaw rejects an empty body, JSON without a status and unparseable JSON", async () => {
+  for (const [body, type] of [
+    ["", "application/json;charset=UTF-8"],
+    ["", "application/zip"],
+    ['{"hello":"world"}', "application/octet-stream"],
+    ["this is not json", "application/json;charset=UTF-8"],
+  ] as const) {
+    const mt = makeMockTransport(() => rawResponse(body, type));
+    const e = new RequestEngine({ transport: mt.transport });
+    await assert.rejects(
+      () => e.postRaw("/data/tablefile", "application/zip", { name: "1" }, { username: "TOK" }),
+      RegionalstatistikParseError,
+      `${type}: ${body}`,
+    );
+  }
+});
+
+test("postRaw returns a non-JSON body that merely starts with a brace", async () => {
+  const mt = makeMockTransport(() => rawResponse("{not json;1;2\n", "text/csv"));
+  const e = new RequestEngine({ transport: mt.transport });
+  const res = await e.postRaw("/data/tablefile", "application/zip", { name: "1" }, { username: "TOK" });
+  assert.equal(res.data.toString("utf8"), "{not json;1;2\n");
+});
+
 test("redactUrl masks username and password query parameters", () => {
   const masked = redactUrl("https://www.regionalstatistik.de/x?name=1&username=SECRET&password=HUNTER2");
   assert.match(masked, /username=%2A%2A%2A|username=\*\*\*/);
@@ -369,3 +439,7 @@ test("a rejected base URL does not echo embedded credentials", () => {
     (err) => err instanceof RegionalstatistikNetworkError && !/SECRETUSER|HUNTER2/.test(err.message),
   );
 });
+
+function envelopeWith(code: number, type: string): unknown {
+  return { Ident: { Service: "x", Method: "y" }, Status: { Code: code, Content: "status text", Type: type }, Parameter: {}, Copyright: "c" };
+}

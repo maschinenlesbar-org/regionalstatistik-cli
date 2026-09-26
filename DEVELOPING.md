@@ -97,10 +97,19 @@ in a `Status` object (`{ Code, Content, Type }`). After a successful parse,
 | `Status.Code` | Handling |
 |---|---|
 | `0`, `22` (auto-corrected), `50` (no newer data) | success — returned as-is (the envelope's `Status.Content` carries any warning) |
-| `104` | **empty result** — returned as a valid empty list, NOT an error |
+| `104` | **empty result** — returned as a valid empty list, NOT an error (except on a `data/*file` download, below) |
 | `90` | object not found → `RegionalstatistikApiError`, `isNotFound` (exit 4) |
 | `98` | too large → `RegionalstatistikApiError` with narrowing guidance (exit 1) |
 | any `Type` = `Fehler`/`Error` | → `RegionalstatistikApiError` (exit 1) |
+
+A `data/*file` endpoint answers with a file (a ZIP wrapper), so `postRaw` treats
+any JSON or empty reply as a failure rather than a download. A body counts as JSON
+when its Content-Type says so **or** it starts with `{` (after an optional BOM) —
+the server labels some replies `text/plain` or `application/octet-stream`. An
+empty body or JSON without a GENESIS status → `RegionalstatistikParseError`; a
+GENESIS status → the mapping above, and otherwise a `RegionalstatistikApiError`
+carrying that status — `104` included, which there means "no such object"
+(`isNotFound`, exit 4). Nothing is written.
 
 **Divergence from the destatis reference (its engine misses this):**
 authentication failures arrive as a **flat, envelope-less**

@@ -87,7 +87,7 @@ dieselbe Struktur mit 401/404:
 | `0` | Information | Erfolg | liefert Daten |
 | `22` | Warnung | Erfolg, ein Parameter wurde automatisch korrigiert | liefert Daten (Warnung in `Status.Content` sichtbar) |
 | `50` | Information | keine neueren Daten (bei `--stand`) | liefert Daten |
-| `104` | Information | kein Objekt gefunden, das passt | liefert ein **leeres** Ergebnis (Exit 0) |
+| `104` | Information | kein Objekt gefunden, das passt | liefert ein **leeres** Ergebnis (Exit 0); ein Download mit `data <kind>file` schlägt stattdessen fehl (Exit 4, keine Datei geschrieben) |
 | `90` | Fehler | angefordertes Objekt nicht gefunden | Fehler, **Exit 4** |
 | `98` | Information | Ergebnis zu groß für einen direkten Abruf | Fehler mit Hinweisen zum Eingrenzen, Exit 1 |
 | `15` | ERROR | nicht autorisiert (keine oder nicht erkannte Zugangsdaten; flacher Body bei HTTP 401) | Fehler + Hinweis zu den Zugangsdaten, Exit 1 |

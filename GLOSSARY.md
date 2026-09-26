@@ -88,7 +88,7 @@ with 401/404:
 | `0` | Information | success | returns data |
 | `22` | Warnung | success, a parameter was auto-corrected | returns data (warning visible in `Status.Content`) |
 | `50` | Information | no newer data (for `--stand`) | returns data |
-| `104` | Information | no object matched | returns an **empty** result (exit 0) |
+| `104` | Information | no object matched | returns an **empty** result (exit 0); a `data <kind>file` download fails instead (exit 4, no file written) |
 | `90` | Fehler | requested object not found | error, **exit 4** |
 | `98` | Information | result too large for a direct fetch | error with narrowing guidance, exit 1 |
 | `15` | ERROR | not authorized (no/unrecognized credentials; flat body on HTTP 401) | error + credentials hint, exit 1 |
