@@ -55,6 +55,18 @@ test("postJson throws RegionalstatistikParseError on invalid JSON", async () => 
   await assert.rejects(() => e.postJson("/x", {}, {}), RegionalstatistikParseError);
 });
 
+test("an empty 200 body or a 204 is a RegionalstatistikParseError, not null", async () => {
+  for (const res of [rawResponse("", "application/json"), rawResponse("  \n", "application/json"), rawResponse("", "application/json", 204)]) {
+    const mt = makeMockTransport(() => res);
+    const e = new RequestEngine({ transport: mt.transport });
+    await assert.rejects(
+      () => e.postJson("/find/find", {}, {}),
+      (err) => err instanceof RegionalstatistikParseError && err.message === "Empty response body from /find/find",
+    );
+    await assert.rejects(() => e.getJson("/helloworld/whoami"), RegionalstatistikParseError);
+  }
+});
+
 test("surfaces a logical error (Status.Type Fehler) despite HTTP 200", async () => {
   const mt = makeMockTransport(() => jsonResponse(fx.genericError)); // HTTP 200
   const e = new RequestEngine({ transport: mt.transport });

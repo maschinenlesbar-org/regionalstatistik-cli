@@ -514,6 +514,14 @@ test("DEL and C1 control characters in server data are escaped in the JSON outpu
   }
 });
 
+test("an empty 200 reply exits 1 instead of printing null", async () => {
+  const cli = makeCli(() => rawResponse("", "application/json"));
+  const code = await run([...TOKEN, "find", "x"], cli.deps);
+  assert.equal(code, 1);
+  assert.deepEqual(cli.out, []);
+  assert.match(cli.err.join("\n"), /Empty response body from \/genesisws\/rest\/2020\/find\/find/);
+});
+
 test("--compact prints single-line JSON", async () => {
   const cli = makeCli(() => jsonResponse(fx.tablesList));
   await run([...TOKEN, "--compact", "catalogue", "tables"], cli.deps);

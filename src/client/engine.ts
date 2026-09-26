@@ -409,8 +409,11 @@ export class RequestEngine {
     sent: boolean | undefined,
   ): T {
     const text = res.data.toString("utf8");
+    // Every GENESIS endpoint answers with a JSON body (the envelope, or the
+    // helloworld objects); an empty 200 or a 204 is a broken response, not a
+    // result — returning null would print "null" with exit 0.
     if (res.status === 204 || text.trim().length === 0) {
-      return null as T;
+      throw new RegionalstatistikParseError(`Empty response body from ${path}`);
     }
     let parsed: unknown;
     try {
