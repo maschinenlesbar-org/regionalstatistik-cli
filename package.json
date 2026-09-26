@@ -1,6 +1,6 @@
 {
   "name": "@maschinenlesbar.org/regionalstatistik-cli",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "TypeScript API client and CLI for the Regionaldatenbank Deutschland GENESIS REST API (www.regionalstatistik.de)",
   "type": "module",
   "bin": {
