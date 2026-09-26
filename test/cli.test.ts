@@ -616,6 +616,19 @@ test("--help exits 0", async () => {
   assert.equal(await run(["--help"], cli.deps), 0);
 });
 
+test("help/version exit 0; a missing command prints the help to stderr and exits 2", async () => {
+  for (const argv of [["--help"], ["help"], ["find", "--help"], ["--version"]]) {
+    const cli = makeCli(() => jsonResponse(fx.whoami));
+    assert.equal(await run(argv, cli.deps), 0, argv.join(" "));
+  }
+  for (const argv of [[], ["data"]]) {
+    const cli = makeCli(() => jsonResponse(fx.whoami));
+    assert.equal(await run(argv, cli.deps), 2, argv.join(" "));
+    assert.deepEqual(cli.out, []);
+    assert.match(cli.err.join("\n"), /^Usage: regstat/);
+  }
+});
+
 test("a commander usage error (bad option value) exits 2, not 1", async () => {
   const cli = makeCli(() => jsonResponse(fx.tablesList));
   const code = await run([...TOKEN, "--pagelength", "0", "catalogue", "tables"], cli.deps);

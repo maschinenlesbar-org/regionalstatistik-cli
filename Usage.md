@@ -142,9 +142,9 @@ regstat data tablefile 12411-01-01-4 --region-key "08*" --format ffcsv -o bevoel
 
 | Code | Meaning |
 |---|---|
-| `0` | success (help/version included); also an **empty result** — see note |
+| `0` | success (`--help`, `help` and `--version` included); also an **empty result** — see note |
 | `1` | API/logical error (including auth failures — Code 15/2), network or parse error |
-| `2` | usage error (missing/partial credentials, bad flags/arguments, unknown command) |
+| `2` | usage error (missing/partial credentials, bad flags/arguments, unknown command, and no command at all: bare `regstat` or `regstat data` prints the help to stderr and exits 2) |
 | `4` | object not found — logical `Status.Code 90`, or an HTTP 404 without a GENESIS code (see note), and a `data <kind>file` download for a code that does not exist (`Status.Code 104`) |
 
 > **A missing object code usually does not exit 4.** Looking up a code that does

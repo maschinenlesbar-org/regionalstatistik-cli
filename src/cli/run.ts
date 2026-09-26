@@ -36,12 +36,13 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
     return 0;
   } catch (err) {
     if (err instanceof CommanderError) {
-      // Help/version (and bare "no command", which prints help) use commander's
-      // exitCode 0; every other commander error — bad option value, missing or
-      // invalid argument, unknown option/command — is a usage error. Normalise
-      // those to the conventional usage exit code 2 (matching
+      // --help, `help` and --version use commander's exitCode 0. Every other
+      // commander error — bad option value, missing or invalid argument, unknown
+      // option/command, and no command at all (bare `regstat` or `regstat data`,
+      // which print the help to stderr with commander's exitCode 1) — is a usage
+      // error. Normalise those to the conventional usage exit code 2 (matching
       // RegionalstatistikUsageError) so scripts get one reliable "usage problem"
-      // signal instead of a mix of 1 and 2. See DEVELOPING.md's exit-code table.
+      // signal instead of a mix of 1 and 2. See Usage.md's exit-code table.
       return err.exitCode === 0 ? 0 : 2;
     }
     if (err instanceof RegionalstatistikUsageError) {
