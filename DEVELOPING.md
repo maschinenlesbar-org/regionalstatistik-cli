@@ -121,7 +121,7 @@ misleading HTTP status (verified live on both hosts):
 | Reply | Meaning | This CLI |
 |---|---|---|
 | HTTP **401** + flat `Code 15` ("Sie sind nicht berechtigt …") | no/unrecognized credentials | exit 1 + credentials hint (`isAuthError`) |
-| HTTP **404** + flat `Code 2` ("… prüfen … Nutzernamen bzw. das Passwort") | wrong credentials | exit **1** (NOT 4 — see below) |
+| HTTP **404** + flat `Code 2` ("… prüfen … Nutzernamen bzw. das Passwort") | wrong credentials | exit **1** (NOT 4 — see below) + credentials hint (`isAuthError`) |
 
 `engine.ts` therefore extracts a GENESIS status from non-2xx bodies too
 (`toApiError`), *and* maps the flat shape on 2xx replies defensively
@@ -181,9 +181,11 @@ narrow the selection (`--start-year`/`--end-year`/`--timeslices`/
 4. **Flat auth-error mapping** (engine `toApiError` + `checkLogicalStatus`):
    401+Code 15 and 404+Code 2 surface as typed errors with the GENESIS code;
    `isNotFound` ignores a 404 that carries a GENESIS code; run.ts prints a
-   credentials hint on `isAuthError` (destatis only hints on HTTP 401/403).
-   The destatis reference renders these poorly (exit 4 / no detail) — a
-   backport candidate.
+   credentials hint on `isAuthError` (Code 15, Code 2 on a non-2xx reply,
+   HTTP 401/403) worded by `RegionalstatistikApiError.credentialsSent`: "check
+   your credentials" when a `username` header went out, "refused the request
+   without credentials" when none did, and no hint for `hello` (whoami takes
+   none). destatis-genesis-cli has the same mapping since 2026-09-26.
 5. **BOM-tolerant HTML detection** in `toApiError` — this host's HTML error
    pages start with a UTF-8 BOM, which must not defeat the "don't dump HTML to
    stderr" check.

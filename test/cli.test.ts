@@ -277,7 +277,36 @@ test("the live 404 + flat Code 2 reply (bad credentials) exits 1, not 4", async 
   const errText = cli.err.join("\n");
   assert.match(errText, /GENESIS status 2/);
   assert.match(errText, /Nutzernamen/);
+  assert.match(errText, /Hint: check your credentials \(--token or --username\/--password\)\./);
   assert.doesNotMatch(errText, /Unexpected error/);
+});
+
+test("a wrong-credentials reply on a data download gets the credentials hint too", async () => {
+  const cli = makeCli(() => jsonResponse(fx.flatBadCredentials, 404), {
+    REGIONALSTATISTIK_USERNAME: "u",
+    REGIONALSTATISTIK_PASSWORD: "p",
+  });
+  const code = await run(["data", "tablefile", "12411-01-01-4", "-o", "t.zip"], cli.deps);
+  assert.equal(code, 1);
+  assert.match(cli.err.join("\n"), /Hint: check your credentials/);
+  assert.equal(cli.files.size, 0);
+});
+
+test("hello (no credentials sent) gets no credentials hint on a 401/403", async () => {
+  for (const status of [401, 403]) {
+    const cli = makeCli(() => rawResponse("", "text/html", status));
+    const code = await run(["hello"], cli.deps);
+    assert.equal(code, 1);
+    assert.match(cli.err.join("\n"), new RegExp(`HTTP ${status} for GET`));
+    assert.doesNotMatch(cli.err.join("\n"), /Hint/);
+  }
+});
+
+test("a bare HTTP 404 still exits 4, without a hint", async () => {
+  const cli = makeCli(() => jsonResponse({ detail: "nope" }, 404));
+  const code = await run([...TOKEN, "metadata", "table", "12411-01-01-4"], cli.deps);
+  assert.equal(code, 4);
+  assert.doesNotMatch(cli.err.join("\n"), /Hint/);
 });
 
 test("a not-found (Status.Code 90) exits 4", async () => {

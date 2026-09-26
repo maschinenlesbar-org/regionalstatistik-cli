@@ -35,6 +35,13 @@ export class RegionalstatistikApiError extends RegionalstatistikError {
   readonly method: string;
   readonly body: string;
   readonly detail: string | undefined;
+  /**
+   * Whether the failed request carried credentials: `true` if it did, `false` for
+   * an endpoint that accepts them but was called without, `undefined` for an
+   * endpoint that takes none (`whoami`). Lets the CLI give the right hint — or
+   * none — for an auth error.
+   */
+  readonly credentialsSent: boolean | undefined;
 
   constructor(args: {
     url: string;
@@ -44,6 +51,7 @@ export class RegionalstatistikApiError extends RegionalstatistikError {
     code?: number;
     statusType?: string;
     detail?: string;
+    credentialsSent?: boolean;
   }) {
     const detailPart = args.detail ? `: ${args.detail}` : "";
     const genesisPart =
@@ -63,6 +71,7 @@ export class RegionalstatistikApiError extends RegionalstatistikError {
     this.method = args.method;
     this.body = args.body;
     this.detail = args.detail;
+    this.credentialsSent = args.credentialsSent;
   }
 
   /**
@@ -85,11 +94,18 @@ export class RegionalstatistikApiError extends RegionalstatistikError {
 
   /**
    * True when the API rejected the credentials: the GENESIS logical code 15
-   * ("Sie sind nicht berechtigt ..." — no/unrecognized credentials) or a
-   * transport-level 401/403. The CLI appends a credentials hint for these.
+   * ("Sie sind nicht berechtigt ..." — no/unrecognized credentials), the flat
+   * code 2 on a non-2xx reply (wrong username/password or token — the live
+   * server's HTTP 404 + `{ Code: 2 }`), or a transport-level 401/403. The CLI
+   * appends a credentials hint for these.
    */
   get isAuthError(): boolean {
-    return this.code === 15 || this.httpStatus === 401 || this.httpStatus === 403;
+    return (
+      this.code === 15 ||
+      (this.code === 2 && this.httpStatus !== undefined) ||
+      this.httpStatus === 401 ||
+      this.httpStatus === 403
+    );
   }
 
   /** True for HTTP statuses the engine treats as transient and retries. */

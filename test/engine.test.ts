@@ -120,6 +120,8 @@ test("a 404 with a flat Code 2 body is bad credentials, NOT not-found", async ()
       assert.equal(err.httpStatus, 404);
       assert.equal(err.code, 2);
       assert.ok(!err.isNotFound);
+      assert.ok(err.isAuthError);
+      assert.equal(err.credentialsSent, true);
       assert.match(err.message, /Nutzernamen/);
       return true;
     },
@@ -443,3 +445,24 @@ test("a rejected base URL does not echo embedded credentials", () => {
 function envelopeWith(code: number, type: string): unknown {
   return { Ident: { Service: "x", Method: "y" }, Status: { Code: code, Content: "status text", Type: type }, Parameter: {}, Copyright: "c" };
 }
+
+test("credentialsSent: true with a username header, false with none, undefined for whoami", async () => {
+  const mt = makeMockTransport(() => rawResponse(JSON.stringify(fx.flatNotAuthorized), "application/json", 401));
+  const e = new RequestEngine({ transport: mt.transport });
+  for (const [call, expected] of [
+    [() => e.postJson("/x", {}, { username: "U", password: "P" }), true],
+    [() => e.postJson("/x", {}, {}), false],
+    [() => e.getJson("/helloworld/whoami"), undefined],
+  ] as const) {
+    await assert.rejects(call, (err) => err instanceof RegionalstatistikApiError && err.credentialsSent === expected);
+  }
+});
+
+test("a flat Code 2 on HTTP 200 is not an auth error (only the live 404 pairing is)", async () => {
+  const mt = makeMockTransport(() => jsonResponse(fx.flatBadCredentials));
+  const e = new RequestEngine({ transport: mt.transport });
+  await assert.rejects(
+    () => e.postJson("/x", {}, { username: "U", password: "P" }),
+    (err) => err instanceof RegionalstatistikApiError && err.code === 2 && !err.isAuthError,
+  );
+});

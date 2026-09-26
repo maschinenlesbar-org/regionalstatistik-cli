@@ -157,7 +157,9 @@ regstat data tablefile 12411-01-01-4 --region-key "08*" --format ffcsv -o bevoel
 
 > **A 404 is not always "not found" on this host.** Wrong credentials come back
 > as HTTP 404 with a flat `{"Code":2,…}` body; the CLI recognizes the GENESIS
-> code and exits **1** with the server's explanation, not 4.
+> code and exits **1** with the server's explanation and a
+> `Hint: check your credentials` line, not 4. (`regstat hello` sends no
+> credentials, so a 401/403 there gets no such hint.)
 
 ## Gotchas
 

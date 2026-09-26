@@ -139,6 +139,17 @@ function assertHttpScheme(baseUrl: string): void {
   }
 }
 
+/**
+ * Whether a request carried credentials, for
+ * `RegionalstatistikApiError.credentialsSent`: `undefined` for an endpoint that
+ * takes none (whoami — no auth headers passed at all), `false` for an
+ * authenticatable endpoint called without them, `true` when a `username` header
+ * went out.
+ */
+function credentialsSent(authHeaders: Record<string, string> | undefined): boolean | undefined {
+  return authHeaders === undefined ? undefined : Object.keys(authHeaders).length > 0;
+}
+
 /** The `{ Code, Content, Type }` status object of a GENESIS reply. */
 interface GenesisStatus {
   Code?: unknown;
@@ -253,7 +264,7 @@ export class RequestEngine {
       // to stderr by renderRaw, so strip any embedded terminal control chars.
       const contentType = sanitizeServerText(String(response.headers["content-type"] ?? ""));
       if (status < 200 || status >= 300) {
-        throw this.toApiError(method, url, status, response.body);
+        throw this.toApiError(method, url, status, response.body, credentialsSent(options.authHeaders));
       }
 
       return { data: response.body, contentType, status };
@@ -263,7 +274,7 @@ export class RequestEngine {
   /** GET a JSON body without credentials (helloworld/whoami). */
   async getJson<T>(path: string): Promise<T> {
     const res = await this.request("GET", path, { accept: "application/json" });
-    return this.decodeJson<T>("GET", path, res);
+    return this.decodeJson<T>("GET", path, res, undefined);
   }
 
   /** POST form-encoded params (with credential headers) and parse the JSON reply. */
@@ -273,7 +284,7 @@ export class RequestEngine {
     authHeaders: Record<string, string>,
   ): Promise<T> {
     const res = await this.request("POST", path, { params, accept: "application/json", authHeaders });
-    return this.decodeJson<T>("POST", path, res);
+    return this.decodeJson<T>("POST", path, res, credentialsSent(authHeaders));
   }
 
   /**
@@ -318,7 +329,8 @@ export class RequestEngine {
       );
     }
     const url = this.buildUrl(path);
-    this.checkLogicalStatus("POST", url, text, parsed);
+    const sent = credentialsSent(authHeaders);
+    this.checkLogicalStatus("POST", url, text, parsed, sent);
     const s = genesisStatus(parsed);
     if (s === undefined) {
       throw new RegionalstatistikParseError(
@@ -332,13 +344,19 @@ export class RequestEngine {
       method: "POST",
       url: redactUrl(url),
       body: text,
+      ...(sent !== undefined ? { credentialsSent: sent } : {}),
       ...(code !== undefined ? { code } : {}),
       ...(type !== undefined ? { statusType: type } : {}),
       detail: `${content ? `${content} — ` : ""}the server sent this status instead of a file`,
     });
   }
 
-  private decodeJson<T>(method: "GET" | "POST", path: string, res: RawResponse): T {
+  private decodeJson<T>(
+    method: "GET" | "POST",
+    path: string,
+    res: RawResponse,
+    sent: boolean | undefined,
+  ): T {
     const text = res.data.toString("utf8");
     if (res.status === 204 || text.trim().length === 0) {
       return null as T;
@@ -349,7 +367,7 @@ export class RequestEngine {
     } catch (cause) {
       throw new RegionalstatistikParseError(`Failed to parse JSON response from ${path}`, { cause });
     }
-    this.checkLogicalStatus(method, this.buildUrl(path), text, parsed);
+    this.checkLogicalStatus(method, this.buildUrl(path), text, parsed, sent);
     return parsed as T;
   }
 
@@ -375,6 +393,7 @@ export class RequestEngine {
     url: string,
     body: string,
     parsed: unknown,
+    sent: boolean | undefined,
   ): void {
     // helloworld/logincheck put a plain string in `Status`; only the object form
     // (or the flat auth-failure shape) carries a logical `Code` worth inspecting.
@@ -398,6 +417,7 @@ export class RequestEngine {
         method,
         url: redactUrl(url),
         body,
+        ...(sent !== undefined ? { credentialsSent: sent } : {}),
         code,
         statusType: type,
         detail,
@@ -418,6 +438,7 @@ export class RequestEngine {
     url: string,
     status: number,
     body: Buffer,
+    sent: boolean | undefined,
   ): RegionalstatistikApiError {
     const text = body.toString("utf8");
     let detail: string | undefined;
@@ -469,6 +490,7 @@ export class RequestEngine {
       url: redactUrl(url),
       method,
       body: text,
+      ...(sent !== undefined ? { credentialsSent: sent } : {}),
       ...(code !== undefined ? { code } : {}),
       ...(statusType !== undefined ? { statusType } : {}),
       detail,
