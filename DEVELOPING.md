@@ -78,8 +78,10 @@ https://www.regionalstatistik.de/genesis/online. The CLI resolves credentials
 with precedence **flag > env > unset** (`--username`/`--password` seeded from
 `REGIONALSTATISTIK_USERNAME`/`REGIONALSTATISTIK_PASSWORD`, `--token` from
 `REGIONALSTATISTIK_API_TOKEN`, in `program.ts`; validated in
-`shared.ts:resolveCredentials`). A token wins over username/password; supplying
-only one of username/password is a `RegionalstatistikUsageError` (exit 2). No
+`shared.ts:resolveCredentials`). A token wins over username/password, except
+that a `--username`/`--password` *flag* beats an env-only token (commander's
+value source tells flag from env); supplying only one of username/password is a
+`RegionalstatistikUsageError` (exit 2). No
 credential is ever bundled.
 
 **Redirects are NOT followed.** Following a cross-origin redirect would forward

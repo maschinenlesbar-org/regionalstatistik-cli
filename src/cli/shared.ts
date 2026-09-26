@@ -120,14 +120,29 @@ export interface ResolvedCredentials {
   present: boolean;
 }
 
+/** Which credential options were given as flags on the command line (not seeded from env). */
+export interface CredentialSources {
+  token?: boolean;
+  username?: boolean;
+  password?: boolean;
+}
+
 /**
  * Resolve the credential flags into a normalized form. A token wins over
- * username/password. Supplying only one of username/password is a usage error
- * (exit 2). No credentials at all is allowed here — commands that need auth
- * enforce presence via {@link action}'s `auth` guard.
+ * username/password — except that a `--username`/`--password` **flag** beats a
+ * token that only came from `REGIONALSTATISTIK_API_TOKEN`: the account named on
+ * the command line is the one the user means, so an env token must not silently
+ * authenticate as someone else. (An explicit `--token` flag still wins.)
+ * Supplying only one of username/password is a usage error (exit 2). No
+ * credentials at all is allowed here — commands that need auth enforce presence
+ * via {@link action}'s `auth` guard.
  */
-export function resolveCredentials(global: GlobalOptions): ResolvedCredentials {
-  const token = trimmed(global.token);
+export function resolveCredentials(
+  global: GlobalOptions,
+  fromCli: CredentialSources = {},
+): ResolvedCredentials {
+  const pairFromCli = !fromCli.token && (fromCli.username === true || fromCli.password === true);
+  const token = pairFromCli ? undefined : trimmed(global.token);
   if (token) return { token, present: true };
 
   const username = trimmed(global.username);
@@ -296,7 +311,12 @@ export function action(
     const command = args[args.length - 1] as Command;
     const positionals = args.slice(0, Math.max(0, args.length - 2)) as string[];
     const global = command.optsWithGlobals() as GlobalOptions;
-    const creds = resolveCredentials(global);
+    const root = rootCommand(command);
+    const creds = resolveCredentials(global, {
+      token: root.getOptionValueSource("token") === "cli",
+      username: root.getOptionValueSource("username") === "cli",
+      password: root.getOptionValueSource("password") === "cli",
+    });
     if (opts.auth !== false && !creds.present) {
       throw new RegionalstatistikUsageError(
         "This command needs credentials. Set --username/--password " +

@@ -106,6 +106,51 @@ test("an explicit --token overrides REGIONALSTATISTIK_API_TOKEN from the environ
   assert.equal(cli.mt.last().headers?.["username"], "0123456789abcdef0123456789abcdef");
 });
 
+test("--username/--password flags beat a REGIONALSTATISTIK_API_TOKEN from the environment", async () => {
+  const cli = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_API_TOKEN: "envtok" });
+  const code = await run(["--username", "flaguser", "--password", "flagpass", "logincheck"], cli.deps);
+  assert.equal(code, 0);
+  assert.equal(cli.mt.last().headers?.["username"], "flaguser");
+  assert.equal(cli.mt.last().headers?.["password"], "flagpass");
+});
+
+test("a --password flag combines with REGIONALSTATISTIK_USERNAME and beats the env token", async () => {
+  const cli = makeCli(() => jsonResponse(fx.loginOk), {
+    REGIONALSTATISTIK_API_TOKEN: "envtok",
+    REGIONALSTATISTIK_USERNAME: "envuser",
+  });
+  const code = await run(["--password", "flagpass", "logincheck"], cli.deps);
+  assert.equal(code, 0);
+  assert.equal(cli.mt.last().headers?.["username"], "envuser");
+  assert.equal(cli.mt.last().headers?.["password"], "flagpass");
+});
+
+test("a lone --username flag with an env token is a usage error, not a silent token login", async () => {
+  const cli = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_API_TOKEN: "envtok" });
+  const code = await run(["--username", "flaguser", "logincheck"], cli.deps);
+  assert.equal(code, 2);
+  assert.equal(cli.mt.calls.length, 0);
+  assert.match(cli.err.join("\n"), /BOTH --username and --password/);
+});
+
+test("an explicit --token flag still beats --username/--password flags", async () => {
+  const cli = makeCli(() => jsonResponse(fx.loginOk));
+  await run([...TOKEN, "--username", "u", "--password", "p", "logincheck"], cli.deps);
+  assert.equal(cli.mt.last().headers?.["username"], "0123456789abcdef0123456789abcdef");
+  assert.equal(cli.mt.last().headers?.["password"], undefined);
+});
+
+test("with env credentials only, REGIONALSTATISTIK_API_TOKEN still beats USERNAME/PASSWORD", async () => {
+  const cli = makeCli(() => jsonResponse(fx.loginOk), {
+    REGIONALSTATISTIK_API_TOKEN: "envtok",
+    REGIONALSTATISTIK_USERNAME: "envuser",
+    REGIONALSTATISTIK_PASSWORD: "envpass",
+  });
+  await run(["logincheck"], cli.deps);
+  assert.equal(cli.mt.last().headers?.["username"], "envtok");
+  assert.equal(cli.mt.last().headers?.["password"], undefined);
+});
+
 test("a control character in --user-agent is rejected before any request", async () => {
   const cli = makeCli(() => jsonResponse(fx.whoami));
   const code = await run(["hello", "--user-agent", "bad\r\nX-Injected: 1"], cli.deps);

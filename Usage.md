@@ -22,7 +22,7 @@ Global options (valid on any command):
 | Flag | Meaning |
 |---|---|
 | `--username <u>` · `--password <p>` | account login (env `REGIONALSTATISTIK_USERNAME` / `REGIONALSTATISTIK_PASSWORD`) |
-| `--token <t>` | API token (env `REGIONALSTATISTIK_API_TOKEN`); wins over username/password |
+| `--token <t>` | API token (env `REGIONALSTATISTIK_API_TOKEN`); wins over username/password, but a `--username`/`--password` flag beats a token from the env var |
 | `--base-url <url>` | API base (default `https://www.regionalstatistik.de`) |
 | `--language <de\|en>` | response language (default `de`; English labels are partial) |
 | `--pagelength <n>` | max list results, `1..25000` (server default 100) |

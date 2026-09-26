@@ -40,7 +40,9 @@ is bundled with this tool.
 | Token | `--token <t>` | `REGIONALSTATISTIK_API_TOKEN` |
 
 Precedence per field is **flag > env var > unset**; a token takes precedence
-over username/password. Only `regstat hello` works without credentials.
+over username/password — except that a `--username`/`--password` **flag** beats
+a token from `REGIONALSTATISTIK_API_TOKEN`, so the account you name on the
+command line is the one used. Only `regstat hello` works without credentials.
 
 > **Prefer the environment variables.** A credential passed as a `--token` /
 > `--username` / `--password` **flag** is visible in the process table (`ps`,
