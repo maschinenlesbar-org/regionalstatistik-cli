@@ -4,6 +4,7 @@ import {
   assertRequestParams,
   assertValid,
   baseUrlProblem,
+  credentialPairProblem,
   credentialProblem,
   headerNameProblem,
   headerValueProblem,
@@ -239,4 +240,11 @@ test("baseUrlProblem accepts an http(s) URL and names each rejected shape", () =
   assert.equal(baseUrlProblem(" https://h.example"), "A base URL cannot have surrounding whitespace.");
   assert.equal(baseUrlProblem("https://h.example/a b"), "A base URL cannot contain whitespace or control characters.");
   assert.equal(baseUrlProblem("https://h.example/a\x7fb"), "A base URL cannot contain whitespace or control characters.");
+});
+
+test("credentialPairProblem wants both or neither of username and password", () => {
+  assert.equal(credentialPairProblem({}), undefined);
+  assert.equal(credentialPairProblem({ username: "u", password: "p" }), undefined);
+  assert.equal(credentialPairProblem({ username: "u" }), "Provide both username and password (or a token).");
+  assert.equal(credentialPairProblem({ password: "p" }), "Provide both username and password (or a token).");
 });

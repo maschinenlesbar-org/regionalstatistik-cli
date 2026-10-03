@@ -111,6 +111,12 @@ What the library rejects:
   it. The scheme and `?`/`#` rules are checked by the engine's `assertHttpScheme`,
   which still throws `RegionalstatistikNetworkError`. `parseBaseUrl` calls
   `baseUrlProblem` and only appends the flag hint for an embedded credential.
+- **Half a credential pair** (`credentialPairProblem`): with no token, a
+  `username` without a `password` (or the reverse) throws at construction —
+  `Invalid credentials: Provide both username and password (or a token).` A lone
+  username used to go out in the token's wire format, a lone password was dropped.
+  The CLI's `resolveCredentials` keeps only the flag > env precedence; `action()`
+  builds the client first and rewords this error with the flags and env vars.
 
 Request defaults: neither side fills in a value the caller did not give. The CLI
 has no `.default()` for `--language` or `find --category`, so an omitted value is
@@ -153,8 +159,8 @@ with precedence **flag > env > unset** (`--username`/`--password` seeded from
 `REGIONALSTATISTIK_API_TOKEN`, in `program.ts`; values checked by the library's
 `credentialProblem`, precedence in `shared.ts:resolveCredentials`). A token wins over username/password, except
 that a `--username`/`--password` *flag* beats an env-only token (commander's
-value source tells flag from env); supplying only one of username/password is a
-`RegionalstatistikUsageError` (exit 2). Flag values are checked by their parser
+value source tells flag from env); supplying only one of username/password is
+rejected by the library (see above) and reworded by the CLI with the flags (exit 2). Flag values are checked by their parser
 (`parseCredential`, the library's `credentialProblem`); an env value is seeded unchecked and validated in
 `shared.ts:action()` only when the command is about to send it, so a malformed
 env var never breaks `--help`, `--version`, `hello` or a run whose flag

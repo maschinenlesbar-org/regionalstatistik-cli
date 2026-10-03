@@ -24,7 +24,13 @@
 
 import { RequestEngine, type EngineOptions, type RawResponse } from "./engine.js";
 import type { QueryParams } from "./query.js";
-import { assertRequestParams, assertValid, credentialProblem, nonBlankProblem } from "./validate.js";
+import {
+  assertRequestParams,
+  assertValid,
+  credentialPairProblem,
+  credentialProblem,
+  nonBlankProblem,
+} from "./validate.js";
 import type {
   CatalogueParams,
   DataFileParams,
@@ -85,7 +91,10 @@ export interface RegionalstatistikClientOptions extends EngineOptions {
    * Takes precedence over `username`/`password` if both are given.
    */
   token?: string;
-  /** Account username (may be an email). Requires `password`. */
+  /**
+   * Account username (may be an email). Requires `password`: with only one of the
+   * two (and no token) the constructor throws `RegionalstatistikValidationError`.
+   */
   username?: string;
   /** Account password. */
   password?: string;
@@ -238,6 +247,7 @@ export class RegionalstatistikClient {
     } else {
       this.username = set("username", username);
       this.password = set("password", password);
+      assertValid("credentials", { username: this.username, password: this.password }, credentialPairProblem);
     }
     this.engine = new RequestEngine(engineOptions);
 

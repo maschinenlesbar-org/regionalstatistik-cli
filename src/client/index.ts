@@ -28,6 +28,8 @@ export {
   assertValid,
   BASE_URL_USERINFO_PROBLEM,
   baseUrlProblem,
+  CREDENTIAL_PAIR_PROBLEM,
+  credentialPairProblem,
   credentialProblem,
   headerNameProblem,
   headerValueProblem,

@@ -655,3 +655,80 @@ test("parity #5 control: a base URL with a path prefix sends the identical reque
   assertSameRequest(p);
   assert.equal(p.lib.requests[0]!.url, "https://h.example/prefix/genesisws/rest/2020/catalogue/tables");
 });
+
+// ---- Finding 2 (PAT-7): username and password come as a pair --------------------------
+
+const PAIR_CLI =
+  /^Error: Provide BOTH --username and --password \(or use --token\)\. Env: REGIONALSTATISTIK_USERNAME \+ REGIONALSTATISTIK_PASSWORD, or REGIONALSTATISTIK_API_TOKEN\.$/m;
+const PAIR_LIB = /^Invalid credentials: Provide both username and password \(or a token\)\.$/;
+
+const pairCases: Array<{
+  label: string;
+  argv: string[];
+  env?: Record<string, string>;
+  lib: (t: Transport) => Promise<unknown>;
+}> = [
+  {
+    label: "REGIONALSTATISTIK_USERNAME=user catalogue tables x",
+    argv: ["catalogue", "tables", "x"],
+    env: { REGIONALSTATISTIK_USERNAME: "user" },
+    lib: async (t) => new RegionalstatistikClient({ transport: t, username: "user" }).catalogue.tables({ selection: "x" }),
+  },
+  {
+    label: "--password pass catalogue tables x",
+    argv: ["--password", "pass", "catalogue", "tables", "x"],
+    lib: async (t) => new RegionalstatistikClient({ transport: t, password: "pass" }).catalogue.tables({ selection: "x" }),
+  },
+  {
+    label: "--username user logincheck",
+    argv: ["--username", "user", "logincheck"],
+    lib: async (t) => new RegionalstatistikClient({ transport: t, username: "user" }).logincheck(),
+  },
+  {
+    label: "--username user with a blank REGIONALSTATISTIK_PASSWORD, data table",
+    argv: ["--username", "user", "data", "table", "12411-01-01-4"],
+    env: { REGIONALSTATISTIK_PASSWORD: "  " },
+    lib: async (t) =>
+      new RegionalstatistikClient({ transport: t, username: "user", password: "  " }).data.table("12411-01-01-4"),
+  },
+  {
+    label: "a --username flag next to an env token (the flag drops the env token)",
+    argv: ["--username", "user", "find", "bev"],
+    env: { REGIONALSTATISTIK_API_TOKEN: TOKEN_VALUE },
+    lib: async (t) => new RegionalstatistikClient({ transport: t, username: "user" }).find({ term: "bev" }),
+  },
+];
+
+for (const pc of pairCases) {
+  test(`parity #2: ${pc.label} is rejected by both, with no request`, async () => {
+    const p = await parity({
+      argv: ["--compact", ...pc.argv],
+      ...(pc.env ? { env: pc.env } : {}),
+      lib: pc.lib,
+      responder: () => jsonResponse(fx.tablesList),
+    });
+    assertBothReject(p, PAIR_LIB);
+    assert.match(p.cli.err, PAIR_CLI);
+  });
+}
+
+test("parity #2: a lone username next to a token is not an error (the token wins)", async () => {
+  const p = await parity({
+    argv: ["--compact", ...TOKEN, "catalogue", "tables", "x"],
+    env: { REGIONALSTATISTIK_USERNAME: "user" },
+    lib: (t) => client(t, { username: "user" }).catalogue.tables({ selection: "x" }),
+    responder: () => jsonResponse(fx.tablesList),
+  });
+  assertSameRequest(p);
+  assert.equal(p.lib.requests[0]!.headers?.["username"], TOKEN_VALUE);
+});
+
+test("parity #2 control: a username/password pair sends the identical request", async () => {
+  const p = await parity({
+    argv: ["--compact", "logincheck"],
+    env: { REGIONALSTATISTIK_USERNAME: "user", REGIONALSTATISTIK_PASSWORD: "pass" },
+    lib: (t) => new RegionalstatistikClient({ transport: t, username: "user", password: "pass" }).logincheck(),
+    responder: () => jsonResponse(fx.loginOk),
+  });
+  assertSameRequest(p);
+});

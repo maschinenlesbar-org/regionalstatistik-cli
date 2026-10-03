@@ -7,10 +7,15 @@ import { InvalidArgumentError } from "commander";
 import type { CliDeps } from "./io.js";
 import type { RawResponse } from "../client/engine.js";
 import type { RegionalstatistikClientOptions } from "../client/client.js";
-import { RegionalstatistikError, RegionalstatistikUsageError } from "../client/errors.js";
+import {
+  RegionalstatistikError,
+  RegionalstatistikUsageError,
+  RegionalstatistikValidationError,
+} from "../client/errors.js";
 import {
   BASE_URL_USERINFO_PROBLEM,
   baseUrlProblem,
+  CREDENTIAL_PAIR_PROBLEM,
   credentialProblem,
   headerValueProblem,
   intRangeProblem,
@@ -143,9 +148,10 @@ export interface CredentialSources {
  * token that only came from `REGIONALSTATISTIK_API_TOKEN`: the account named on
  * the command line is the one the user means, so an env token must not silently
  * authenticate as someone else. (An explicit `--token` flag still wins.)
- * Supplying only one of username/password is a usage error (exit 2). No
- * credentials at all is allowed here — commands that need auth enforce presence
- * via {@link action}'s `auth` guard.
+ * Precedence only: a lone username or password is passed on as is, and the
+ * library's pair rule rejects it when the client is built (see {@link action}).
+ * No credentials at all is allowed here — commands that need auth enforce
+ * presence via {@link action}'s `auth` guard.
  */
 export function resolveCredentials(
   global: GlobalOptions,
@@ -157,14 +163,33 @@ export function resolveCredentials(
 
   const username = nonBlank(global.username);
   const password = nonBlank(global.password);
-  if (username && password) return { username, password, present: true };
-  if (username || password) {
-    throw new RegionalstatistikUsageError(
-      "Provide BOTH --username and --password (or use --token). " +
-        "Env: REGIONALSTATISTIK_USERNAME + REGIONALSTATISTIK_PASSWORD, or REGIONALSTATISTIK_API_TOKEN.",
-    );
+  return {
+    ...(username !== undefined ? { username } : {}),
+    ...(password !== undefined ? { password } : {}),
+    present: username !== undefined && password !== undefined,
+  };
+}
+
+/**
+ * Build the client, rewording the library's credential-pair error with the
+ * flags and env vars that supply the pair.
+ */
+function createClient(
+  deps: CliDeps,
+  options: RegionalstatistikClientOptions,
+): ReturnType<CliDeps["createClient"]> {
+  try {
+    return deps.createClient(options);
+  } catch (err) {
+    if (err instanceof RegionalstatistikValidationError && err.message.endsWith(CREDENTIAL_PAIR_PROBLEM)) {
+      throw new RegionalstatistikUsageError(
+        "Provide BOTH --username and --password (or use --token). " +
+          "Env: REGIONALSTATISTIK_USERNAME + REGIONALSTATISTIK_PASSWORD, or REGIONALSTATISTIK_API_TOKEN.",
+        { cause: err },
+      );
+    }
+    throw err;
   }
-  return { present: false };
 }
 
 /** Translate resolved global CLI options + credentials into client options. */
@@ -385,6 +410,12 @@ export function action(
         username: root.getOptionValueSource("username") === "cli",
         password: root.getOptionValueSource("password") === "cli",
       });
+      checkEnvCredentials(root, creds);
+    }
+    // Built before the presence guard, so a half username/password pair gets the
+    // library's pair error (reworded with the flags) rather than "needs credentials".
+    const client = createClient(deps, toClientOptions(global, creds));
+    if (opts.auth !== false) {
       if (!creds.present) {
         throw new RegionalstatistikUsageError(
           "This command needs credentials. Set --username/--password " +
@@ -393,10 +424,8 @@ export function action(
             "A free account is available at https://www.regionalstatistik.de/genesis/online.",
         );
       }
-      checkEnvCredentials(root, creds);
       warnArgvCredentials(deps, command);
     }
-    const client = deps.createClient(toClientOptions(global, creds));
     await fn({ client, global, opts: command.opts() }, positionals);
   };
 }

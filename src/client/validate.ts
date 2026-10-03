@@ -156,3 +156,15 @@ export function baseUrlProblem(value: unknown): string | undefined {
   }
   return undefined;
 }
+
+/** `credentialPairProblem`'s reason when only one of username/password is set. */
+export const CREDENTIAL_PAIR_PROBLEM = "Provide both username and password (or a token).";
+
+/**
+ * Username and password come as a pair: with only one of them, a lone username
+ * would go out in the token's wire format and a lone password would be dropped.
+ * Pass the values after blank-to-unset; a token, when set, makes this moot.
+ */
+export function credentialPairProblem(creds: { username?: string | undefined; password?: string | undefined }): string | undefined {
+  return (creds.username === undefined) === (creds.password === undefined) ? undefined : CREDENTIAL_PAIR_PROBLEM;
+}

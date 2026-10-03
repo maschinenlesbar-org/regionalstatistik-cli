@@ -108,7 +108,8 @@ possible), `()` (limited informative value), `p` (provisional), `r` (revised),
 
 - **Username / password** — the account login for the free registration at
   https://www.regionalstatistik.de/genesis/online (mandatory for API use since
-  May 2025). Required together.
+  May 2025). Required together: one without the other is refused before any
+  request, by the CLI and the library alike.
 - **API token** — a personal token generated in the GENESIS web UI
   ("Webservice/API" section) where offered. Placed in the `username` request
   field with no password; wins over username/password when both are set.

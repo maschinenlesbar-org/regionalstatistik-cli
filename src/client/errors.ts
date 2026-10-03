@@ -119,7 +119,7 @@ export class RegionalstatistikNetworkError extends RegionalstatistikError {}
 
 /**
  * A usage error (bad/missing argument or credentials detected before any
- * request, e.g. only one of --username/--password, or a credential-required
+ * request, e.g. only one of username/password, or a credential-required
  * command invoked with none). Mapped to the conventional usage exit code 2 so
  * scripts can distinguish it from a runtime error (1).
  */

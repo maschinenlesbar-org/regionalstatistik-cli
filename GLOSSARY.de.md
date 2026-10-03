@@ -107,7 +107,8 @@ möglich), `()` (eingeschränkter Aussagewert), `p` (vorläufig), `r` (berichtig
 
 - **Benutzername / Passwort** – die Anmeldedaten der kostenlosen Registrierung unter
   https://www.regionalstatistik.de/genesis/online (seit Mai 2025 für die API-Nutzung
-  Pflicht). Nur gemeinsam anzugeben.
+  Pflicht). Nur gemeinsam anzugeben: Eines ohne das andere weisen CLI und Bibliothek
+  gleichermaßen vor jeder Anfrage zurück.
 - **API-Token** – ein persönliches Token, das Sie in der GENESIS-Weboberfläche
   (Bereich „Webservice/API“) erzeugen, sofern dort angeboten. Es wird ohne Passwort im
   Anfragefeld `username` übertragen und hat Vorrang vor Benutzername/Passwort, wenn beides
