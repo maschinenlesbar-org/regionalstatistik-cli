@@ -26,6 +26,9 @@ export {
 export {
   assertRequestParams,
   assertValid,
+  credentialProblem,
+  headerNameProblem,
+  headerValueProblem,
   intRangeProblem,
   nonBlankProblem,
   oneOfProblem,

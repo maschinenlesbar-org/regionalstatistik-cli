@@ -91,6 +91,19 @@ What the library rejects:
   (the default transport still clamps a direct `nodeHttpTransport` call). The
   CLI's `--timeout`/`--max-retries` parsers take their bounds from the same
   constants.
+- **Header values** (`headerValueProblem`, `credentialProblem`, `headerNameProblem`):
+  `userAgent` and every `defaultHeaders` value must be non-blank, free of control
+  characters (CR/LF included, tab allowed) and within Latin-1; a `defaultHeaders`
+  name must be an HTTP token. Only `userAgent: undefined` selects the default. A
+  `token`/`username`/`password` must also have no leading or trailing whitespace
+  (the server would strip it, so a different credential would be checked). A
+  *blank* credential still counts as unset in the library (so
+  `token: process.env.REGIONALSTATISTIK_API_TOKEN` works with an empty variable),
+  and so does a blank credential env var in the CLI; only a blank credential
+  *flag* is a CLI usage error, because it would silently cancel an env
+  credential. Messages never echo the value. The CLI's
+  `parseHeaderValue`/`parseCredential` (and the env-var check in `action()`) call
+  the same rules.
 
 Request defaults: neither side fills in a value the caller did not give. The CLI
 has no `.default()` for `--language` or `find --category`, so an omitted value is
@@ -130,12 +143,12 @@ Same regime as destatis-genesis-cli, preserved 1:1:
 https://www.regionalstatistik.de/genesis/online. The CLI resolves credentials
 with precedence **flag > env > unset** (`--username`/`--password` seeded from
 `REGIONALSTATISTIK_USERNAME`/`REGIONALSTATISTIK_PASSWORD`, `--token` from
-`REGIONALSTATISTIK_API_TOKEN`, in `program.ts`; validated in
-`shared.ts:resolveCredentials`). A token wins over username/password, except
+`REGIONALSTATISTIK_API_TOKEN`, in `program.ts`; values checked by the library's
+`credentialProblem`, precedence in `shared.ts:resolveCredentials`). A token wins over username/password, except
 that a `--username`/`--password` *flag* beats an env-only token (commander's
 value source tells flag from env); supplying only one of username/password is a
 `RegionalstatistikUsageError` (exit 2). Flag values are checked by their parser
-(`parseCredential`); an env value is seeded unchecked and validated in
+(`parseCredential`, the library's `credentialProblem`); an env value is seeded unchecked and validated in
 `shared.ts:action()` only when the command is about to send it, so a malformed
 env var never breaks `--help`, `--version`, `hello` or a run whose flag
 overrides it. No

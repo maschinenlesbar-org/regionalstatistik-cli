@@ -7,7 +7,7 @@ import {
 import { makeMockTransport, jsonResponse, bodyOf, type MockTransport } from "./helpers.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
 import * as fx from "./fixtures.js";
-import { RegionalstatistikNetworkError } from "../src/client/errors.js";
+import { RegionalstatistikNetworkError, RegionalstatistikValidationError } from "../src/client/errors.js";
 
 function client(
   responder: (req: HttpRequest) => HttpResponse,
@@ -104,9 +104,20 @@ test("data.tableFile posts to the file endpoint and returns raw bytes", async ()
 });
 
 test("a non-blank credential is sent exactly as given, never trimmed", async () => {
-  const { c, mt } = client(() => jsonResponse(fx.tablesList), { username: "u", password: " pass with spaces " });
+  const { c, mt } = client(() => jsonResponse(fx.tablesList), { username: "u", password: "pass with spaces" });
   await c.catalogue.tables({});
-  assert.equal(mt.last().headers?.["password"], " pass with spaces ");
+  assert.equal(mt.last().headers?.["password"], "pass with spaces");
+});
+
+test("a credential with surrounding whitespace is rejected, never trimmed or sent", () => {
+  const mt = makeMockTransport(() => jsonResponse(fx.tablesList));
+  assert.throws(
+    () => new RegionalstatistikClient({ username: "u", password: " pass with spaces ", transport: mt.transport }),
+    (err) =>
+      err instanceof RegionalstatistikValidationError &&
+      err.message === "Invalid password: Value has leading or trailing whitespace, which an HTTP header cannot carry.",
+  );
+  assert.equal(mt.calls.length, 0);
 });
 
 test("a blank token is treated as unset (no credential header)", async () => {

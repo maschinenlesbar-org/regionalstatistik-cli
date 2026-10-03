@@ -83,3 +83,43 @@ export function assertRequestParams(params: Readonly<Record<string, unknown>>): 
     else if (typeof value === "string") assertValid(key, value, nonBlankProblem);
   }
 }
+
+/**
+ * A value sent in an HTTP header (credentials, User-Agent): non-blank, no C0
+ * control character other than tab (so no CR/LF header injection), no DEL, and
+ * nothing above U+00FF, which Node's HTTP layer cannot send. Tab and Latin-1
+ * (e.g. "ü") are allowed — exactly what Node sends (as single ISO-8859-1 bytes).
+ * Checked by char code so the source stays free of control bytes.
+ */
+export function headerValueProblem(value: unknown): string | undefined {
+  const blank = nonBlankProblem(value);
+  if (blank !== undefined) return blank;
+  const text = value as string;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if ((c < 0x20 && c !== 0x09) || c === 0x7f) return "Value contains control characters.";
+    if (c > 0xff) return "Value contains characters outside Latin-1 (above U+00FF).";
+  }
+  return undefined;
+}
+
+/**
+ * A credential (token, username, password): a valid header value with no
+ * leading or trailing whitespace. An HTTP header cannot carry those — the
+ * receiving server strips them as optional whitespace — so "  pass  " could never
+ * arrive as given; rejecting it beats silently trimming it into another password.
+ */
+export function credentialProblem(value: unknown): string | undefined {
+  const header = headerValueProblem(value);
+  if (header !== undefined) return header;
+  return value === (value as string).trim()
+    ? undefined
+    : "Value has leading or trailing whitespace, which an HTTP header cannot carry.";
+}
+
+/** An HTTP header name: one or more token characters (RFC 9110). */
+export function headerNameProblem(value: unknown): string | undefined {
+  return typeof value === "string" && /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(value)
+    ? undefined
+    : "Expected an HTTP header name (token characters only).";
+}

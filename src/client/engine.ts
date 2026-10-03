@@ -12,7 +12,7 @@
 
 import { MAX_TIMEOUT_MS, nodeHttpTransport, type Transport } from "./http.js";
 import { buildQueryString, type QueryParams } from "./query.js";
-import { assertValid, intRangeProblem } from "./validate.js";
+import { assertValid, headerNameProblem, headerValueProblem, intRangeProblem } from "./validate.js";
 import {
   RegionalstatistikApiError,
   RegionalstatistikNetworkError,
@@ -43,9 +43,12 @@ export interface EngineOptions {
   baseUrl?: string;
   /** Swappable transport. Defaults to the built-in node http/https transport. */
   transport?: Transport;
-  /** Value of the User-Agent header. */
+  /**
+   * Value of the User-Agent header (only `undefined` selects the default). Must be
+   * a valid header value: non-blank, no control characters, nothing above U+00FF.
+   */
   userAgent?: string;
-  /** Extra headers sent on every request. */
+  /** Extra headers sent on every request (token names, valid header values). */
   defaultHeaders?: Record<string, string>;
   /**
    * Time limit per request in milliseconds, covering the whole response body, not
@@ -255,8 +258,18 @@ export class RequestEngine {
     this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
     assertHttpScheme(this.baseUrl);
     this.transport = options.transport ?? nodeHttpTransport;
-    this.userAgent = options.userAgent ?? DEFAULT_USER_AGENT;
-    this.defaultHeaders = options.defaultHeaders ?? {};
+    // Only `undefined` selects the default; a given value must be a valid header
+    // value (a blank one is rejected, not silently replaced).
+    this.userAgent =
+      options.userAgent === undefined
+        ? DEFAULT_USER_AGENT
+        : assertValid("userAgent", options.userAgent, headerValueProblem);
+    const defaultHeaders = options.defaultHeaders ?? {};
+    for (const [name, value] of Object.entries(defaultHeaders)) {
+      assertValid("defaultHeaders name", name, headerNameProblem);
+      assertValid(`defaultHeaders["${name}"]`, value, headerValueProblem);
+    }
+    this.defaultHeaders = defaultHeaders;
     this.timeoutMs = intOption("timeoutMs", options.timeoutMs, 0, MAX_TIMEOUT_MS) ?? 30_000;
     this.maxRetries = intOption("maxRetries", options.maxRetries, 0, MAX_RETRIES) ?? 2;
     this.retryDelayMs = intOption("retryDelayMs", options.retryDelayMs, 0, Number.MAX_SAFE_INTEGER) ?? 200;

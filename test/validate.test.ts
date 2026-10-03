@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import {
   assertRequestParams,
   assertValid,
+  credentialProblem,
+  headerNameProblem,
+  headerValueProblem,
   intRangeProblem,
   nonBlankProblem,
   oneOfProblem,
@@ -14,6 +17,7 @@ import {
   RegionalstatistikValidationError,
 } from "../src/client/errors.js";
 import * as lib from "../src/index.js";
+import { RequestEngine } from "../src/client/engine.js";
 import { run } from "../src/cli/run.js";
 import type { CliDeps } from "../src/cli/io.js";
 import { RegionalstatistikClient } from "../src/client/client.js";
@@ -176,4 +180,45 @@ test("assertRequestParams checks timeslices", () => {
       String(v),
     );
   }
+});
+
+test("headerValueProblem rejects blank, control and non-Latin-1 values and allows tab and Latin-1", () => {
+  for (const ok of ["ua/1", "é", "a\tb", " padded "]) assert.equal(headerValueProblem(ok), undefined, JSON.stringify(ok));
+  assert.equal(headerValueProblem(""), "Expected a non-empty value.");
+  assert.equal(headerValueProblem("  "), "Expected a non-empty value.");
+  for (const bad of ["a\r\nb", "a\x00b", "a\x7fb", "a\nb"]) {
+    assert.equal(headerValueProblem(bad), "Value contains control characters.", JSON.stringify(bad));
+  }
+  assert.equal(headerValueProblem("€"), "Value contains characters outside Latin-1 (above U+00FF).");
+});
+
+test("credentialProblem adds the no-surrounding-whitespace rule", () => {
+  assert.equal(credentialProblem("tok"), undefined);
+  assert.equal(credentialProblem("pa\tss"), undefined);
+  assert.equal(credentialProblem(" tok"), "Value has leading or trailing whitespace, which an HTTP header cannot carry.");
+  assert.equal(credentialProblem("t\rk"), "Value contains control characters.");
+});
+
+test("headerNameProblem accepts only HTTP token characters", () => {
+  assert.equal(headerNameProblem("X-Trace-Id"), undefined);
+  for (const bad of ["", "a b", "a:b", "a\r\nb", "ü"]) assert.ok(headerNameProblem(bad), JSON.stringify(bad));
+});
+
+test("the engine validates userAgent and defaultHeaders at construction", () => {
+  assert.throws(() => new RequestEngine({ userAgent: "  " }), /Invalid userAgent: Expected a non-empty value\./);
+  assert.throws(
+    () => new RequestEngine({ defaultHeaders: { "X-Trace": "a\r\nInjected: 1" } }),
+    (err: unknown) =>
+      err instanceof RegionalstatistikValidationError &&
+      err.message === 'Invalid defaultHeaders["X-Trace"]: Value contains control characters.',
+  );
+  assert.throws(() => new RequestEngine({ defaultHeaders: { "Bad Name": "v" } }), RegionalstatistikValidationError);
+  assert.doesNotThrow(() => new RequestEngine({ userAgent: "é", defaultHeaders: { "X-Trace": "a\tb" } }));
+});
+
+test("a credential message never echoes the value", () => {
+  assert.throws(
+    () => new RegionalstatistikClient({ password: " s3cret ", username: "u" }),
+    (err: unknown) => err instanceof RegionalstatistikValidationError && !(err as Error).message.includes("s3cret"),
+  );
 });

@@ -8,7 +8,13 @@ import type { CliDeps } from "./io.js";
 import type { RawResponse } from "../client/engine.js";
 import type { RegionalstatistikClientOptions } from "../client/client.js";
 import { RegionalstatistikError, RegionalstatistikUsageError } from "../client/errors.js";
-import { intRangeProblem, nonBlankProblem, type Problem } from "../client/validate.js";
+import {
+  credentialProblem,
+  headerValueProblem,
+  intRangeProblem,
+  nonBlankProblem,
+  type Problem,
+} from "../client/validate.js";
 import type { Language } from "../client/params.js";
 
 /**
@@ -78,46 +84,23 @@ export function parseBaseUrl(value: string): string {
 }
 
 /**
- * commander value-parser for a value that ends up in an HTTP header (credentials,
- * User-Agent). Node's HTTP layer throws an opaque "Invalid character in header
- * content" at request time for a CR/LF (or any other C0 control or DEL) and for
- * any character above U+00FF, which escaped our typed-error handling as
- * "Unexpected error". Reject those here as a usage error, along with a blank
- * value (a blank `--token ""` silently cancelled a valid env token). Tab (0x09)
- * and Latin-1 (e.g. "ü") are allowed — exactly what Node sends (as single
- * ISO-8859-1 bytes, not UTF-8). Checked by char code so the source stays free of
- * control bytes.
+ * commander value-parser for a value that ends up in an HTTP header (the
+ * User-Agent): the library's `headerValueProblem` — non-blank, no control
+ * characters (CR/LF included), nothing above U+00FF. Rejected here as a usage
+ * error instead of Node's opaque "Invalid character in header content".
  */
 export function parseHeaderValue(value: string): string {
-  parseNonEmpty(value);
-  for (let i = 0; i < value.length; i++) {
-    const c = value.charCodeAt(i);
-    if ((c < 0x20 && c !== 0x09) || c === 0x7f) {
-      throw new InvalidArgumentError("Value contains control characters.");
-    }
-    if (c > 0xff) {
-      throw new InvalidArgumentError("Value contains characters outside Latin-1 (above U+00FF).");
-    }
-  }
-  return value;
+  return check(value, headerValueProblem);
 }
 
 /**
- * commander value-parser for a credential (`--token`, `--username`, `--password`,
- * and the env vars): a valid header value (see parseHeaderValue) with no leading
- * or trailing whitespace. An HTTP header cannot carry those — the receiving
- * server strips them as optional whitespace — so a password such as
- * "  pass  " could never be sent as typed. Rejecting it beats silently
- * trimming it into a different password.
+ * commander value-parser for a credential (`--token`, `--username`,
+ * `--password`, and the env vars): the library's `credentialProblem` — a valid
+ * header value with no leading or trailing whitespace. A blank credential flag
+ * is refused too (a blank `--token ""` silently cancelled a valid env token).
  */
 export function parseCredential(value: string): string {
-  parseHeaderValue(value);
-  if (value !== value.trim()) {
-    throw new InvalidArgumentError(
-      "Value has leading or trailing whitespace, which an HTTP header cannot carry.",
-    );
-  }
-  return value;
+  return check(value, credentialProblem);
 }
 
 /**
@@ -211,8 +194,7 @@ export function toClientOptions(
   const options: RegionalstatistikClientOptions = {};
   if (global.baseUrl !== undefined) options.baseUrl = global.baseUrl;
   if (global.timeout !== undefined) options.timeoutMs = global.timeout;
-  const ua = nonBlank(global.userAgent);
-  if (ua !== undefined) options.userAgent = ua;
+  if (global.userAgent !== undefined) options.userAgent = global.userAgent;
   if (global.maxRetries !== undefined) options.maxRetries = global.maxRetries;
   if (global.maxResponseBytes !== undefined) options.maxResponseBytes = global.maxResponseBytes;
   if (creds.token !== undefined) options.token = creds.token;

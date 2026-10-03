@@ -24,7 +24,7 @@
 
 import { RequestEngine, type EngineOptions, type RawResponse } from "./engine.js";
 import type { QueryParams } from "./query.js";
-import { assertRequestParams, assertValid, nonBlankProblem } from "./validate.js";
+import { assertRequestParams, assertValid, credentialProblem, nonBlankProblem } from "./validate.js";
 import type {
   CatalogueParams,
   DataFileParams,
@@ -224,16 +224,20 @@ export class RegionalstatistikClient {
     const { token, username, password, ...engineOptions } = options;
     // Token mode collapses onto the `username` field with no password; otherwise
     // use the username/password pair. Blank (empty or whitespace-only) values are
-    // treated as unset; any other value is sent exactly as given, never trimmed.
-    const set = (v: string | undefined): string | undefined =>
-      v !== undefined && v.trim() !== "" ? v : undefined;
-    const tok = set(token);
+    // treated as unset (so `token: process.env.REGIONALSTATISTIK_API_TOKEN` works
+    // when the variable is empty); any other value must be a valid credential
+    // header value (`credentialProblem`: no control characters, nothing above
+    // U+00FF, no surrounding whitespace) and is sent exactly as given, never
+    // trimmed. The error names the option, never its value.
+    const set = (name: string, v: string | undefined): string | undefined =>
+      v !== undefined && v.trim() !== "" ? assertValid(name, v, credentialProblem) : undefined;
+    const tok = set("token", token);
     if (tok) {
       this.username = tok;
       this.password = undefined;
     } else {
-      this.username = set(username);
-      this.password = set(password);
+      this.username = set("username", username);
+      this.password = set("password", password);
     }
     this.engine = new RequestEngine(engineOptions);
 

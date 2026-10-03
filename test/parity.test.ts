@@ -506,3 +506,109 @@ test("parity #4: the CLI's --max-retries bound is the library's MAX_RETRIES", as
   const opt = buildProgram().options.find((o) => o.long === "--max-retries")!;
   assert.match(opt.description, new RegExp(`\\(0\\.\\.${MAX_RETRIES};`));
 });
+
+// ---- Finding 3 (PAT-5/PAT-6): header values for credentials and the User-Agent -------
+
+const headerCases: Array<{
+  label: string;
+  argv: string[];
+  env?: Record<string, string>;
+  lib: (t: Transport) => Promise<unknown>;
+  msg: RegExp;
+}> = [
+  {
+    label: "--user-agent with CR/LF",
+    argv: [...TOKEN, "--user-agent", "a\r\nX-Evil: 1", "catalogue", "tables", "x"],
+    lib: async (t) => client(t, { userAgent: "a\r\nX-Evil: 1" }).catalogue.tables({ selection: "x" }),
+    msg: /^Invalid userAgent: Value contains control characters\.$/,
+  },
+  {
+    label: "--user-agent ''",
+    argv: [...TOKEN, "--user-agent", "", "catalogue", "tables", "x"],
+    lib: async (t) => client(t, { userAgent: "" }).catalogue.tables({ selection: "x" }),
+    msg: /^Invalid userAgent: Expected a non-empty value\.$/,
+  },
+  {
+    label: "--user-agent 'Agent ✓'",
+    argv: [...TOKEN, "--user-agent", "Agent ✓", "catalogue", "tables", "x"],
+    lib: async (t) => client(t, { userAgent: "Agent ✓" }).catalogue.tables({ selection: "x" }),
+    msg: /^Invalid userAgent: Value contains characters outside Latin-1 \(above U\+00FF\)\.$/,
+  },
+  {
+    label: "--user-agent with DEL",
+    argv: [...TOKEN, "--user-agent", "a\x7fb", "hello"],
+    lib: async (t) => new RegionalstatistikClient({ transport: t, userAgent: "a\x7fb" }).whoami(),
+    msg: /^Invalid userAgent: Value contains control characters\.$/,
+  },
+  {
+    label: "--token with CR/LF",
+    argv: ["--token", "tok\r\nX: y", "catalogue", "tables", "x"],
+    lib: async (t) => new RegionalstatistikClient({ transport: t, token: "tok\r\nX: y" }).catalogue.tables({ selection: "x" }),
+    msg: /^Invalid token: Value contains control characters\.$/,
+  },
+  {
+    label: "--token ' t '",
+    argv: ["--token", " t ", "catalogue", "tables", "x"],
+    lib: async (t) => new RegionalstatistikClient({ transport: t, token: " t " }).catalogue.tables({ selection: "x" }),
+    msg: /^Invalid token: Value has leading or trailing whitespace, which an HTTP header cannot carry\.$/,
+  },
+  {
+    label: "env REGIONALSTATISTIK_PASSWORD=' pass '",
+    argv: ["catalogue", "tables", "x"],
+    env: { REGIONALSTATISTIK_USERNAME: "user", REGIONALSTATISTIK_PASSWORD: " pass " },
+    lib: async (t) =>
+      new RegionalstatistikClient({ transport: t, username: "user", password: " pass " }).catalogue.tables({ selection: "x" }),
+    msg: /^Invalid password: Value has leading or trailing whitespace/,
+  },
+  {
+    label: "env REGIONALSTATISTIK_API_TOKEN=' test-key '",
+    argv: ["catalogue", "tables", "x"],
+    env: { REGIONALSTATISTIK_API_TOKEN: " test-key " },
+    lib: async (t) => new RegionalstatistikClient({ transport: t, token: " test-key " }).catalogue.tables({ selection: "x" }),
+    msg: /^Invalid token: Value has leading or trailing whitespace/,
+  },
+  {
+    label: "env REGIONALSTATISTIK_USERNAME='usér✓'",
+    argv: ["catalogue", "tables", "x"],
+    env: { REGIONALSTATISTIK_USERNAME: "usér✓", REGIONALSTATISTIK_PASSWORD: "pass" },
+    lib: async (t) =>
+      new RegionalstatistikClient({ transport: t, username: "usér✓", password: "pass" }).catalogue.tables({ selection: "x" }),
+    msg: /^Invalid username: Value contains characters outside Latin-1 \(above U\+00FF\)\.$/,
+  },
+];
+
+for (const hc of headerCases) {
+  test(`parity #3: ${hc.label} is rejected by both, with no request`, async () => {
+    const p = await parity({
+      argv: ["--compact", ...hc.argv],
+      ...(hc.env ? { env: hc.env } : {}),
+      lib: hc.lib,
+      responder: () => jsonResponse(fx.tablesList),
+    });
+    assertBothReject(p, hc.msg);
+  });
+}
+
+for (const ua of ["é", "a\tb", " ua "]) {
+  test(`parity #3 control: --user-agent ${JSON.stringify(ua)} is sent by both`, async () => {
+    const p = await parity({
+      argv: ["--compact", "--user-agent", ua, "hello"],
+      lib: (t) => new RegionalstatistikClient({ transport: t, userAgent: ua }).whoami(),
+      responder: () => jsonResponse(fx.whoami),
+    });
+    assert.equal(p.cli.code, 0, p.cli.err);
+    assert.ok(p.lib.ok);
+    assert.equal(p.cli.requests[0]!.headers?.["User-Agent"], ua);
+    assert.equal(p.lib.requests[0]!.headers?.["User-Agent"], ua);
+  });
+}
+
+test("parity #3 control: a TAB inside a password is accepted and sent by both", async () => {
+  const p = await parity({
+    argv: ["--compact", "catalogue", "tables", "x"],
+    env: { REGIONALSTATISTIK_USERNAME: "user", REGIONALSTATISTIK_PASSWORD: "pa\tss" },
+    lib: (t) => new RegionalstatistikClient({ transport: t, username: "user", password: "pa\tss" }).catalogue.tables({ selection: "x" }),
+    responder: () => jsonResponse(fx.tablesList),
+  });
+  assertSameRequest(p);
+});
