@@ -9,6 +9,7 @@
 //     the message `Invalid <name>: <reason>`.
 
 import { RegionalstatistikValidationError } from "./errors.js";
+import { LANGUAGES } from "./params.js";
 
 /** Returns why `value` is invalid, or `undefined` when it is valid. */
 export type Problem<T = unknown> = (value: T) => string | undefined;
@@ -33,12 +34,31 @@ export function nonBlankProblem(value: unknown): string | undefined {
 }
 
 /**
+ * A value must be one of `allowed` (exact, case-sensitive match). The reason
+ * lists the allowed values, worded like commander's `.choices()` error.
+ */
+export function oneOfProblem(allowed: readonly string[]): Problem<unknown> {
+  return (value) =>
+    (allowed as readonly unknown[]).includes(value) ? undefined : `Allowed choices are ${allowed.join(", ")}.`;
+}
+
+/** The GENESIS request parameters with a rule beyond "non-blank", and that rule. */
+const RULES: Readonly<Record<string, Problem<unknown>>> = {
+  language: oneOfProblem(LANGUAGES),
+};
+
+/**
  * Check the parameters of one GENESIS request before it is sent. `undefined`
- * and `null` mean "omitted" and are never sent; every string that is given must
- * be non-blank. Throws `RegionalstatistikValidationError` naming the parameter.
+ * and `null` mean "omitted" and are never sent. A parameter with its own rule
+ * (`language`, …) must pass it; every other string that is given must be
+ * non-blank. Throws `RegionalstatistikValidationError` naming the parameter.
  */
 export function assertRequestParams(params: Readonly<Record<string, unknown>>): void {
   for (const [key, value] of Object.entries(params)) {
-    if (typeof value === "string") assertValid(key, value, nonBlankProblem);
+    if (value === undefined || value === null) continue;
+    // An own-property lookup, so a key such as "constructor" is never a rule.
+    const rule = Object.prototype.hasOwnProperty.call(RULES, key) ? RULES[key] : undefined;
+    if (rule !== undefined) assertValid(key, value, rule);
+    else if (typeof value === "string") assertValid(key, value, nonBlankProblem);
   }
 }

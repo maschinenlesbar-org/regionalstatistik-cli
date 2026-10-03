@@ -69,6 +69,11 @@ What the library rejects:
   GENESIS reads an empty parameter as "no filter", so it would silently return
   unfiltered data. `undefined` still means "omitted". The CLI's `parseNonEmpty`
   calls the same rule.
+- **Values outside a GENESIS value list** (`oneOfProblem`): `language` must be one
+  of `LANGUAGES` (`de`, `en`) — exact, case-sensitive — on every request path,
+  `logincheck(language)` included. The list is exported from `params.ts`, the
+  `Language` type derives from it, and the CLI builds `--language`'s `.choices()`
+  from the same export.
 
 ## Host-specific facts (verified live 2026-07-13)
 

@@ -10,6 +10,9 @@ import {
 } from "../src/client/client.js";
 import { RegionalstatistikValidationError } from "../src/client/errors.js";
 import type { Transport } from "../src/client/http.js";
+import * as params from "../src/client/params.js";
+import { buildProgram } from "../src/cli/program.js";
+import type { Command } from "commander";
 import { jsonResponse, parity, requestKey, rawResponse, type ParityResult } from "./helpers.js";
 import * as fx from "./fixtures.js";
 
@@ -163,7 +166,7 @@ test("parity #1: logincheck rejects a blank language before any request", async 
       return jsonResponse(fx.loginOk);
     },
   });
-  await assert.rejects(c.logincheck(" "), /^RegionalstatistikValidationError: Invalid language: /);
+  await assert.rejects(c.logincheck(" " as never), /^RegionalstatistikValidationError: Invalid language: /);
   assert.equal(calls, 0);
 });
 
@@ -174,4 +177,70 @@ test("parity #1 control: a non-blank filter sends the identical request on both 
     responder: () => jsonResponse(fx.dataTable),
   });
   assertSameRequest(p);
+});
+
+// ---- Finding 8 (PAT-12): the language allow-list (de, en) -------------------------
+
+const languageCases: Array<{
+  label: string;
+  argv: string[];
+  lib: (c: RegionalstatistikClient) => Promise<unknown>;
+  zip?: boolean;
+}> = [
+  {
+    label: "--language fr metadata cube X",
+    argv: ["--language", "fr", "metadata", "cube", "X"],
+    lib: (c) => c.metadata.cube("X", { language: "fr" as never }),
+  },
+  {
+    label: "--language EN catalogue tables",
+    argv: ["--language", "EN", "catalogue", "tables"],
+    lib: (c) => c.catalogue.tables({ language: "EN" as never }),
+  },
+  {
+    label: "--language '' data table T",
+    argv: ["--language", "", "data", "table", "T"],
+    lib: (c) => c.data.table("T", { language: "" as never }),
+  },
+  {
+    label: "--language ' en' find bev",
+    argv: ["--language", " en", "find", "bev"],
+    lib: (c) => c.find({ term: "bev", language: " en" as never }),
+  },
+  {
+    label: "--language xx logincheck",
+    argv: ["--language", "xx", "logincheck"],
+    lib: (c) => c.logincheck("xx" as never),
+  },
+  {
+    label: "--language fr data cubefile X",
+    argv: ["-o", "out.zip", "--language", "fr", "data", "cubefile", "X"],
+    lib: (c) => c.data.cubeFile("X", { language: "fr" as never }),
+    zip: true,
+  },
+];
+
+for (const lc of languageCases) {
+  test(`parity #8: ${lc.label} is rejected by both, with no request`, async () => {
+    const p = await parity({
+      argv: ["--compact", ...TOKEN, ...lc.argv],
+      lib: (t) => lc.lib(client(t)),
+      responder: lc.zip ? ZIP : () => jsonResponse(fx.tablesList),
+    });
+    assertBothReject(p, /^Invalid language: Allowed choices are de, en\.$/);
+  });
+}
+
+test("parity #8 control: --language en sends the identical request on both sides", async () => {
+  const p = await parity({
+    argv: ["--compact", ...TOKEN, "--language", "en", "metadata", "cube", "X"],
+    lib: (t) => client(t).metadata.cube("X", { language: "en" }),
+    responder: () => jsonResponse(fx.metadataTable),
+  });
+  assertSameRequest(p);
+});
+
+test("parity #8: the CLI's --language choices are the library's LANGUAGES", () => {
+  const choices = (cmd: Command, flag: string) => cmd.options.find((o) => o.long === flag)?.argChoices;
+  assert.deepEqual(choices(buildProgram(), "--language"), [...params.LANGUAGES]);
 });

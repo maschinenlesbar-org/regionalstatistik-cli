@@ -3,12 +3,18 @@
 // are simply not sent. The client checks the given values before any request
 // (see validate.ts): a blank string (empty or whitespace only) is rejected with
 // RegionalstatistikValidationError, since GENESIS reads an empty parameter as
-// "no filter". Valid values are sent as-is, never trimmed.
+// "no filter". `language` must be one of `LANGUAGES`. Valid values are sent
+// as-is, never trimmed.
 //
 // The Regionaldatenbank's whole point is the regional dimension: on `data/*`
 // requests, `regionalvariable` picks the regional level (e.g. KREISE, GEMEIN)
 // and `regionalkey` selects the region(s) by their official key (AGS/ARS, `*`
 // wildcard allowed — e.g. "08*" for everything in Baden-Württemberg).
+
+/** Response languages GENESIS offers (`language`). */
+export const LANGUAGES = ["de", "en"] as const;
+/** A response language (`language`). */
+export type Language = (typeof LANGUAGES)[number];
 
 /** Object types `find/find` can search. */
 export type FindCategory = "all" | "tables" | "statistics" | "cubes" | "variables" | "time-series";
@@ -19,7 +25,7 @@ export interface FindParams {
   category?: FindCategory;
   /** Max results (default 100, server max 25000). */
   pagelength?: number;
-  language?: string;
+  language?: Language;
 }
 
 /**
@@ -34,13 +40,13 @@ export interface CatalogueParams {
   type?: string;
   /** Max results (default 100, server max 25000). */
   pagelength?: number;
-  language?: string;
+  language?: Language;
 }
 
 /** Parameters for the `metadata/*` describe endpoints (`name` is passed separately). */
 export interface MetadataParams {
   area?: string;
-  language?: string;
+  language?: Language;
 }
 
 /**
@@ -73,7 +79,7 @@ export interface DataTableParams {
   classifyingvariable5?: string;
   classifyingkey5?: string;
   stand?: string;
-  language?: string;
+  language?: Language;
 }
 
 /** File-download output formats offered by the `data/*file` endpoints. */

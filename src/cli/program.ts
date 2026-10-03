@@ -9,6 +9,7 @@ import type { CliDeps } from "./io.js";
 import { defaultIO } from "./io.js";
 import { RegionalstatistikClient } from "../client/client.js";
 import { MAX_TIMEOUT_MS } from "../client/http.js";
+import { LANGUAGES } from "../client/params.js";
 import {
   parseIntArg,
   parseBoundedInt,
@@ -94,7 +95,7 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
       parseCredential,
     )
     .addOption(
-      new Option("--language <lang>", "response language").choices(["de", "en"]).default("de"),
+      new Option("--language <lang>", "response language").choices([...LANGUAGES]).default("de"),
     )
     .option(
       "--pagelength <n>",

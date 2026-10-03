@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { assertRequestParams, assertValid, nonBlankProblem, type Problem } from "../src/client/validate.js";
+import { assertRequestParams, assertValid, nonBlankProblem, oneOfProblem, type Problem } from "../src/client/validate.js";
 import {
   RegionalstatistikError,
   RegionalstatistikUsageError,
@@ -104,4 +104,24 @@ test("assertRequestParams rejects a blank string, naming the parameter, and skip
 test("the package root exports the blank-value rules", () => {
   assert.equal(lib.nonBlankProblem, nonBlankProblem);
   assert.equal(lib.assertRequestParams, assertRequestParams);
+});
+
+test("oneOfProblem accepts only the listed values, case-sensitively", () => {
+  const problem = oneOfProblem(["de", "en"] as const);
+  assert.equal(problem("de"), undefined);
+  assert.equal(problem("en"), undefined);
+  for (const v of ["fr", "EN", "", " en", undefined, 1, "constructor"]) {
+    assert.equal(problem(v), "Allowed choices are de, en.", JSON.stringify(v));
+  }
+});
+
+test("assertRequestParams checks language against LANGUAGES", () => {
+  assert.doesNotThrow(() => assertRequestParams({ language: "en" }));
+  assert.doesNotThrow(() => assertRequestParams({ language: undefined }));
+  assert.throws(
+    () => assertRequestParams({ language: "fr" }),
+    (err: unknown) =>
+      err instanceof RegionalstatistikValidationError && err.message === "Invalid language: Allowed choices are de, en.",
+  );
+  assert.throws(() => assertRequestParams({ language: "" }), /Invalid language: Allowed choices are de, en\./);
 });
