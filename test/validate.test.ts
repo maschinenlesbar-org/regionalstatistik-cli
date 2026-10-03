@@ -6,6 +6,7 @@ import {
   baseUrlProblem,
   credentialPairProblem,
   credentialProblem,
+  credentialsRequiredProblem,
   headerNameProblem,
   headerValueProblem,
   intRangeProblem,
@@ -247,4 +248,13 @@ test("credentialPairProblem wants both or neither of username and password", () 
   assert.equal(credentialPairProblem({ username: "u", password: "p" }), undefined);
   assert.equal(credentialPairProblem({ username: "u" }), "Provide both username and password (or a token).");
   assert.equal(credentialPairProblem({ password: "p" }), "Provide both username and password (or a token).");
+});
+
+test("credentialsRequiredProblem wants a username (a token travels in it too)", () => {
+  assert.equal(credentialsRequiredProblem({ username: "u" }), undefined);
+  assert.equal(credentialsRequiredProblem({ username: "tok" , password: undefined }), undefined);
+  assert.equal(
+    credentialsRequiredProblem({}),
+    "This endpoint needs an account (a token, or a username and password).",
+  );
 });

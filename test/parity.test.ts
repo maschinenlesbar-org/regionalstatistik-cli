@@ -732,3 +732,80 @@ test("parity #2 control: a username/password pair sends the identical request", 
   });
   assertSameRequest(p);
 });
+
+// ---- Finding 11 (PAT-7): which endpoints need credentials ------------------------------
+
+const NEEDS_CLI =
+  /^Error: This command needs credentials\. Set --username\/--password \(env REGIONALSTATISTIK_USERNAME \/ REGIONALSTATISTIK_PASSWORD\) or --token \(env REGIONALSTATISTIK_API_TOKEN\)\. A free account is available at https:\/\/www\.regionalstatistik\.de\/genesis\/online\.$/m;
+const NEEDS_LIB = /^Invalid credentials: This endpoint needs an account \(a token, or a username and password\)\.$/;
+
+const noCredCases: Array<{
+  label: string;
+  argv: string[];
+  env?: Record<string, string>;
+  lib: (c: RegionalstatistikClient) => Promise<unknown>;
+  zip?: boolean;
+}> = [
+  { label: "catalogue tables x", argv: ["catalogue", "tables", "x"], lib: (c) => c.catalogue.tables({ selection: "x" }) },
+  {
+    label: "catalogue tables x with a blank REGIONALSTATISTIK_API_TOKEN",
+    argv: ["catalogue", "tables", "x"],
+    env: { REGIONALSTATISTIK_API_TOKEN: "  " },
+    lib: (c) => c.catalogue.tables({ selection: "x" }),
+  },
+  { label: "metadata table 12411-01-01-4", argv: ["metadata", "table", "12411-01-01-4"], lib: (c) => c.metadata.table("12411-01-01-4") },
+  { label: "data timeseries N1", argv: ["data", "timeseries", "N1"], lib: (c) => c.data.timeseries("N1") },
+  {
+    label: "data tablefile T -o out.zip",
+    argv: ["-o", "out.zip", "data", "tablefile", "T"],
+    lib: (c) => c.data.tableFile("T"),
+    zip: true,
+  },
+  { label: "find bev", argv: ["find", "bev"], lib: (c) => c.find({ term: "bev" }) },
+];
+
+for (const nc of noCredCases) {
+  test(`parity #11: ${nc.label} without credentials is rejected by both, with no request`, async () => {
+    const p = await parity({
+      argv: ["--compact", ...nc.argv],
+      ...(nc.env ? { env: nc.env } : {}),
+      lib: (t) => nc.lib(new RegionalstatistikClient({ transport: t, token: nc.env?.["REGIONALSTATISTIK_API_TOKEN"] })),
+      responder: nc.zip ? ZIP : () => jsonResponse(fx.tablesList),
+    });
+    assertBothReject(p, NEEDS_LIB);
+    assert.match(p.cli.err, NEEDS_CLI);
+  });
+}
+
+const GUEST = { Status: "Sie wurden erfolgreich an- und abgemeldet!", Username: "GAST" };
+
+test("parity #11: logincheck without credentials is sent by both and answers as guest", async () => {
+  const p = await parity({
+    argv: ["--compact", "logincheck"],
+    lib: (t) => new RegionalstatistikClient({ transport: t }).logincheck(),
+    responder: () => jsonResponse(GUEST),
+  });
+  assertSameRequest(p);
+  assert.equal(p.cli.requests[0]!.headers?.["username"], undefined);
+  assert.deepEqual(JSON.parse(p.cli.out), GUEST);
+  assert.deepEqual(p.lib.ok ? p.lib.value : undefined, GUEST);
+});
+
+test("parity #11: logincheck with a blank env token is a guest call on both sides", async () => {
+  const p = await parity({
+    argv: ["--compact", "logincheck"],
+    env: { REGIONALSTATISTIK_API_TOKEN: "  " },
+    lib: (t) => new RegionalstatistikClient({ transport: t, token: "  " }).logincheck(),
+    responder: () => jsonResponse(GUEST),
+  });
+  assertSameRequest(p);
+});
+
+test("parity #11 control: with a token both send catalogue tables identically", async () => {
+  const p = await parity({
+    argv: ["--compact", ...TOKEN, "catalogue", "tables", "x"],
+    lib: (t) => client(t).catalogue.tables({ selection: "x" }),
+    responder: () => jsonResponse(fx.tablesList),
+  });
+  assertSameRequest(p);
+});

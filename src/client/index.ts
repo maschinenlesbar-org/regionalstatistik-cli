@@ -31,6 +31,8 @@ export {
   CREDENTIAL_PAIR_PROBLEM,
   credentialPairProblem,
   credentialProblem,
+  CREDENTIALS_REQUIRED_PROBLEM,
+  credentialsRequiredProblem,
   headerNameProblem,
   headerValueProblem,
   intRangeProblem,

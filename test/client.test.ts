@@ -121,9 +121,22 @@ test("a credential with surrounding whitespace is rejected, never trimmed or sen
 });
 
 test("a blank token is treated as unset (no credential header)", async () => {
-  const { c, mt } = client(() => jsonResponse(fx.tablesList), { token: "   " });
-  await c.catalogue.tables({});
+  const { c, mt } = client(() => jsonResponse(fx.loginOk), { token: "   " });
+  await c.logincheck();
   assert.equal(mt.last().headers?.["username"], undefined);
+});
+
+test("an account-only endpoint without credentials rejects before any request", async () => {
+  const { c, mt } = client(() => jsonResponse(fx.tablesList), { token: "   " });
+  for (const call of [() => c.catalogue.tables({}), () => c.metadata.table("X"), () => c.data.table("T"), () => c.data.tableFile("T"), () => c.find({ term: "bev" })]) {
+    await assert.rejects(
+      call,
+      (err) =>
+        err instanceof RegionalstatistikValidationError &&
+        err.message === "Invalid credentials: This endpoint needs an account (a token, or a username and password).",
+    );
+  }
+  assert.equal(mt.calls.length, 0);
 });
 
 test("a non-http(s) base URL is rejected before any request carries credentials", () => {

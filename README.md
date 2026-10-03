@@ -42,7 +42,8 @@ is bundled with this tool.
 Precedence per field is **flag > env var > unset**; a token takes precedence
 over username/password — except that a `--username`/`--password` **flag** beats
 a token from `REGIONALSTATISTIK_API_TOKEN`, so the account you name on the
-command line is the one used. Only `regstat hello` works without credentials.
+command line is the one used. Only `regstat hello` works without credentials
+(and `regstat logincheck`, which then answers as the guest user `GAST`).
 Credentials are sent exactly as given: a blank credential flag, or one with
 leading or trailing whitespace (which an HTTP header cannot carry), is refused
 with exit 2; a blank env var counts as unset.

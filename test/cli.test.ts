@@ -604,11 +604,14 @@ test("--compact prints single-line JSON", async () => {
   assert.equal(cli.out[0], JSON.stringify(fx.tablesList));
 });
 
-test("logincheck requires credentials", async () => {
-  const cli = makeCli(() => jsonResponse(fx.loginOk));
+test("logincheck without credentials sends none and prints the guest reply", async () => {
+  const guest = { Status: "Sie wurden erfolgreich an- und abgemeldet!", Username: "GAST" };
+  const cli = makeCli(() => jsonResponse(guest));
   const code = await run(["logincheck"], cli.deps);
-  assert.equal(code, 2);
-  assert.equal(cli.mt.calls.length, 0);
+  assert.equal(code, 0);
+  assert.equal(cli.mt.calls.length, 1);
+  assert.equal(cli.mt.last().headers?.["username"], undefined);
+  assert.deepEqual(JSON.parse(cli.out.join("\n")), guest);
 });
 
 test("--help exits 0", async () => {

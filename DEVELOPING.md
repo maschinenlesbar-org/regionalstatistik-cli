@@ -117,6 +117,16 @@ What the library rejects:
   username used to go out in the token's wire format, a lone password was dropped.
   The CLI's `resolveCredentials` keeps only the flag > env precedence; `action()`
   builds the client first and rewords this error with the flags and env vars.
+- **No credentials for an account-only endpoint** (`credentialsRequiredProblem`):
+  `find()`, `catalogue.*`, `metadata.*` and `data.*` reject before any request
+  when the client has no credentials (a blank one counts as none) —
+  `Invalid credentials: This endpoint needs an account (a token, or a username and
+  password).` Anonymously GENESIS would answer 401 + Code 15 after the round trip.
+  `whoami()` and `logincheck()` keep optional credentials: a credential-less
+  `logincheck` answers as the guest user `GAST` (verified live), and the CLI's
+  `logincheck` now sends it too instead of refusing it. The CLI has no presence
+  guard of its own: `action()` rewords this error with the flags, env vars and
+  signup URL (exit 2, message unchanged).
 
 Request defaults: neither side fills in a value the caller did not give. The CLI
 has no `.default()` for `--language` or `find --category`, so an omitted value is

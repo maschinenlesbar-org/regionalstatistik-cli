@@ -37,6 +37,7 @@ Global options (valid on any command):
 ```bash
 regstat hello           # helloworld/whoami — needs NO credentials (ignores any set)
 regstat logincheck      # helloworld/logincheck — validates your credentials
+                        # (without any it answers as the guest user, "Username": "GAST")
 ```
 
 ## find — full-text search

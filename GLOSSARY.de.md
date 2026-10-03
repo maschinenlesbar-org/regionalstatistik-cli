@@ -109,6 +109,10 @@ möglich), `()` (eingeschränkter Aussagewert), `p` (vorläufig), `r` (berichtig
   https://www.regionalstatistik.de/genesis/online (seit Mai 2025 für die API-Nutzung
   Pflicht). Nur gemeinsam anzugeben: Eines ohne das andere weisen CLI und Bibliothek
   gleichermaßen vor jeder Anfrage zurück.
+- **Nur mit Konto** – `find`, `catalogue`, `metadata` und `data` brauchen Zugangsdaten;
+  ohne sie antwortet GENESIS mit 401 und Code `15`, deshalb lehnen CLI und Bibliothek den
+  Aufruf schon vor jeder Anfrage ab. `hello` (`whoami`) und `logincheck` funktionieren ohne
+  Zugangsdaten (`logincheck` antwortet dann als Gastnutzer `GAST`).
 - **API-Token** – ein persönliches Token, das Sie in der GENESIS-Weboberfläche
   (Bereich „Webservice/API“) erzeugen, sofern dort angeboten. Es wird ohne Passwort im
   Anfragefeld `username` übertragen und hat Vorrang vor Benutzername/Passwort, wenn beides

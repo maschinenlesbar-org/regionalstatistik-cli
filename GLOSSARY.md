@@ -110,6 +110,10 @@ possible), `()` (limited informative value), `p` (provisional), `r` (revised),
   https://www.regionalstatistik.de/genesis/online (mandatory for API use since
   May 2025). Required together: one without the other is refused before any
   request, by the CLI and the library alike.
+- **Account-only endpoints** — `find`, `catalogue`, `metadata` and `data` need
+  credentials; without them GENESIS answers 401 + Code `15`, so the CLI and the
+  library refuse the call before any request. `hello` (`whoami`) and `logincheck`
+  work without credentials (`logincheck` then answers as the guest user `GAST`).
 - **API token** — a personal token generated in the GENESIS web UI
   ("Webservice/API" section) where offered. Placed in the `username` request
   field with no password; wins over username/password when both are set.

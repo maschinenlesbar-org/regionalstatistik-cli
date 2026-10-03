@@ -11,9 +11,11 @@
 // request parameters in a form-urlencoded body. No credential is bundled; pass
 // them via the options below (CLI: --token / --username+--password, or the
 // REGIONALSTATISTIK_API_TOKEN / REGIONALSTATISTIK_USERNAME /
-// REGIONALSTATISTIK_PASSWORD env vars). Only `whoami()` works without
-// credentials; registration (free) is at
-// https://www.regionalstatistik.de/genesis/online.
+// REGIONALSTATISTIK_PASSWORD env vars). `whoami()` needs no credentials, and
+// `logincheck()` works without them too (GENESIS answers as the guest user
+// "GAST"); `find`, catalogue, metadata and data need an account and reject with
+// `RegionalstatistikValidationError` before any request when the client has
+// none. Registration (free) is at https://www.regionalstatistik.de/genesis/online.
 //
 //   const c = new RegionalstatistikClient({
 //     username: process.env.REGIONALSTATISTIK_USERNAME,
@@ -29,6 +31,7 @@ import {
   assertValid,
   credentialPairProblem,
   credentialProblem,
+  credentialsRequiredProblem,
   nonBlankProblem,
 } from "./validate.js";
 import type {
@@ -251,13 +254,24 @@ export class RegionalstatistikClient {
     }
     this.engine = new RequestEngine(engineOptions);
 
-    const auth: AuthHeaders = () => this.authHeaders();
+    // catalogue, metadata and data are account-only endpoints.
+    const auth: AuthHeaders = () => this.requireAuth();
     this.catalogue = new CatalogueGroup(this.engine, auth);
     this.metadata = new MetadataGroup(this.engine, auth);
     this.data = new DataGroup(this.engine, auth);
   }
 
-  /** The credential headers merged into every authenticated request. */
+  /**
+   * The credential headers for an account-only endpoint. Without credentials
+   * GENESIS would answer 401 + Code 15 after the round trip, so this throws
+   * `RegionalstatistikValidationError` (`Invalid credentials: …`) before any request.
+   */
+  private requireAuth(): Record<string, string> {
+    assertValid("credentials", { username: this.username }, credentialsRequiredProblem);
+    return this.authHeaders();
+  }
+
+  /** The credential headers merged into every request that takes them (none when unset). */
   private authHeaders(): Record<string, string> {
     if (!this.username) return {};
     return this.password
@@ -270,14 +284,21 @@ export class RegionalstatistikClient {
     return this.engine.getJson(`${API}/helloworld/whoami`);
   }
 
-  /** `helloworld/logincheck` — validate the supplied credentials. */
+  /**
+   * `helloworld/logincheck` — validate the supplied credentials. Without any,
+   * GENESIS answers as the guest user (`"Username": "GAST"`), so this does not
+   * demand credentials.
+   */
   logincheck(language?: Language): Promise<LoginCheckResponse> {
     return postJson(this.engine, `${API}/helloworld/logincheck`, { language }, () => this.authHeaders());
   }
 
-  /** `find/find` — full-text search across object types. `term` must be non-blank. */
+  /**
+   * `find/find` — full-text search across object types. `term` must be non-blank;
+   * needs an account (rejects with `RegionalstatistikValidationError` without one).
+   */
   async find(params: FindParams): Promise<FindResponse> {
     assertValid("term", params.term, nonBlankProblem);
-    return postJson(this.engine, `${API}/find/find`, { ...params } as QueryParams, () => this.authHeaders());
+    return postJson(this.engine, `${API}/find/find`, { ...params } as QueryParams, () => this.requireAuth());
   }
 }

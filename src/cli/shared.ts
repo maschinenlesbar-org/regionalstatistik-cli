@@ -17,6 +17,7 @@ import {
   baseUrlProblem,
   CREDENTIAL_PAIR_PROBLEM,
   credentialProblem,
+  CREDENTIALS_REQUIRED_PROBLEM,
   headerValueProblem,
   intRangeProblem,
   nonBlankProblem,
@@ -150,8 +151,8 @@ export interface CredentialSources {
  * authenticate as someone else. (An explicit `--token` flag still wins.)
  * Precedence only: a lone username or password is passed on as is, and the
  * library's pair rule rejects it when the client is built (see {@link action}).
- * No credentials at all is allowed here — commands that need auth enforce
- * presence via {@link action}'s `auth` guard.
+ * No credentials at all is allowed here — the library rejects an account-only
+ * call without them, and {@link action} rewords that error.
  */
 export function resolveCredentials(
   global: GlobalOptions,
@@ -375,9 +376,33 @@ function checkEnvCredentials(root: Command, creds: ResolvedCredentials): void {
 }
 
 /**
- * Wrap an async command action with credential resolution, an optional auth
- * guard, and client construction. The callback receives a context (client +
- * resolved global options + this command's options) and the positional args.
+ * Run a command body, rewording the library's "this endpoint needs an account"
+ * error with the flags and env vars that supply credentials, and the signup URL.
+ */
+async function withCredentialsHint(body: () => Promise<void>): Promise<void> {
+  try {
+    await body();
+  } catch (err) {
+    if (err instanceof RegionalstatistikValidationError && err.message.endsWith(CREDENTIALS_REQUIRED_PROBLEM)) {
+      throw new RegionalstatistikUsageError(
+        "This command needs credentials. Set --username/--password " +
+          "(env REGIONALSTATISTIK_USERNAME / REGIONALSTATISTIK_PASSWORD) " +
+          "or --token (env REGIONALSTATISTIK_API_TOKEN). " +
+          "A free account is available at https://www.regionalstatistik.de/genesis/online.",
+        { cause: err },
+      );
+    }
+    throw err;
+  }
+}
+
+/**
+ * Wrap an async command action with credential resolution and client
+ * construction. The callback receives a context (client + resolved global
+ * options + this command's options) and the positional args. Which commands need
+ * credentials is the library's rule: an account-only call rejects before any
+ * request, and the error is reworded here with the flags and env vars
+ * (`logincheck` without credentials answers as guest, like the library).
  *
  * Commander invokes actions as (arg1, ..., argN, options, command); we slice off
  * the trailing options object and command instance to recover the positionals.
@@ -412,21 +437,10 @@ export function action(
       });
       checkEnvCredentials(root, creds);
     }
-    // Built before the presence guard, so a half username/password pair gets the
-    // library's pair error (reworded with the flags) rather than "needs credentials".
+    // A half username/password pair gets the library's pair error, reworded.
     const client = createClient(deps, toClientOptions(global, creds));
-    if (opts.auth !== false) {
-      if (!creds.present) {
-        throw new RegionalstatistikUsageError(
-          "This command needs credentials. Set --username/--password " +
-            "(env REGIONALSTATISTIK_USERNAME / REGIONALSTATISTIK_PASSWORD) " +
-            "or --token (env REGIONALSTATISTIK_API_TOKEN). " +
-            "A free account is available at https://www.regionalstatistik.de/genesis/online.",
-        );
-      }
-      warnArgvCredentials(deps, command);
-    }
-    await fn({ client, global, opts: command.opts() }, positionals);
+    if (creds.present) warnArgvCredentials(deps, command);
+    await withCredentialsHint(() => fn({ client, global, opts: command.opts() }, positionals));
   };
 }
 
