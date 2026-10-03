@@ -82,6 +82,15 @@ What the library rejects:
   and `25001` never reach the server. The CLI's `parseBoundedInt` parses the
   string and applies the same rule; `--pagelength` takes its bound from
   `MAX_PAGELENGTH`.
+- **Out-of-range engine limits** (`intRangeProblem`, in the `RequestEngine`
+  constructor): `timeoutMs` must be an integer from 0 to `MAX_TIMEOUT_MS`,
+  `maxRetries` from 0 to `MAX_RETRIES` (10, exported from `engine.ts`), and
+  `maxResponseBytes`/`retryDelayMs` non-negative safe integers. A negative or `NaN`
+  timeout or size cap used to switch that guard off, and `maxRetries` had no
+  bound. A `timeoutMs` above `MAX_TIMEOUT_MS` is now rejected rather than clamped
+  (the default transport still clamps a direct `nodeHttpTransport` call). The
+  CLI's `--timeout`/`--max-retries` parsers take their bounds from the same
+  constants.
 
 Request defaults: neither side fills in a value the caller did not give. The CLI
 has no `.default()` for `--language` or `find --category`, so an omitted value is
@@ -213,7 +222,7 @@ narrow the selection (`--start-year`/`--end-year`/`--timeslices`/
   `regstat data`), which prints the help to stderr;
   not-found → 4; other errors → 1 (including auth failures, which additionally
   print a credentials hint).
-- **Retry/backoff:** transient `429`/`503` retried up to `maxRetries` (0..10),
+- **Retry/backoff:** transient `429`/`503` retried up to `maxRetries` (0..`MAX_RETRIES` = 10, enforced by the engine),
   each after the response's `Retry-After` (delay-seconds or an IMF-fixdate; a
   malformed one falls back to linear backoff, one above 30 s is not retried). GENESIS
   rate-limits on *concurrency* (logincheck reports killing requests beyond ~10

@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MAX_RETRY_AFTER_MS, RequestEngine, parseRetryAfter, redactUrl } from "../src/client/engine.js";
+import { MAX_RETRIES, MAX_RETRY_AFTER_MS, RequestEngine, parseRetryAfter, redactUrl } from "../src/client/engine.js";
+import { MAX_TIMEOUT_MS } from "../src/client/http.js";
 import {
+  RegionalstatistikValidationError,
   RegionalstatistikApiError,
   RegionalstatistikNetworkError,
   RegionalstatistikParseError,
@@ -551,4 +553,48 @@ test("parseRetryAfter reads delay-seconds and IMF-fixdate HTTP-dates", () => {
     assert.equal(parseRetryAfter(bad, now), undefined, String(bad));
   }
   assert.equal(MAX_RETRY_AFTER_MS, 30_000);
+});
+
+// ---- numeric engine options (parity report finding #4) ------------------------------
+
+const BAD_LIMITS: Array<[string, number]> = [
+  ["timeoutMs", -1],
+  ["timeoutMs", NaN],
+  ["timeoutMs", 1.5],
+  ["timeoutMs", Infinity],
+  ["timeoutMs", MAX_TIMEOUT_MS + 1],
+  ["maxRetries", -1],
+  ["maxRetries", 1.5],
+  ["maxRetries", Infinity],
+  ["maxRetries", MAX_RETRIES + 1],
+  ["maxResponseBytes", -1],
+  ["maxResponseBytes", NaN],
+  ["maxResponseBytes", 1.5],
+  ["retryDelayMs", -1],
+  ["retryDelayMs", NaN],
+];
+
+for (const [name, value] of BAD_LIMITS) {
+  test(`the engine rejects ${name}: ${value} at construction`, () => {
+    assert.throws(
+      () => new RequestEngine({ [name]: value }),
+      (err: unknown) =>
+        err instanceof RegionalstatistikValidationError && (err as Error).message.startsWith(`Invalid ${name}: `),
+    );
+  });
+}
+
+test("the engine accepts the boundary values of every numeric option", async () => {
+  const mt = makeMockTransport(() => jsonResponse(fx.tablesList));
+  const e = new RequestEngine({
+    transport: mt.transport,
+    timeoutMs: MAX_TIMEOUT_MS,
+    maxRetries: MAX_RETRIES,
+    maxResponseBytes: 0,
+    retryDelayMs: 0,
+  });
+  await e.postJson("/x", {}, {});
+  assert.equal(mt.last().timeoutMs, MAX_TIMEOUT_MS);
+  assert.equal(mt.last().maxResponseBytes, undefined);
+  assert.doesNotThrow(() => new RequestEngine({ timeoutMs: 0, maxRetries: 0 }));
 });

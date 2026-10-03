@@ -9,6 +9,7 @@ import type { CliDeps } from "./io.js";
 import { defaultIO } from "./io.js";
 import { RegionalstatistikClient } from "../client/client.js";
 import { MAX_TIMEOUT_MS } from "../client/http.js";
+import { MAX_RETRIES, MAX_RETRY_AFTER_MS } from "../client/engine.js";
 import { LANGUAGES, MAX_PAGELENGTH } from "../client/params.js";
 import {
   parseIntArg,
@@ -112,8 +113,8 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
     .option("--user-agent <ua>", "User-Agent header value", parseHeaderValue)
     .option(
       "--max-retries <n>",
-      "retries for transient 429/503 responses (0..10; each waits the server's Retry-After, up to 30 s)",
-      parseBoundedInt(0, 10),
+      `retries for transient 429/503 responses (0..${MAX_RETRIES}; each waits the server's Retry-After, up to ${MAX_RETRY_AFTER_MS / 1000} s)`,
+      parseBoundedInt(0, MAX_RETRIES),
     )
     .option(
       "--max-response-bytes <n>",

@@ -462,3 +462,47 @@ test("parity #7 control: --timeslices 0 and 3 send the identical request", async
     assertSameRequest(p);
   }
 });
+
+// ---- Finding 4 (PAT-8): engine limits timeoutMs, maxRetries, maxResponseBytes -------
+
+const limitCases: Array<{ label: string; argv: string[]; opts: Partial<RegionalstatistikClientOptions>; msg: RegExp }> = [
+  { label: "--timeout -1", argv: ["--timeout", "-1"], opts: { timeoutMs: -1 }, msg: /^Invalid timeoutMs: Expected a non-negative integer\.$/ },
+  { label: "--timeout NaN", argv: ["--timeout", "NaN"], opts: { timeoutMs: NaN }, msg: /^Invalid timeoutMs: Expected a non-negative integer\.$/ },
+  { label: "--timeout 1.5", argv: ["--timeout", "1.5"], opts: { timeoutMs: 1.5 }, msg: /^Invalid timeoutMs: Expected a non-negative integer\.$/ },
+  { label: "--timeout 2147483648", argv: ["--timeout", "2147483648"], opts: { timeoutMs: 2147483648 }, msg: /^Invalid timeoutMs: Must be <= 2147483647\.$/ },
+  { label: "--max-response-bytes -1", argv: ["--max-response-bytes", "-1"], opts: { maxResponseBytes: -1 }, msg: /^Invalid maxResponseBytes: Expected a non-negative integer\.$/ },
+  { label: "--max-response-bytes NaN", argv: ["--max-response-bytes", "NaN"], opts: { maxResponseBytes: NaN }, msg: /^Invalid maxResponseBytes: Expected a non-negative integer\.$/ },
+  { label: "--max-retries 11", argv: ["--max-retries", "11"], opts: { maxRetries: 11 }, msg: /^Invalid maxRetries: Must be <= 10\.$/ },
+  { label: "--max-retries 1.5", argv: ["--max-retries", "1.5"], opts: { maxRetries: 1.5 }, msg: /^Invalid maxRetries: Expected a non-negative integer\.$/ },
+  { label: "--max-retries Infinity", argv: ["--max-retries", "Infinity"], opts: { maxRetries: Infinity }, msg: /^Invalid maxRetries: Expected a non-negative integer\.$/ },
+  { label: "--max-retries -1", argv: ["--max-retries", "-1"], opts: { maxRetries: -1 }, msg: /^Invalid maxRetries: Expected a non-negative integer\.$/ },
+];
+
+for (const lc of limitCases) {
+  test(`parity #4: ${lc.label} is rejected by both, with no request`, async () => {
+    const p = await parity({
+      argv: ["--compact", ...TOKEN, ...lc.argv, "catalogue", "tables", "x"],
+      lib: async (t) => client(t, lc.opts).catalogue.tables({ selection: "x" }),
+      responder: () => jsonResponse(fx.tablesList),
+    });
+    assertBothReject(p, lc.msg);
+  });
+}
+
+test("parity #4 control: the boundary values are accepted and sent by both", async () => {
+  const p = await parity({
+    argv: ["--compact", ...TOKEN, "--timeout", "0", "--max-retries", "10", "--max-response-bytes", "0", "catalogue", "tables", "x"],
+    lib: (t) => client(t, { timeoutMs: 0, maxRetries: 10, maxResponseBytes: 0 }).catalogue.tables({ selection: "x" }),
+    responder: () => jsonResponse(fx.tablesList),
+  });
+  assertSameRequest(p);
+  assert.equal(p.cli.requests[0]!.timeoutMs, 0);
+  assert.equal(p.lib.requests[0]!.timeoutMs, 0);
+});
+
+test("parity #4: the CLI's --max-retries bound is the library's MAX_RETRIES", async () => {
+  const { MAX_RETRIES } = await import("../src/client/engine.js");
+  assert.equal(MAX_RETRIES, 10);
+  const opt = buildProgram().options.find((o) => o.long === "--max-retries")!;
+  assert.match(opt.description, new RegExp(`\\(0\\.\\.${MAX_RETRIES};`));
+});
