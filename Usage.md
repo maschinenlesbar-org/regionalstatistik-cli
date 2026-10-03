@@ -24,7 +24,7 @@ Global options (valid on any command):
 | `--username <u>` · `--password <p>` | account login (env `REGIONALSTATISTIK_USERNAME` / `REGIONALSTATISTIK_PASSWORD`) |
 | `--token <t>` | API token (env `REGIONALSTATISTIK_API_TOKEN`); wins over username/password, but a `--username`/`--password` flag beats a token from the env var |
 | `--base-url <url>` | API base (default `https://www.regionalstatistik.de`); `http(s)` only, a path prefix is fine, but no query, fragment, userinfo or surrounding whitespace |
-| `--language <de\|en>` | response language (default `de`; English labels are partial) |
+| `--language <de\|en>` | response language (not sent unless given; the server default is `de`; English labels are partial) |
 | `--pagelength <n>` | max list results, `1..25000` (server default 100) |
 | `--timeout <ms>` · `--max-retries <n>` · `--max-response-bytes <n>` | transport tuning |
 | `--user-agent <ua>` | User-Agent header |
@@ -45,7 +45,8 @@ regstat logincheck      # helloworld/logincheck — validates your credentials
 regstat find <term> [--category all|tables|statistics|cubes|variables|time-series]
 ```
 
-`--pagelength` bounds the result count. Returns parallel arrays
+Without `--category` no category is sent and GENESIS searches every object type
+(`all`). `--pagelength` bounds the result count. Returns parallel arrays
 (`Tables`/`Statistics`/`Cubes`/`Timeseries`/`Variables`), each `null` when not
 searched.
 

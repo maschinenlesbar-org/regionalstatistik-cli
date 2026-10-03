@@ -65,7 +65,7 @@ What the library rejects:
 
 - **Blank text** (`nonBlankProblem`, `assertRequestParams`): a blank (`""` or
   whitespace-only) object `name`, `find` `term`, or any given string parameter
-  (`selection`, `area`, `type`, `regionalkey`, `classifyingkey1`, `language`, …).
+  (`selection`, `area`, `type`, `regionalkey`, `classifyingkey1`, …).
   GENESIS reads an empty parameter as "no filter", so it would silently return
   unfiltered data. `undefined` still means "omitted". The CLI's `parseNonEmpty`
   calls the same rule.
@@ -76,6 +76,11 @@ What the library rejects:
   `data/*file` download's `format` one of `DATA_FILE_FORMATS` — exact,
   case-sensitive. The lists are exported from `params.ts` and the types derive from
   them; the CLI builds its `.choices()` from the same exports.
+
+Request defaults: neither side fills in a value the caller did not give. The CLI
+has no `.default()` for `--language` or `find --category`, so an omitted value is
+not sent — by the CLI or the library — and GENESIS applies its own defaults
+(`de`, `all`); the help text says so.
 
 ## Host-specific facts (verified live 2026-07-13)
 

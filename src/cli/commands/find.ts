@@ -14,7 +14,11 @@ export function registerFindCommand(program: Command, deps: CliDeps): void {
     )
     .argument("<term>", "search term (must be non-empty)", parseNonEmpty)
     .addOption(
-      new Option("--category <cat>", "restrict to an object type").choices([...FIND_CATEGORIES]).default("all"),
+      // No .default(): an omitted --category is not sent, exactly like the library,
+      // and GENESIS searches every object type.
+      new Option("--category <cat>", "restrict to an object type (server default: all)").choices([
+        ...FIND_CATEGORIES,
+      ]),
     )
     .action(
       action(deps, async ({ client, global, opts }, [term]) => {
@@ -23,7 +27,7 @@ export function registerFindCommand(program: Command, deps: CliDeps): void {
           global,
           await client.find({
             term: term!,
-            category: opts["category"] as FindCategory,
+            ...(opts["category"] !== undefined ? { category: opts["category"] as FindCategory } : {}),
             ...commonListParams(global),
           }),
         );

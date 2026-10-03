@@ -347,3 +347,36 @@ test("parity #9: the CLI's choices are the library's exported value lists", () =
     assert.deepEqual(choices(sub(sub(program, "data"), name), "--format"), [...params.DATA_FILE_FORMATS]);
   }
 });
+
+// ---- Finding 10 (PAT-15): no CLI-only request defaults ------------------------------
+
+const defaultCases: Array<{ label: string; argv: string[]; lib: (c: RegionalstatistikClient) => Promise<unknown>; zip?: boolean }> = [
+  { label: "find bev", argv: ["find", "bev"], lib: (c) => c.find({ term: "bev" }) },
+  { label: "logincheck", argv: ["logincheck"], lib: (c) => c.logincheck() },
+  { label: "catalogue tables 12411*", argv: ["catalogue", "tables", "12411*"], lib: (c) => c.catalogue.tables({ selection: "12411*" }) },
+  { label: "catalogue modified", argv: ["catalogue", "modified"], lib: (c) => c.catalogue.modifiedData() },
+  { label: "metadata table 12411-01-01-4", argv: ["metadata", "table", "12411-01-01-4"], lib: (c) => c.metadata.table("12411-01-01-4") },
+  { label: "data table 12411-01-01-4", argv: ["data", "table", "12411-01-01-4"], lib: (c) => c.data.table("12411-01-01-4") },
+  { label: "data cubefile X", argv: ["-o", "out.zip", "data", "cubefile", "X"], lib: (c) => c.data.cubeFile("X"), zip: true },
+];
+
+for (const dc of defaultCases) {
+  test(`parity #10: ${dc.label} with no --language/--category sends the identical request`, async () => {
+    const p = await parity({
+      argv: ["--compact", ...TOKEN, ...dc.argv],
+      lib: (t) => dc.lib(client(t)),
+      responder: dc.zip ? ZIP : () => jsonResponse(fx.findResult),
+    });
+    assertSameRequest(p);
+    const body = new URLSearchParams(p.cli.requests[0]!.body?.toString() ?? "");
+    assert.equal(body.has("language"), false);
+    assert.equal(body.has("category"), false);
+  });
+}
+
+test("parity #10: --help names the server defaults for --language and --category", async () => {
+  const p = await parity({ argv: ["--help"], lib: async () => undefined });
+  assert.match(p.cli.out, /--language <lang>\s+response language \(server default: de\)/);
+  const f = await parity({ argv: ["find", "--help"], lib: async () => undefined });
+  assert.match(f.cli.out, /server default: all/);
+});
