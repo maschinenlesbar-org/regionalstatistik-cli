@@ -8,6 +8,7 @@ import type { CliDeps } from "./io.js";
 import type { RawResponse } from "../client/engine.js";
 import type { RegionalstatistikClientOptions } from "../client/client.js";
 import { RegionalstatistikError, RegionalstatistikUsageError } from "../client/errors.js";
+import { nonBlankProblem, type Problem } from "../client/validate.js";
 
 /**
  * commander value-parser: a non-negative integer in plain decimal notation.
@@ -27,12 +28,16 @@ export function parseIntArg(value: string): number {
   return n;
 }
 
-/** commander value-parser: a non-empty (after trimming) string. */
-export function parseNonEmpty(value: string): string {
-  if (value.trim() === "") {
-    throw new InvalidArgumentError("Expected a non-empty value.");
-  }
+/** Throw the library's reason for an invalid value as a commander usage error. */
+function check<T>(value: T, problem: Problem<T>): T {
+  const reason = problem(value);
+  if (reason !== undefined) throw new InvalidArgumentError(reason);
   return value;
+}
+
+/** commander value-parser: a non-empty (after trimming) string — the library's rule. */
+export function parseNonEmpty(value: string): string {
+  return check(value, nonBlankProblem);
 }
 
 /**

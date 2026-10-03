@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { assertValid, type Problem } from "../src/client/validate.js";
+import { assertRequestParams, assertValid, nonBlankProblem, type Problem } from "../src/client/validate.js";
 import {
   RegionalstatistikError,
   RegionalstatistikUsageError,
@@ -81,4 +81,27 @@ test("parity() runs the CLI and the library on one recording transport", async (
   assert.ok(p.lib.ok);
   assert.equal(p.lib.requests.length, 1);
   assert.equal(p.cli.requests[0]!.url, p.lib.requests[0]!.url);
+});
+
+test("nonBlankProblem accepts text and rejects blank or non-string values", () => {
+  assert.equal(nonBlankProblem("12411*"), undefined);
+  assert.equal(nonBlankProblem(" x "), undefined);
+  for (const v of ["", " ", "\t\n", undefined, null, 5]) {
+    assert.equal(nonBlankProblem(v), "Expected a non-empty value.", JSON.stringify(v));
+  }
+});
+
+test("assertRequestParams rejects a blank string, naming the parameter, and skips omitted ones", () => {
+  assert.doesNotThrow(() => assertRequestParams({ a: "x", b: undefined, c: null, d: 3, e: true }));
+  assert.throws(
+    () => assertRequestParams({ selection: "1*", regionalkey: " " }),
+    (err: unknown) =>
+      err instanceof RegionalstatistikValidationError &&
+      err.message === "Invalid regionalkey: Expected a non-empty value.",
+  );
+});
+
+test("the package root exports the blank-value rules", () => {
+  assert.equal(lib.nonBlankProblem, nonBlankProblem);
+  assert.equal(lib.assertRequestParams, assertRequestParams);
 });

@@ -22,3 +22,23 @@ export function assertValid<T>(name: string, value: T, problem: Problem<T>): T {
   if (reason !== undefined) throw new RegionalstatistikValidationError(`Invalid ${name}: ${reason}`);
   return value;
 }
+
+/**
+ * A required or given text value must not be blank (`""` or whitespace only):
+ * GENESIS reads an empty parameter as "no filter", so a blank filter would
+ * silently return unfiltered data. A non-string counts as missing.
+ */
+export function nonBlankProblem(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() !== "" ? undefined : "Expected a non-empty value.";
+}
+
+/**
+ * Check the parameters of one GENESIS request before it is sent. `undefined`
+ * and `null` mean "omitted" and are never sent; every string that is given must
+ * be non-blank. Throws `RegionalstatistikValidationError` naming the parameter.
+ */
+export function assertRequestParams(params: Readonly<Record<string, unknown>>): void {
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === "string") assertValid(key, value, nonBlankProblem);
+  }
+}

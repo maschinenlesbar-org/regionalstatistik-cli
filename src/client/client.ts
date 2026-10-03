@@ -24,6 +24,7 @@
 
 import { RequestEngine, type EngineOptions, type RawResponse } from "./engine.js";
 import type { QueryParams } from "./query.js";
+import { assertRequestParams, assertValid, nonBlankProblem } from "./validate.js";
 import type {
   CatalogueParams,
   DataFileParams,
@@ -56,6 +57,26 @@ const FILE_ACCEPT = "application/zip, */*";
 /** A supplier of the per-request credential headers (username / optional password). */
 type AuthHeaders = () => Record<string, string>;
 
+/**
+ * Validate a request's parameters (see `validate.ts`) and POST them, parsing the
+ * JSON reply. `async`, so a rejected input rejects the promise — and sends nothing.
+ */
+async function postJson<T>(
+  e: RequestEngine,
+  path: string,
+  params: QueryParams,
+  auth: AuthHeaders,
+): Promise<T> {
+  assertRequestParams(params);
+  return e.postJson<T>(path, params, auth());
+}
+
+/** Validate a request object's required `name` (the object code) and its parameters. */
+function named(name: string, params: object): QueryParams {
+  assertValid("name", name, nonBlankProblem);
+  return { name, ...params } as QueryParams;
+}
+
 /** Options for the Regionalstatistik client (engine options plus credentials). */
 export interface RegionalstatistikClientOptions extends EngineOptions {
   /**
@@ -77,7 +98,7 @@ class CatalogueGroup {
   ) {}
 
   private list<TItem>(method: string, params: CatalogueParams): Promise<CatalogueResponse<TItem>> {
-    return this.e.postJson(`${API}/catalogue/${method}`, params as QueryParams, this.auth());
+    return postJson(this.e, `${API}/catalogue/${method}`, { ...params } as QueryParams, this.auth);
   }
 
   tables(params: CatalogueParams = {}): Promise<CatalogueResponse<TableItem>> {
@@ -122,8 +143,8 @@ class MetadataGroup {
     private readonly auth: AuthHeaders,
   ) {}
 
-  private get(method: string, name: string, params: MetadataParams): Promise<MetadataResponse> {
-    return this.e.postJson(`${API}/metadata/${method}`, { name, ...params } as QueryParams, this.auth());
+  private async get(method: string, name: string, params: MetadataParams): Promise<MetadataResponse> {
+    return postJson(this.e, `${API}/metadata/${method}`, named(name, params), this.auth);
   }
 
   table(name: string, params: MetadataParams = {}): Promise<MetadataResponse> {
@@ -153,8 +174,8 @@ class DataGroup {
     private readonly auth: AuthHeaders,
   ) {}
 
-  private json(method: string, name: string, params: DataTableParams): Promise<DataResponse> {
-    return this.e.postJson(`${API}/data/${method}`, { name, ...params } as QueryParams, this.auth());
+  private async json(method: string, name: string, params: DataTableParams): Promise<DataResponse> {
+    return postJson(this.e, `${API}/data/${method}`, named(name, params), this.auth);
   }
 
   table(name: string, params: DataTableParams = {}): Promise<DataResponse> {
@@ -170,8 +191,10 @@ class DataGroup {
     return this.json("result", name, params);
   }
 
-  private file(method: string, name: string, params: DataFileParams): Promise<RawResponse> {
-    return this.e.postRaw(`${API}/data/${method}`, FILE_ACCEPT, { name, ...params } as QueryParams, this.auth());
+  private async file(method: string, name: string, params: DataFileParams): Promise<RawResponse> {
+    const all = named(name, params);
+    assertRequestParams(all);
+    return this.e.postRaw(`${API}/data/${method}`, FILE_ACCEPT, all, this.auth());
   }
   tableFile(name: string, params: DataFileParams = {}): Promise<RawResponse> {
     return this.file("tablefile", name, params);
@@ -234,11 +257,12 @@ export class RegionalstatistikClient {
 
   /** `helloworld/logincheck` — validate the supplied credentials. */
   logincheck(language?: string): Promise<LoginCheckResponse> {
-    return this.engine.postJson(`${API}/helloworld/logincheck`, { language }, this.authHeaders());
+    return postJson(this.engine, `${API}/helloworld/logincheck`, { language }, () => this.authHeaders());
   }
 
-  /** `find/find` — full-text search across object types. */
-  find(params: FindParams): Promise<FindResponse> {
-    return this.engine.postJson(`${API}/find/find`, { ...params } as QueryParams, this.authHeaders());
+  /** `find/find` — full-text search across object types. `term` must be non-blank. */
+  async find(params: FindParams): Promise<FindResponse> {
+    assertValid("term", params.term, nonBlankProblem);
+    return postJson(this.engine, `${API}/find/find`, { ...params } as QueryParams, () => this.authHeaders());
   }
 }
