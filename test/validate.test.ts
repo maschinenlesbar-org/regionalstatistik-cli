@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { assertRequestParams, assertValid, nonBlankProblem, oneOfProblem, type Problem } from "../src/client/validate.js";
+import {
+  assertRequestParams,
+  assertValid,
+  intRangeProblem,
+  nonBlankProblem,
+  oneOfProblem,
+  type Problem,
+} from "../src/client/validate.js";
 import {
   RegionalstatistikError,
   RegionalstatistikUsageError,
@@ -137,4 +144,24 @@ test("assertRequestParams checks category, the criteria and format against their
     () => assertRequestParams({ format: "zip" }),
     /Invalid format: Allowed choices are datencsv, csv, ffcsv, xlsx, html, genml\./,
   );
+});
+
+test("intRangeProblem accepts safe integers in range and words its reasons like the CLI", () => {
+  const problem = intRangeProblem(1, 25000);
+  assert.equal(problem(1), undefined);
+  assert.equal(problem(25000), undefined);
+  assert.equal(problem(0), "Must be >= 1.");
+  assert.equal(problem(25001), "Must be <= 25000.");
+  for (const v of [-1, 1.5, NaN, Infinity, 1e20, "10", undefined]) {
+    assert.equal(problem(v), "Expected a non-negative integer.", String(v));
+  }
+});
+
+test("assertRequestParams checks pagelength", () => {
+  assert.doesNotThrow(() => assertRequestParams({ pagelength: 25000 }));
+  assert.throws(
+    () => assertRequestParams({ pagelength: 0 }),
+    /^RegionalstatistikValidationError: Invalid pagelength: Must be >= 1\.$/,
+  );
+  assert.throws(() => assertRequestParams({ pagelength: NaN }), /Invalid pagelength: Expected a non-negative integer\./);
 });

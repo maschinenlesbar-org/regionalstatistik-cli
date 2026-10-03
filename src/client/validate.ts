@@ -9,7 +9,7 @@
 //     the message `Invalid <name>: <reason>`.
 
 import { RegionalstatistikValidationError } from "./errors.js";
-import { CRITERIA, DATA_FILE_FORMATS, FIND_CATEGORIES, LANGUAGES } from "./params.js";
+import { CRITERIA, DATA_FILE_FORMATS, FIND_CATEGORIES, LANGUAGES, MAX_PAGELENGTH } from "./params.js";
 
 /** Returns why `value` is invalid, or `undefined` when it is valid. */
 export type Problem<T = unknown> = (value: T) => string | undefined;
@@ -42,8 +42,24 @@ export function oneOfProblem(allowed: readonly string[]): Problem<unknown> {
     (allowed as readonly unknown[]).includes(value) ? undefined : `Allowed choices are ${allowed.join(", ")}.`;
 }
 
+/**
+ * A value must be a safe integer from `min` to `max` (`min` >= 0). The reasons
+ * are worded like the CLI's integer parsers.
+ */
+export function intRangeProblem(min: number, max: number): Problem<unknown> {
+  return (value) => {
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+      return "Expected a non-negative integer.";
+    }
+    if (value < min) return `Must be >= ${min}.`;
+    if (value > max) return `Must be <= ${max}.`;
+    return undefined;
+  };
+}
+
 /** The GENESIS request parameters with a rule beyond "non-blank", and that rule. */
 const RULES: Readonly<Record<string, Problem<unknown>>> = {
+  pagelength: intRangeProblem(1, MAX_PAGELENGTH),
   language: oneOfProblem(LANGUAGES),
   category: oneOfProblem(FIND_CATEGORIES),
   searchcriterion: oneOfProblem(CRITERIA),
@@ -54,7 +70,7 @@ const RULES: Readonly<Record<string, Problem<unknown>>> = {
 /**
  * Check the parameters of one GENESIS request before it is sent. `undefined`
  * and `null` mean "omitted" and are never sent. A parameter with its own rule
- * (`language`, `category`, the criteria, `format`, …) must pass it; every other string that is given must be
+ * (`pagelength`, `language`, `category`, the criteria, `format`, …) must pass it; every other string that is given must be
  * non-blank. Throws `RegionalstatistikValidationError` naming the parameter.
  */
 export function assertRequestParams(params: Readonly<Record<string, unknown>>): void {

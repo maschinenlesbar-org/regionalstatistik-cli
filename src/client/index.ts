@@ -22,7 +22,13 @@ export {
   RegionalstatistikValidationError,
   RegionalstatistikParseError,
 } from "./errors.js";
-export { assertRequestParams, assertValid, nonBlankProblem, oneOfProblem } from "./validate.js";
+export {
+  assertRequestParams,
+  assertValid,
+  intRangeProblem,
+  nonBlankProblem,
+  oneOfProblem,
+} from "./validate.js";
 export type { Problem } from "./validate.js";
 
 export * from "./params.js";

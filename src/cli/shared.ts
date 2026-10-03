@@ -8,7 +8,7 @@ import type { CliDeps } from "./io.js";
 import type { RawResponse } from "../client/engine.js";
 import type { RegionalstatistikClientOptions } from "../client/client.js";
 import { RegionalstatistikError, RegionalstatistikUsageError } from "../client/errors.js";
-import { nonBlankProblem, type Problem } from "../client/validate.js";
+import { intRangeProblem, nonBlankProblem, type Problem } from "../client/validate.js";
 import type { Language } from "../client/params.js";
 
 /**
@@ -120,14 +120,13 @@ export function parseCredential(value: string): string {
   return value;
 }
 
-/** Build a commander value-parser for an integer constrained to [min, max]. */
+/**
+ * Build a commander value-parser for an integer constrained to [min, max]: the
+ * string is parsed here, the range is the library's rule (`intRangeProblem`).
+ */
 export function parseBoundedInt(min: number, max: number): (value: string) => number {
-  return (value: string) => {
-    const n = parseIntArg(value);
-    if (n < min) throw new InvalidArgumentError(`Must be >= ${min}.`);
-    if (n > max) throw new InvalidArgumentError(`Must be <= ${max}.`);
-    return n;
-  };
+  const problem = intRangeProblem(min, max);
+  return (value: string) => check(parseIntArg(value), problem);
 }
 
 export interface GlobalOptions {

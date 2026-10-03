@@ -76,6 +76,11 @@ What the library rejects:
   `data/*file` download's `format` one of `DATA_FILE_FORMATS` — exact,
   case-sensitive. The lists are exported from `params.ts` and the types derive from
   them; the CLI builds its `.choices()` from the same exports.
+- **Out-of-range counts** (`intRangeProblem`): `pagelength` must be an integer from
+  1 to `MAX_PAGELENGTH` (25000, exported from `params.ts`) — `0`, `-1`, `1.5`,
+  `NaN`, `Infinity` and `25001` never reach the server. The CLI's `parseBoundedInt`
+  parses the string and applies the same rule; `--pagelength` takes its bound from
+  `MAX_PAGELENGTH`.
 
 Request defaults: neither side fills in a value the caller did not give. The CLI
 has no `.default()` for `--language` or `find --category`, so an omitted value is

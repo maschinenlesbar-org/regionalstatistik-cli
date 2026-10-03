@@ -380,3 +380,41 @@ test("parity #10: --help names the server defaults for --language and --category
   const f = await parity({ argv: ["find", "--help"], lib: async () => undefined });
   assert.match(f.cli.out, /server default: all/);
 });
+
+// ---- Finding 6 (PAT-11): pagelength 1..MAX_PAGELENGTH --------------------------------
+
+const NONNEG = /^Invalid pagelength: Expected a non-negative integer\.$/;
+const pagelengthCases: Array<{ label: string; argv: string[]; lib: (c: RegionalstatistikClient) => Promise<unknown>; msg: RegExp }> = [
+  { label: "catalogue tables --pagelength 0", argv: ["--pagelength", "0", "catalogue", "tables"], lib: (c) => c.catalogue.tables({ pagelength: 0 }), msg: /^Invalid pagelength: Must be >= 1\.$/ },
+  { label: "catalogue tables --pagelength -1", argv: ["--pagelength", "-1", "catalogue", "tables"], lib: (c) => c.catalogue.tables({ pagelength: -1 }), msg: NONNEG },
+  { label: "catalogue tables --pagelength 25001", argv: ["--pagelength", "25001", "catalogue", "tables"], lib: (c) => c.catalogue.tables({ pagelength: 25001 }), msg: /^Invalid pagelength: Must be <= 25000\.$/ },
+  { label: "catalogue tables --pagelength 1.5", argv: ["--pagelength", "1.5", "catalogue", "tables"], lib: (c) => c.catalogue.tables({ pagelength: 1.5 }), msg: NONNEG },
+  { label: "catalogue tables --pagelength NaN", argv: ["--pagelength", "NaN", "catalogue", "tables"], lib: (c) => c.catalogue.tables({ pagelength: NaN }), msg: NONNEG },
+  { label: "catalogue tables --pagelength Infinity", argv: ["--pagelength", "Infinity", "catalogue", "tables"], lib: (c) => c.catalogue.tables({ pagelength: Infinity }), msg: NONNEG },
+  { label: "catalogue tables --pagelength 1e20", argv: ["--pagelength", "99999999999999999999", "catalogue", "tables"], lib: (c) => c.catalogue.tables({ pagelength: 1e20 }), msg: NONNEG },
+  { label: "find bev --pagelength 0", argv: ["--pagelength", "0", "find", "bev"], lib: (c) => c.find({ term: "bev", pagelength: 0 }), msg: /^Invalid pagelength: Must be >= 1\.$/ },
+  { label: "catalogue results --pagelength -5", argv: ["--pagelength", "-5", "catalogue", "results"], lib: (c) => c.catalogue.results({ pagelength: -5 }), msg: NONNEG },
+  { label: "catalogue qualitysigns --pagelength 30000", argv: ["--pagelength", "30000", "catalogue", "qualitysigns"], lib: (c) => c.catalogue.qualitySigns({ pagelength: 30000 }), msg: /^Invalid pagelength: Must be <= 25000\.$/ },
+];
+
+for (const pc of pagelengthCases) {
+  test(`parity #6: ${pc.label} is rejected by both, with no request`, async () => {
+    const p = await parity({
+      argv: ["--compact", ...TOKEN, ...pc.argv],
+      lib: (t) => pc.lib(client(t)),
+      responder: () => jsonResponse(fx.tablesList),
+    });
+    assertBothReject(p, pc.msg);
+  });
+}
+
+test("parity #6 control: --pagelength 25000 and 1 send the identical request", async () => {
+  for (const n of [params.MAX_PAGELENGTH, 1]) {
+    const p = await parity({
+      argv: ["--compact", ...TOKEN, "--pagelength", String(n), "catalogue", "tables"],
+      lib: (t) => client(t).catalogue.tables({ pagelength: n }),
+      responder: () => jsonResponse(fx.tablesList),
+    });
+    assertSameRequest(p);
+  }
+});

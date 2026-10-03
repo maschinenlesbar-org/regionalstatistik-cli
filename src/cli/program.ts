@@ -9,7 +9,7 @@ import type { CliDeps } from "./io.js";
 import { defaultIO } from "./io.js";
 import { RegionalstatistikClient } from "../client/client.js";
 import { MAX_TIMEOUT_MS } from "../client/http.js";
-import { LANGUAGES } from "../client/params.js";
+import { LANGUAGES, MAX_PAGELENGTH } from "../client/params.js";
 import {
   parseIntArg,
   parseBoundedInt,
@@ -101,8 +101,8 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
     )
     .option(
       "--pagelength <n>",
-      "max list results for find/catalogue (1..25000; ignored by data/metadata)",
-      parseBoundedInt(1, 25000),
+      `max list results for find/catalogue (1..${MAX_PAGELENGTH}; ignored by data/metadata)`,
+      parseBoundedInt(1, MAX_PAGELENGTH),
     )
     .option(
       "--timeout <ms>",
