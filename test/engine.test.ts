@@ -417,16 +417,28 @@ test("redactUrl masks URL userinfo (basic-auth credentials in the base URL)", ()
   assert.match(masked, /www\.regionalstatistik\.de\/x/);
 });
 
-test("a base URL with embedded userinfo does not leak into the error message", async () => {
+test("a base URL with embedded userinfo is rejected at construction, without leaking it", () => {
   const mt = makeMockTransport(() => rawResponse("nope", "text/plain", 500));
-  const e = new RequestEngine({
-    baseUrl: "https://SECRETUSER:HUNTER2@www.regionalstatistik.de",
-    transport: mt.transport,
-  });
-  await assert.rejects(
-    () => e.postJson("/find/find", {}, { username: "TOK" }),
-    (err) => err instanceof RegionalstatistikApiError && !/SECRETUSER|HUNTER2/.test(err.message),
+  assert.throws(
+    () => new RequestEngine({ baseUrl: "https://SECRETUSER:HUNTER2@www.regionalstatistik.de", transport: mt.transport }),
+    (err) =>
+      err instanceof RegionalstatistikValidationError &&
+      err.message === "Invalid baseUrl: Must not embed credentials (user:pass@host)." &&
+      !/SECRETUSER|HUNTER2/.test(err.message),
   );
+  assert.equal(mt.calls.length, 0);
+});
+
+test("a base URL with whitespace is rejected at construction, before the trailing-slash strip", () => {
+  for (const baseUrl of ["https://example.test/ ", " https://example.test", "https://example.test\t", "https://example.test/a b"]) {
+    const mt = makeMockTransport(() => jsonResponse(fx.whoami));
+    assert.throws(
+      () => new RequestEngine({ baseUrl, transport: mt.transport }),
+      (err) => err instanceof RegionalstatistikValidationError && /^Invalid baseUrl: A base URL cannot/.test(err.message),
+      JSON.stringify(baseUrl),
+    );
+    assert.equal(mt.calls.length, 0);
+  }
 });
 
 test("rejects a non-http(s) base URL at construction, even with a custom transport", () => {

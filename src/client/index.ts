@@ -26,6 +26,8 @@ export {
 export {
   assertRequestParams,
   assertValid,
+  BASE_URL_USERINFO_PROBLEM,
+  baseUrlProblem,
   credentialProblem,
   headerNameProblem,
   headerValueProblem,

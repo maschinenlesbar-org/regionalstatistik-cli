@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   assertRequestParams,
   assertValid,
+  baseUrlProblem,
   credentialProblem,
   headerNameProblem,
   headerValueProblem,
@@ -221,4 +222,21 @@ test("a credential message never echoes the value", () => {
     () => new RegionalstatistikClient({ password: " s3cret ", username: "u" }),
     (err: unknown) => err instanceof RegionalstatistikValidationError && !(err as Error).message.includes("s3cret"),
   );
+});
+
+test("baseUrlProblem accepts an http(s) URL and names each rejected shape", () => {
+  assert.equal(baseUrlProblem("https://www.regionalstatistik.de"), undefined);
+  assert.equal(baseUrlProblem("http://127.0.0.1:8080/prefix/"), undefined);
+  assert.equal(baseUrlProblem(""), "Must be an absolute http(s) URL.");
+  assert.equal(baseUrlProblem("not a url"), "Must be an absolute http(s) URL.");
+  assert.equal(baseUrlProblem(42), "Must be an absolute http(s) URL.");
+  assert.equal(baseUrlProblem("ftp://h.example"), 'Only "http:" and "https:" URLs are allowed.');
+  assert.equal(baseUrlProblem("https://u:p@h.example"), "Must not embed credentials (user:pass@host).");
+  assert.equal(baseUrlProblem("https://tok@h.example"), "Must not embed credentials (user:pass@host).");
+  assert.equal(baseUrlProblem("https://h.example/?x=1"), "A base URL cannot have a query (?) or fragment (#).");
+  assert.equal(baseUrlProblem("https://h.example/#f"), "A base URL cannot have a query (?) or fragment (#).");
+  assert.equal(baseUrlProblem("https://h.example/ "), "A base URL cannot have surrounding whitespace.");
+  assert.equal(baseUrlProblem(" https://h.example"), "A base URL cannot have surrounding whitespace.");
+  assert.equal(baseUrlProblem("https://h.example/a b"), "A base URL cannot contain whitespace or control characters.");
+  assert.equal(baseUrlProblem("https://h.example/a\x7fb"), "A base URL cannot contain whitespace or control characters.");
 });

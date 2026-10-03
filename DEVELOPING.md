@@ -104,6 +104,13 @@ What the library rejects:
   credential. Messages never echo the value. The CLI's
   `parseHeaderValue`/`parseCredential` (and the env-var check in `action()`) call
   the same rules.
+- **Base URL** (`baseUrlProblem`, run on the raw `baseUrl` before the
+  trailing-slash strip): embedded userinfo (`https://u:p@host` would become a Basic
+  `Authorization` header; GENESIS never uses Basic auth), surrounding whitespace
+  (`"https://h/ "` requested `/%20/…`), and whitespace or control characters inside
+  it. The scheme and `?`/`#` rules are checked by the engine's `assertHttpScheme`,
+  which still throws `RegionalstatistikNetworkError`. `parseBaseUrl` calls
+  `baseUrlProblem` and only appends the flag hint for an embedded credential.
 
 Request defaults: neither side fills in a value the caller did not give. The CLI
 has no `.default()` for `--language` or `find --category`, so an omitted value is
@@ -242,8 +249,8 @@ narrow the selection (`--start-year`/`--end-year`/`--timeslices`/
   parallel on this host) and does not reliably emit `429`/`503`, so this path is
   largely inert — keep it, don't rely on it.
 - **`--base-url`** accepts only `http:`/`https:` and refuses embedded userinfo,
-  a query, a fragment and surrounding whitespace (paths are appended as a string;
-  the engine rejects a query/fragment for library users too).
+  a query, a fragment, and whitespace or control characters (paths are appended
+  as a string; the engine applies the same `baseUrlProblem` for library users).
   Pointing it at the sibling DESTATIS/Zensus installations is possible but out
   of scope; note they use the **uppercase** `/genesisWS` path, so cross-pointing
   mostly 404s — use the right sibling CLI instead. The data terms also differ

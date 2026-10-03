@@ -612,3 +612,46 @@ test("parity #3 control: a TAB inside a password is accepted and sent by both", 
   });
   assertSameRequest(p);
 });
+
+// ---- Finding 5 (PAT-1): base URL userinfo and whitespace -----------------------------
+
+const baseUrlCases: Array<{ url: string; msg: RegExp }> = [
+  { url: "https://u:p@example.org", msg: /^Invalid baseUrl: Must not embed credentials \(user:pass@host\)\.$/ },
+  { url: "https://tok@example.org", msg: /^Invalid baseUrl: Must not embed credentials/ },
+  { url: "https://example.org ", msg: /^Invalid baseUrl: A base URL cannot have surrounding whitespace\.$/ },
+  { url: " https://example.org", msg: /^Invalid baseUrl: A base URL cannot have surrounding whitespace\.$/ },
+  { url: "https://h.example\t", msg: /^Invalid baseUrl: A base URL cannot have surrounding whitespace\.$/ },
+  { url: "https://h.example/ ", msg: /^Invalid baseUrl: A base URL cannot have surrounding whitespace\.$/ },
+  { url: "https://h.example/p\tx", msg: /^Invalid baseUrl: A base URL cannot contain whitespace or control characters\.$/ },
+];
+
+for (const bc of baseUrlCases) {
+  test(`parity #5: base URL ${JSON.stringify(bc.url)} is rejected by both, with no request`, async () => {
+    const p = await parity({
+      argv: ["--compact", ...TOKEN, "--base-url", bc.url, "catalogue", "tables", "x"],
+      lib: async (t) => client(t, { baseUrl: bc.url }).catalogue.tables({ selection: "x" }),
+      responder: () => jsonResponse(fx.tablesList),
+    });
+    assertBothReject(p, bc.msg);
+    if (!p.lib.ok) assert.doesNotMatch((p.lib.error as Error).message, /u:p|tok@|example\.org/);
+  });
+}
+
+test("parity #5: the CLI keeps its flag hint for an embedded credential", async () => {
+  const p = await parity({
+    argv: ["--compact", "--base-url", "https://u:p@example.org", "hello"],
+    lib: async () => undefined,
+  });
+  assert.equal(p.cli.code, 2);
+  assert.match(p.cli.err, /Must not embed credentials \(user:pass@host\)\. Use --token or --username\/--password\./);
+});
+
+test("parity #5 control: a base URL with a path prefix sends the identical request", async () => {
+  const p = await parity({
+    argv: ["--compact", ...TOKEN, "--base-url", "https://h.example/prefix/", "catalogue", "tables", "x"],
+    lib: (t) => client(t, { baseUrl: "https://h.example/prefix/" }).catalogue.tables({ selection: "x" }),
+    responder: () => jsonResponse(fx.tablesList),
+  });
+  assertSameRequest(p);
+  assert.equal(p.lib.requests[0]!.url, "https://h.example/prefix/genesisws/rest/2020/catalogue/tables");
+});

@@ -23,7 +23,7 @@ Global options (valid on any command):
 |---|---|
 | `--username <u>` · `--password <p>` | account login (env `REGIONALSTATISTIK_USERNAME` / `REGIONALSTATISTIK_PASSWORD`) |
 | `--token <t>` | API token (env `REGIONALSTATISTIK_API_TOKEN`); wins over username/password, but a `--username`/`--password` flag beats a token from the env var |
-| `--base-url <url>` | API base (default `https://www.regionalstatistik.de`); `http(s)` only, a path prefix is fine, but no query, fragment, userinfo or surrounding whitespace |
+| `--base-url <url>` | API base (default `https://www.regionalstatistik.de`); `http(s)` only, a path prefix is fine, but no query, fragment, userinfo, whitespace or control characters |
 | `--language <de\|en>` | response language (not sent unless given; the server default is `de`; English labels are partial) |
 | `--pagelength <n>` | max list results, `1..25000` (server default 100) |
 | `--timeout <ms>` · `--max-retries <n>` · `--max-response-bytes <n>` | transport tuning |

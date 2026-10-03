@@ -12,7 +12,7 @@
 
 import { MAX_TIMEOUT_MS, nodeHttpTransport, type Transport } from "./http.js";
 import { buildQueryString, type QueryParams } from "./query.js";
-import { assertValid, headerNameProblem, headerValueProblem, intRangeProblem } from "./validate.js";
+import { assertValid, baseUrlProblem, headerNameProblem, headerValueProblem, intRangeProblem } from "./validate.js";
 import {
   RegionalstatistikApiError,
   RegionalstatistikNetworkError,
@@ -255,8 +255,12 @@ export class RequestEngine {
   private readonly sleep: (ms: number) => Promise<void>;
 
   constructor(options: EngineOptions = {}) {
-    this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
+    const baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
+    this.baseUrl = baseUrl.replace(/\/+$/, "");
     assertHttpScheme(this.baseUrl);
+    // The rest of the base-URL rules (userinfo, whitespace), on the raw value —
+    // before the trailing-slash strip, so "https://h/ " cannot slip through.
+    assertValid("baseUrl", baseUrl, baseUrlProblem);
     this.transport = options.transport ?? nodeHttpTransport;
     // Only `undefined` selects the default; a given value must be a valid header
     // value (a blank one is rejected, not silently replaced).

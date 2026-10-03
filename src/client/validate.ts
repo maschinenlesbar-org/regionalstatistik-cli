@@ -123,3 +123,36 @@ export function headerNameProblem(value: unknown): string | undefined {
     ? undefined
     : "Expected an HTTP header name (token characters only).";
 }
+
+/** `baseUrlProblem`'s reason for a base URL with embedded userinfo. */
+export const BASE_URL_USERINFO_PROBLEM = "Must not embed credentials (user:pass@host).";
+
+/**
+ * A base URL: an absolute `http:`/`https:` URL with no userinfo, no query or
+ * fragment, no surrounding whitespace and no whitespace or control character
+ * inside. Request paths are appended to it as a string, so `?`/`#` would swallow
+ * every path and whitespace would end up in the request path (`new URL()` trims
+ * and strips some of it silently, the raw string does not). Userinfo would turn
+ * into a Basic Authorization header or leak into messages; GENESIS never uses
+ * Basic auth. The reasons never echo the value.
+ */
+export function baseUrlProblem(value: unknown): string | undefined {
+  if (typeof value !== "string") return "Must be an absolute http(s) URL.";
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return "Must be an absolute http(s) URL.";
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return 'Only "http:" and "https:" URLs are allowed.';
+  }
+  if (url.username || url.password) return BASE_URL_USERINFO_PROBLEM;
+  if (/[?#]/.test(value)) return "A base URL cannot have a query (?) or fragment (#).";
+  if (value !== value.trim()) return "A base URL cannot have surrounding whitespace.";
+  for (let i = 0; i < value.length; i++) {
+    const c = value.charCodeAt(i);
+    if (c <= 0x20 || c === 0x7f) return "A base URL cannot contain whitespace or control characters.";
+  }
+  return undefined;
+}

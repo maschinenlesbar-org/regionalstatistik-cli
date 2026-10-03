@@ -9,6 +9,8 @@ import type { RawResponse } from "../client/engine.js";
 import type { RegionalstatistikClientOptions } from "../client/client.js";
 import { RegionalstatistikError, RegionalstatistikUsageError } from "../client/errors.js";
 import {
+  BASE_URL_USERINFO_PROBLEM,
+  baseUrlProblem,
   credentialProblem,
   headerValueProblem,
   intRangeProblem,
@@ -48,38 +50,17 @@ export function parseNonEmpty(value: string): string {
 }
 
 /**
- * commander value-parser for --base-url: accept only an absolute http/https URL,
- * and reject one carrying embedded userinfo (`https://user:pass@host`). Rejecting
- * at parse time yields the conventional usage exit code (2) instead of a later
- * runtime failure, and closes the only way credentials could end up in a URL —
- * so they cannot leak into an error message or become a Basic Authorization
- * header. GENESIS never uses Basic auth, so userinfo has no legitimate use here.
+ * commander value-parser for --base-url: the library's `baseUrlProblem` (an
+ * absolute http/https URL without userinfo, query, fragment or whitespace).
+ * Rejecting at parse time yields the conventional usage exit code (2); for an
+ * embedded credential the CLI adds which flags to use instead.
  */
 export function parseBaseUrl(value: string): string {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new InvalidArgumentError("Must be an absolute http(s) URL.");
+  const reason = baseUrlProblem(value);
+  if (reason === BASE_URL_USERINFO_PROBLEM) {
+    throw new InvalidArgumentError(`${reason} Use --token or --username/--password.`);
   }
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new InvalidArgumentError('Only "http:" and "https:" URLs are allowed.');
-  }
-  if (url.username || url.password) {
-    throw new InvalidArgumentError(
-      "Must not embed credentials (user:pass@host). Use --token or --username/--password.",
-    );
-  }
-  // Paths are appended to the base URL as a string, so a query or fragment would
-  // swallow every request path ("http://h/#f" requests "/" for every command).
-  if (/[?#]/.test(value)) {
-    throw new InvalidArgumentError("A base URL cannot have a query (?) or fragment (#).");
-  }
-  // new URL() trims surrounding whitespace silently; the raw value is what the
-  // engine uses, so reject it rather than guess.
-  if (value !== value.trim()) {
-    throw new InvalidArgumentError("A base URL cannot have surrounding whitespace.");
-  }
+  if (reason !== undefined) throw new InvalidArgumentError(reason);
   return value;
 }
 
