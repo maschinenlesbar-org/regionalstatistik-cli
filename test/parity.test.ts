@@ -8,12 +8,14 @@ import {
   RegionalstatistikClient,
   type RegionalstatistikClientOptions,
 } from "../src/client/client.js";
-import { RegionalstatistikValidationError } from "../src/client/errors.js";
+import { RegionalstatistikNetworkError, RegionalstatistikValidationError } from "../src/client/errors.js";
+import { run } from "../src/cli/run.js";
+import type { CliDeps } from "../src/cli/io.js";
 import type { Transport } from "../src/client/http.js";
 import * as params from "../src/client/params.js";
 import { buildProgram } from "../src/cli/program.js";
 import type { Command } from "commander";
-import { jsonResponse, parity, requestKey, rawResponse, type ParityResult } from "./helpers.js";
+import { jsonResponse, makeMockTransport, parity, requestKey, rawResponse, type ParityResult } from "./helpers.js";
 import * as fx from "./fixtures.js";
 
 const TOKEN_VALUE = "test-key";
@@ -808,4 +810,41 @@ test("parity #11 control: with a token both send catalogue tables identically", 
     responder: () => jsonResponse(fx.tablesList),
   });
   assertSameRequest(p);
+});
+
+// ---- Finding 12 (PAT-2): a bad base URL is a validation error, not a network error -----
+
+const badBaseUrls: Array<{ url: string; reason: string }> = [
+  { url: "ftp://h.example", reason: 'Only "http:" and "https:" URLs are allowed.' },
+  { url: "not a url", reason: "Must be an absolute http(s) URL." },
+  { url: "", reason: "Must be an absolute http(s) URL." },
+  { url: "https://h.example/?q=1", reason: "A base URL cannot have a query (?) or fragment (#)." },
+  { url: "https://h.example/#f", reason: "A base URL cannot have a query (?) or fragment (#)." },
+];
+
+for (const bc of badBaseUrls) {
+  test(`parity #12: base URL ${JSON.stringify(bc.url)} gets the same reason and class on both sides`, async () => {
+    const p = await parity({
+      argv: ["--compact", "--base-url", bc.url, "hello"],
+      lib: async (t) => new RegionalstatistikClient({ transport: t, baseUrl: bc.url }).whoami(),
+      responder: () => jsonResponse(fx.whoami),
+    });
+    assertBothReject(p, new RegExp(`^Invalid baseUrl: ${bc.reason.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+    if (!p.lib.ok) assert.ok(!(p.lib.error instanceof RegionalstatistikNetworkError));
+    assert.ok(p.cli.err.split("\n")[0]!.endsWith(bc.reason), p.cli.err);
+  });
+}
+
+test("parity #12: the library's base-URL error alone maps to exit 2 in run()", async () => {
+  const mt = makeMockTransport(() => jsonResponse(fx.whoami));
+  const err: string[] = [];
+  const deps: CliDeps = {
+    io: { out: () => {}, err: (s) => err.push(s), writeFile: () => {}, fileExists: () => false, outBinary: () => {} },
+    // Bypass the CLI's parser: the client gets a bad base URL the flag never saw.
+    createClient: (opts) => new RegionalstatistikClient({ ...opts, baseUrl: "ftp://h.example", transport: mt.transport }),
+    env: {},
+  };
+  assert.equal(await run(["hello"], deps), 2);
+  assert.equal(mt.calls.length, 0);
+  assert.deepEqual(err, ['Error: Invalid baseUrl: Only "http:" and "https:" URLs are allowed.']);
 });

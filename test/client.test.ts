@@ -150,7 +150,7 @@ test("a non-http(s) base URL is rejected before any request carries credentials"
           password: "PASS",
           transport: mt.transport,
         }),
-      RegionalstatistikNetworkError,
+      (err) => err instanceof RegionalstatistikValidationError && !(err instanceof RegionalstatistikNetworkError),
     );
     assert.equal(mt.calls.length, 0);
   }

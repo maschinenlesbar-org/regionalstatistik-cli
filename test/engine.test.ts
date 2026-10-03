@@ -446,7 +446,10 @@ test("rejects a non-http(s) base URL at construction, even with a custom transpo
     const mt = makeMockTransport(() => jsonResponse(fx.whoami));
     assert.throws(
       () => new RequestEngine({ baseUrl, transport: mt.transport }),
-      (err) => err instanceof RegionalstatistikNetworkError && /Unsupported protocol/.test(err.message),
+      (err) =>
+        err instanceof RegionalstatistikValidationError &&
+        !(err instanceof RegionalstatistikNetworkError) &&
+        err.message === 'Invalid baseUrl: Only "http:" and "https:" URLs are allowed.',
     );
     assert.equal(mt.calls.length, 0);
   }
@@ -456,7 +459,9 @@ test("a base URL with a query or fragment is rejected at construction", () => {
   for (const baseUrl of ["https://example.test/?x=1", "https://example.test/#f"]) {
     assert.throws(
       () => new RequestEngine({ baseUrl }),
-      (err) => err instanceof RegionalstatistikNetworkError && /must not contain a query or fragment/.test(err.message),
+      (err) =>
+        err instanceof RegionalstatistikValidationError &&
+        err.message === "Invalid baseUrl: A base URL cannot have a query (?) or fragment (#).",
     );
   }
 });
@@ -465,7 +470,8 @@ test("rejects an unparseable base URL at construction", () => {
   const mt = makeMockTransport(() => jsonResponse(fx.whoami));
   assert.throws(
     () => new RequestEngine({ baseUrl: "not a url", transport: mt.transport }),
-    (err) => err instanceof RegionalstatistikNetworkError && /Invalid base URL/.test(err.message),
+    (err) =>
+      err instanceof RegionalstatistikValidationError && err.message === "Invalid baseUrl: Must be an absolute http(s) URL.",
   );
   assert.equal(mt.calls.length, 0);
 });
@@ -473,7 +479,7 @@ test("rejects an unparseable base URL at construction", () => {
 test("a rejected base URL does not echo embedded credentials", () => {
   assert.throws(
     () => new RequestEngine({ baseUrl: "ftp://SECRETUSER:HUNTER2@example.org" }),
-    (err) => err instanceof RegionalstatistikNetworkError && !/SECRETUSER|HUNTER2/.test(err.message),
+    (err) => err instanceof RegionalstatistikValidationError && !/SECRETUSER|HUNTER2/.test(err.message),
   );
 });
 

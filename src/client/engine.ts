@@ -15,7 +15,6 @@ import { buildQueryString, type QueryParams } from "./query.js";
 import { assertValid, baseUrlProblem, headerNameProblem, headerValueProblem, intRangeProblem } from "./validate.js";
 import {
   RegionalstatistikApiError,
-  RegionalstatistikNetworkError,
   RegionalstatistikParseError,
 } from "./errors.js";
 
@@ -39,7 +38,11 @@ export interface RawResponse {
 }
 
 export interface EngineOptions {
-  /** Base URL of the API. Defaults to https://www.regionalstatistik.de */
+  /**
+   * Base URL of the API. Defaults to https://www.regionalstatistik.de. Must be an
+   * http(s) URL without userinfo, query, fragment or whitespace (`baseUrlProblem`);
+   * the constructor throws RegionalstatistikValidationError otherwise.
+   */
   baseUrl?: string;
   /** Swappable transport. Defaults to the built-in node http/https transport. */
   transport?: Transport;
@@ -174,35 +177,6 @@ export function redactUrl(rawUrl: string): string {
 }
 
 /**
- * Reject a base URL whose scheme is not http(s), or that has a query or fragment.
- * The default transport already gates the scheme per hop, but the engine is
- * exported as a library and may be handed a custom transport that does no such
- * check, so gate the configured base URL here too (a `file:`/`ftp:` base URL fails
- * fast with a typed error). Request paths are appended to the base URL as a
- * string, so a `?` or `#` in it would swallow every path: `http://h/?x=1` requests
- * `/?x=1/genesisws/...` and `http://h/#f` requests `/`. The URL is passed through
- * `redactUrl` so embedded userinfo never reaches the message.
- */
-function assertHttpScheme(baseUrl: string): void {
-  let url: URL;
-  try {
-    url = new URL(baseUrl);
-  } catch {
-    throw new RegionalstatistikNetworkError(`Invalid base URL: ${redactUrl(baseUrl)}`);
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new RegionalstatistikNetworkError(
-      `Unsupported protocol "${url.protocol}" in base URL: ${redactUrl(baseUrl)}`,
-    );
-  }
-  if (/[?#]/.test(baseUrl)) {
-    throw new RegionalstatistikNetworkError(
-      `Base URL must not contain a query or fragment: ${redactUrl(baseUrl)}`,
-    );
-  }
-}
-
-/**
  * Whether a request carried credentials, for
  * `RegionalstatistikApiError.credentialsSent`: `undefined` for an endpoint that
  * takes none (whoami — no auth headers passed at all), `false` for an
@@ -256,11 +230,14 @@ export class RequestEngine {
 
   constructor(options: EngineOptions = {}) {
     const baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
-    this.baseUrl = baseUrl.replace(/\/+$/, "");
-    assertHttpScheme(this.baseUrl);
-    // The rest of the base-URL rules (userinfo, whitespace), on the raw value —
-    // before the trailing-slash strip, so "https://h/ " cannot slip through.
+    // Every base-URL rule (http(s) only, no userinfo, query, fragment or
+    // whitespace), on the raw value — before the trailing-slash strip, so
+    // "https://h/ " cannot slip through. A bad base URL is a configuration error
+    // (RegionalstatistikValidationError), not a network failure; the default
+    // transport still checks the scheme per hop. The engine is exported and may
+    // be handed a custom transport that does no such check, so this gate matters.
     assertValid("baseUrl", baseUrl, baseUrlProblem);
+    this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.transport = options.transport ?? nodeHttpTransport;
     // Only `undefined` selects the default; a given value must be a valid header
     // value (a blank one is rejected, not silently replaced).
