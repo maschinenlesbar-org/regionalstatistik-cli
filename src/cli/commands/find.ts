@@ -3,9 +3,7 @@
 import { Option, type Command } from "commander";
 import type { CliDeps } from "../io.js";
 import { action, commonListParams, parseNonEmpty, renderJson } from "../shared.js";
-import type { FindCategory } from "../../client/params.js";
-
-const CATEGORIES = ["all", "tables", "statistics", "cubes", "variables", "time-series"] as const;
+import { FIND_CATEGORIES, type FindCategory } from "../../client/params.js";
 
 export function registerFindCommand(program: Command, deps: CliDeps): void {
   program
@@ -16,7 +14,7 @@ export function registerFindCommand(program: Command, deps: CliDeps): void {
     )
     .argument("<term>", "search term (must be non-empty)", parseNonEmpty)
     .addOption(
-      new Option("--category <cat>", "restrict to an object type").choices([...CATEGORIES]).default("all"),
+      new Option("--category <cat>", "restrict to an object type").choices([...FIND_CATEGORIES]).default("all"),
     )
     .action(
       action(deps, async ({ client, global, opts }, [term]) => {

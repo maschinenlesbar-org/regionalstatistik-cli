@@ -9,7 +9,7 @@
 //     the message `Invalid <name>: <reason>`.
 
 import { RegionalstatistikValidationError } from "./errors.js";
-import { LANGUAGES } from "./params.js";
+import { CRITERIA, DATA_FILE_FORMATS, FIND_CATEGORIES, LANGUAGES } from "./params.js";
 
 /** Returns why `value` is invalid, or `undefined` when it is valid. */
 export type Problem<T = unknown> = (value: T) => string | undefined;
@@ -45,12 +45,16 @@ export function oneOfProblem(allowed: readonly string[]): Problem<unknown> {
 /** The GENESIS request parameters with a rule beyond "non-blank", and that rule. */
 const RULES: Readonly<Record<string, Problem<unknown>>> = {
   language: oneOfProblem(LANGUAGES),
+  category: oneOfProblem(FIND_CATEGORIES),
+  searchcriterion: oneOfProblem(CRITERIA),
+  sortcriterion: oneOfProblem(CRITERIA),
+  format: oneOfProblem(DATA_FILE_FORMATS),
 };
 
 /**
  * Check the parameters of one GENESIS request before it is sent. `undefined`
  * and `null` mean "omitted" and are never sent. A parameter with its own rule
- * (`language`, …) must pass it; every other string that is given must be
+ * (`language`, `category`, the criteria, `format`, …) must pass it; every other string that is given must be
  * non-blank. Throws `RegionalstatistikValidationError` naming the parameter.
  */
 export function assertRequestParams(params: Readonly<Record<string, unknown>>): void {

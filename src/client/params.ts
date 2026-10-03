@@ -3,7 +3,8 @@
 // are simply not sent. The client checks the given values before any request
 // (see validate.ts): a blank string (empty or whitespace only) is rejected with
 // RegionalstatistikValidationError, since GENESIS reads an empty parameter as
-// "no filter". `language` must be one of `LANGUAGES`. Valid values are sent
+// "no filter". The enumerated parameters (language, category, the criteria,
+// format) must be one of the values exported below. Valid values are sent
 // as-is, never trimmed.
 //
 // The Regionaldatenbank's whole point is the regional dimension: on `data/*`
@@ -16,8 +17,15 @@ export const LANGUAGES = ["de", "en"] as const;
 /** A response language (`language`). */
 export type Language = (typeof LANGUAGES)[number];
 
+/** Object types `find/find` can search (`category`). */
+export const FIND_CATEGORIES = ["all", "tables", "statistics", "cubes", "variables", "time-series"] as const;
 /** Object types `find/find` can search. */
-export type FindCategory = "all" | "tables" | "statistics" | "cubes" | "variables" | "time-series";
+export type FindCategory = (typeof FIND_CATEGORIES)[number];
+
+/** Fields a catalogue `selection` matches and sorts by (`searchcriterion`, `sortcriterion`). */
+export const CRITERIA = ["Code", "Content"] as const;
+/** A catalogue search or sort criterion. */
+export type Criterion = (typeof CRITERIA)[number];
 
 /** Parameters for `find/find`. */
 export interface FindParams {
@@ -35,8 +43,8 @@ export interface FindParams {
 export interface CatalogueParams {
   selection?: string;
   area?: string;
-  searchcriterion?: "Code" | "Content";
-  sortcriterion?: "Code" | "Content";
+  searchcriterion?: Criterion;
+  sortcriterion?: Criterion;
   type?: string;
   /** Max results (default 100, server max 25000). */
   pagelength?: number;
@@ -82,8 +90,10 @@ export interface DataTableParams {
   language?: Language;
 }
 
-/** File-download output formats offered by the `data/*file` endpoints. */
-export type DataFileFormat = "datencsv" | "csv" | "ffcsv" | "xlsx" | "html" | "genml";
+/** File-download output formats offered by the `data/*file` endpoints (`format`). */
+export const DATA_FILE_FORMATS = ["datencsv", "csv", "ffcsv", "xlsx", "html", "genml"] as const;
+/** A file-download output format. */
+export type DataFileFormat = (typeof DATA_FILE_FORMATS)[number];
 
 /** Parameters for the `data/*file` download endpoints (returns a ZIP wrapper). */
 export interface DataFileParams extends DataTableParams {

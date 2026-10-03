@@ -125,3 +125,16 @@ test("assertRequestParams checks language against LANGUAGES", () => {
   );
   assert.throws(() => assertRequestParams({ language: "" }), /Invalid language: Allowed choices are de, en\./);
 });
+
+test("assertRequestParams checks category, the criteria and format against their lists", () => {
+  assert.doesNotThrow(() =>
+    assertRequestParams({ category: "time-series", searchcriterion: "Code", sortcriterion: "Content", format: "xlsx" }),
+  );
+  assert.throws(() => assertRequestParams({ category: "Tables" }), RegionalstatistikValidationError);
+  assert.throws(() => assertRequestParams({ searchcriterion: "code" }), /Invalid searchcriterion: Allowed choices are Code, Content\./);
+  assert.throws(() => assertRequestParams({ sortcriterion: "" }), /Invalid sortcriterion: Allowed choices are Code, Content\./);
+  assert.throws(
+    () => assertRequestParams({ format: "zip" }),
+    /Invalid format: Allowed choices are datencsv, csv, ffcsv, xlsx, html, genml\./,
+  );
+});

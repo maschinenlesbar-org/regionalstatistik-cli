@@ -244,3 +244,106 @@ test("parity #8: the CLI's --language choices are the library's LANGUAGES", () =
   const choices = (cmd: Command, flag: string) => cmd.options.find((o) => o.long === flag)?.argChoices;
   assert.deepEqual(choices(buildProgram(), "--language"), [...params.LANGUAGES]);
 });
+
+// ---- Finding 9 (PAT-12): find category, catalogue criteria, data file format -------
+
+const enumCases: Array<{
+  label: string;
+  argv: string[];
+  lib: (c: RegionalstatistikClient) => Promise<unknown>;
+  msg: RegExp;
+  zip?: boolean;
+}> = [
+  {
+    label: "find bev --category Tables",
+    argv: ["find", "bev", "--category", "Tables"],
+    lib: (c) => c.find({ term: "bev", category: "Tables" as never }),
+    msg: /^Invalid category: Allowed choices are all, tables, statistics, cubes, variables, time-series\.$/,
+  },
+  {
+    label: "find bev --category ''",
+    argv: ["find", "bev", "--category", ""],
+    lib: (c) => c.find({ term: "bev", category: "" as never }),
+    msg: /^Invalid category: Allowed choices are /,
+  },
+  {
+    label: "catalogue tables x --search-criterion code",
+    argv: ["catalogue", "tables", "x", "--search-criterion", "code"],
+    lib: (c) => c.catalogue.tables({ selection: "x", searchcriterion: "code" as never }),
+    msg: /^Invalid searchcriterion: Allowed choices are Code, Content\.$/,
+  },
+  {
+    label: "catalogue cubes x --sort-criterion content",
+    argv: ["catalogue", "cubes", "x", "--sort-criterion", "content"],
+    lib: (c) => c.catalogue.cubes({ selection: "x", sortcriterion: "content" as never }),
+    msg: /^Invalid sortcriterion: Allowed choices are Code, Content\.$/,
+  },
+  {
+    label: "data cubefile X --format CSV",
+    argv: ["-o", "out.zip", "data", "cubefile", "X", "--format", "CSV"],
+    lib: (c) => c.data.cubeFile("X", { format: "CSV" as never }),
+    msg: /^Invalid format: Allowed choices are datencsv, csv, ffcsv, xlsx, html, genml\.$/,
+    zip: true,
+  },
+  {
+    label: "data tablefile T --format ' csv'",
+    argv: ["-o", "out.zip", "data", "tablefile", "T", "--format", " csv"],
+    lib: (c) => c.data.tableFile("T", { format: " csv" as never }),
+    msg: /^Invalid format: Allowed choices are /,
+    zip: true,
+  },
+  {
+    label: "data resultfile R --format zip",
+    argv: ["-o", "out.zip", "data", "resultfile", "R", "--format", "zip"],
+    lib: (c) => c.data.resultFile("R", { format: "zip" as never }),
+    msg: /^Invalid format: Allowed choices are /,
+    zip: true,
+  },
+];
+
+for (const ec of enumCases) {
+  test(`parity #9: ${ec.label} is rejected by both, with no request`, async () => {
+    const p = await parity({
+      argv: ["--compact", ...TOKEN, ...ec.argv],
+      lib: (t) => ec.lib(client(t)),
+      responder: ec.zip ? ZIP : () => jsonResponse(fx.findResult),
+    });
+    assertBothReject(p, ec.msg);
+  });
+}
+
+test("parity #9 control: valid category, criterion and format send the identical request", async () => {
+  const f = await parity({
+    argv: ["--compact", ...TOKEN, "--language", "en", "find", "bev", "--category", "tables"],
+    lib: (t) => client(t).find({ term: "bev", language: "en", category: "tables" }),
+    responder: () => jsonResponse(fx.findResult),
+  });
+  assertSameRequest(f);
+  const c = await parity({
+    argv: ["--compact", ...TOKEN, "--language", "de", "catalogue", "tables", "x", "--search-criterion", "Code", "--sort-criterion", "Content"],
+    lib: (t) => client(t).catalogue.tables({ language: "de", selection: "x", searchcriterion: "Code", sortcriterion: "Content" }),
+    responder: () => jsonResponse(fx.tablesList),
+  });
+  assertSameRequest(c);
+  const d = await parity({
+    argv: ["--compact", ...TOKEN, "--language", "de", "-o", "out.zip", "data", "cubefile", "X", "--format", "csv"],
+    lib: (t) => client(t).data.cubeFile("X", { language: "de", format: "csv" }),
+    responder: ZIP,
+  });
+  assertSameRequest(d);
+});
+
+test("parity #9: the CLI's choices are the library's exported value lists", () => {
+  const program = buildProgram();
+  const sub = (cmd: Command, name: string) => cmd.commands.find((c) => c.name() === name)!;
+  const choices = (cmd: Command, flag: string) => cmd.options.find((o) => o.long === flag)?.argChoices;
+  assert.deepEqual(choices(sub(program, "find"), "--category"), [...params.FIND_CATEGORIES]);
+  for (const name of ["tables", "cubes", "qualitysigns"]) {
+    const cmd = sub(sub(program, "catalogue"), name);
+    assert.deepEqual(choices(cmd, "--search-criterion"), [...params.CRITERIA]);
+    assert.deepEqual(choices(cmd, "--sort-criterion"), [...params.CRITERIA]);
+  }
+  for (const name of ["tablefile", "cubefile", "timeseriesfile", "resultfile"]) {
+    assert.deepEqual(choices(sub(sub(program, "data"), name), "--format"), [...params.DATA_FILE_FORMATS]);
+  }
+});

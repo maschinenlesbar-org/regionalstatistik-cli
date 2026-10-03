@@ -5,7 +5,7 @@
 import { Option, type Command } from "commander";
 import type { CliDeps } from "../io.js";
 import type { RegionalstatistikClient } from "../../client/client.js";
-import type { CatalogueParams } from "../../client/params.js";
+import { CRITERIA, type CatalogueParams } from "../../client/params.js";
 import { action, commonListParams, parseNonEmpty, renderJson } from "../shared.js";
 
 type CatalogueFn = (client: RegionalstatistikClient, params: CatalogueParams) => Promise<unknown>;
@@ -55,9 +55,9 @@ export function registerCatalogueCommands(program: Command, deps: CliDeps): void
       .argument("[selection]", "code selection, `*` wildcard ok (e.g. `12411*`)", parseNonEmpty)
       .option("--area <area>", "data area (default server-side; try `all`)", parseNonEmpty)
       .addOption(
-        new Option("--search-criterion <c>", "field `selection` matches").choices(["Code", "Content"]),
+        new Option("--search-criterion <c>", "field `selection` matches").choices([...CRITERIA]),
       )
-      .addOption(new Option("--sort-criterion <c>", "result sort order").choices(["Code", "Content"]))
+      .addOption(new Option("--sort-criterion <c>", "result sort order").choices([...CRITERIA]))
       .option("--type <type>", "object subtype filter", parseNonEmpty)
       .action(
         action(deps, async ({ client, global, opts }, [selection]) => {
