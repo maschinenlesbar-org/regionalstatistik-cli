@@ -418,3 +418,47 @@ test("parity #6 control: --pagelength 25000 and 1 send the identical request", a
     assertSameRequest(p);
   }
 });
+
+// ---- Finding 7 (PAT-11): timeslices is a non-negative integer -----------------------
+
+const TS = /^Invalid timeslices: Expected a non-negative integer\.$/;
+const timesliceCases: Array<{ label: string; argv: string[]; lib: (c: RegionalstatistikClient) => Promise<unknown>; zip?: boolean }> = [
+  { label: "data table T --timeslices=-1", argv: ["data", "table", "T", "--timeslices=-1"], lib: (c) => c.data.table("T", { timeslices: -1 }) },
+  { label: "data table T --timeslices=1.5", argv: ["data", "table", "T", "--timeslices=1.5"], lib: (c) => c.data.table("T", { timeslices: 1.5 }) },
+  { label: "data table T --timeslices=NaN", argv: ["data", "table", "T", "--timeslices=NaN"], lib: (c) => c.data.table("T", { timeslices: NaN }) },
+  { label: "data result T --timeslices=Infinity", argv: ["data", "result", "T", "--timeslices=Infinity"], lib: (c) => c.data.result("T", { timeslices: Infinity }) },
+  {
+    label: "data resultfile T --timeslices=1e20",
+    argv: ["-o", "out.zip", "data", "resultfile", "T", "--timeslices=99999999999999999999"],
+    lib: (c) => c.data.resultFile("T", { timeslices: 1e20 }),
+    zip: true,
+  },
+  {
+    label: "data cubefile T --timeslices=-1",
+    argv: ["-o", "out.zip", "data", "cubefile", "T", "--timeslices=-1"],
+    lib: (c) => c.data.cubeFile("T", { timeslices: -1 }),
+    zip: true,
+  },
+];
+
+for (const tc of timesliceCases) {
+  test(`parity #7: ${tc.label} is rejected by both, with no request`, async () => {
+    const p = await parity({
+      argv: ["--compact", ...TOKEN, ...tc.argv],
+      lib: (t) => tc.lib(client(t)),
+      responder: tc.zip ? ZIP : () => jsonResponse(fx.dataTable),
+    });
+    assertBothReject(p, TS);
+  });
+}
+
+test("parity #7 control: --timeslices 0 and 3 send the identical request", async () => {
+  for (const n of [0, 3]) {
+    const p = await parity({
+      argv: ["--compact", ...TOKEN, "data", "table", "T", "--timeslices", String(n)],
+      lib: (t) => client(t).data.table("T", { timeslices: n }),
+      responder: () => jsonResponse(fx.dataTable),
+    });
+    assertSameRequest(p);
+  }
+});

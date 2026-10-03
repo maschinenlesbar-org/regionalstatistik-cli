@@ -165,3 +165,15 @@ test("assertRequestParams checks pagelength", () => {
   );
   assert.throws(() => assertRequestParams({ pagelength: NaN }), /Invalid pagelength: Expected a non-negative integer\./);
 });
+
+test("assertRequestParams checks timeslices", () => {
+  assert.doesNotThrow(() => assertRequestParams({ timeslices: 0 }));
+  assert.doesNotThrow(() => assertRequestParams({ timeslices: Number.MAX_SAFE_INTEGER }));
+  for (const v of [-1, 1.5, NaN, Infinity, 1e20]) {
+    assert.throws(
+      () => assertRequestParams({ timeslices: v }),
+      /^RegionalstatistikValidationError: Invalid timeslices: Expected a non-negative integer\.$/,
+      String(v),
+    );
+  }
+});

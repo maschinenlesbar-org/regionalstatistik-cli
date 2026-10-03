@@ -5,7 +5,8 @@
 // RegionalstatistikValidationError, since GENESIS reads an empty parameter as
 // "no filter". The enumerated parameters (language, category, the criteria,
 // format) must be one of the values exported below; pagelength is an integer
-// from 1 to MAX_PAGELENGTH. Valid values are sent as-is, never trimmed.
+// from 1 to MAX_PAGELENGTH and timeslices a non-negative integer. Valid values
+// are sent as-is, never trimmed.
 //
 // The Regionaldatenbank's whole point is the regional dimension: on `data/*`
 // requests, `regionalvariable` picks the regional level (e.g. KREISE, GEMEIN)
@@ -74,6 +75,7 @@ export interface DataTableParams {
   contents?: string;
   startyear?: string;
   endyear?: string;
+  /** Number of time slices from the end: a non-negative integer. */
   timeslices?: number;
   /** Regional level variable, e.g. KREISE (Kreise) or GEMEIN (Gemeinden). */
   regionalvariable?: string;

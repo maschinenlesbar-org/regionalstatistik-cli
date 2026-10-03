@@ -60,6 +60,7 @@ export function intRangeProblem(min: number, max: number): Problem<unknown> {
 /** The GENESIS request parameters with a rule beyond "non-blank", and that rule. */
 const RULES: Readonly<Record<string, Problem<unknown>>> = {
   pagelength: intRangeProblem(1, MAX_PAGELENGTH),
+  timeslices: intRangeProblem(0, Number.MAX_SAFE_INTEGER),
   language: oneOfProblem(LANGUAGES),
   category: oneOfProblem(FIND_CATEGORIES),
   searchcriterion: oneOfProblem(CRITERIA),
@@ -70,7 +71,7 @@ const RULES: Readonly<Record<string, Problem<unknown>>> = {
 /**
  * Check the parameters of one GENESIS request before it is sent. `undefined`
  * and `null` mean "omitted" and are never sent. A parameter with its own rule
- * (`pagelength`, `language`, `category`, the criteria, `format`, …) must pass it; every other string that is given must be
+ * (`pagelength`, `timeslices`, `language`, `category`, the criteria, `format`, …) must pass it; every other string that is given must be
  * non-blank. Throws `RegionalstatistikValidationError` naming the parameter.
  */
 export function assertRequestParams(params: Readonly<Record<string, unknown>>): void {
