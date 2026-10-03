@@ -9,6 +9,7 @@ import {
   RegionalstatistikApiError,
   RegionalstatistikError,
   RegionalstatistikUsageError,
+  RegionalstatistikValidationError,
 } from "../client/errors.js";
 
 /**
@@ -45,8 +46,10 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
       // signal instead of a mix of 1 and 2. See Usage.md's exit-code table.
       return err.exitCode === 0 ? 0 : 2;
     }
-    if (err instanceof RegionalstatistikUsageError) {
-      // Bad/missing arguments or credentials -> conventional usage exit code.
+    if (err instanceof RegionalstatistikValidationError || err instanceof RegionalstatistikUsageError) {
+      // Bad/missing arguments or credentials -> conventional usage exit code. A
+      // RegionalstatistikValidationError is the library rejecting an input before
+      // any request (it extends RegionalstatistikUsageError; named for clarity).
       deps.io.err(`Error: ${err.message}`);
       return 2;
     }

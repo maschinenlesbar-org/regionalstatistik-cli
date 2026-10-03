@@ -118,12 +118,20 @@ export class RegionalstatistikApiError extends RegionalstatistikError {
 export class RegionalstatistikNetworkError extends RegionalstatistikError {}
 
 /**
- * A CLI usage error (bad/missing argument or credentials detected before any
+ * A usage error (bad/missing argument or credentials detected before any
  * request, e.g. only one of --username/--password, or a credential-required
  * command invoked with none). Mapped to the conventional usage exit code 2 so
  * scripts can distinguish it from a runtime error (1).
  */
 export class RegionalstatistikUsageError extends RegionalstatistikError {}
+
+/**
+ * The library rejected an input before sending any request (message
+ * `Invalid <name>: <reason>`, see `validate.ts`). It extends
+ * `RegionalstatistikUsageError`, so existing `instanceof RegionalstatistikUsageError`
+ * checks keep catching it, and the CLI maps it to the usage exit code 2.
+ */
+export class RegionalstatistikValidationError extends RegionalstatistikUsageError {}
 
 /** The response body could not be parsed as the expected JSON shape. */
 export class RegionalstatistikParseError extends RegionalstatistikError {}
