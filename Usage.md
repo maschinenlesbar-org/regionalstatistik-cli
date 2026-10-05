@@ -152,6 +152,10 @@ regstat data tablefile 12411-01-01-4 --region-key "08*" --format ffcsv -o bevoel
 | `2` | usage error (missing/partial credentials, bad flags/arguments, unknown command, and no command at all: bare `regstat` or `regstat data` prints the help to stderr and exits 2) |
 | `4` | object not found — logical `Status.Code 90`, or an HTTP 404 without a GENESIS code (see note), and a `data <kind>file` download for a code that does not exist (`Status.Code 104`) |
 
+A reader that stops early (`regstat catalogue tables '12411*' | head`) ends the run
+quietly with exit `0`; a failed run keeps its own code even when its stderr reader
+is gone (`2>&1 | true`).
+
 > **A missing object code usually does not exit 4.** Looking up a code that does
 > not exist on `metadata`/`data` typically returns `Status.Code 104` — a valid
 > **empty** result, so the CLI exits **0**, the same as an empty

@@ -2,7 +2,10 @@
 // Bin shim: parse argv, run the CLI, and set the process exit code. All real
 // logic lives in run.ts (testable without spawning a subprocess).
 
+import { handleOutputErrors } from "./io.js";
 import { run } from "./run.js";
+
+handleOutputErrors();
 
 run(process.argv.slice(2)).then(
   (code) => {
