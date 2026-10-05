@@ -14,6 +14,14 @@ export interface HttpRequest {
   method: string;
   /** Fully-qualified absolute URL. */
   url: string;
+  /**
+   * Always `"manual"`: a transport must NOT follow redirects. GENESIS credentials are
+   * custom headers (`username`, `password`), which `fetch` forwards to another origin on
+   * a redirect (it strips only `Authorization`); the engine answers a 3xx itself (as an
+   * error naming the canonical host). A fetch transport passes it on:
+   * `fetch(req.url, { method, headers, body, redirect: req.redirect, signal: req.signal })`.
+   */
+  redirect?: "manual";
   headers?: Record<string, string>;
   /** Optional request body (already serialised). */
   body?: string | Buffer;
@@ -41,6 +49,13 @@ export interface HttpResponse {
   status: number;
   headers: http.IncomingHttpHeaders;
   body: Buffer;
+  /**
+   * The URL the response came from, when the transport knows it (`fetch`'s `r.url`).
+   * A URL on another origin than the request's means the transport followed a redirect
+   * despite `redirect: "manual"`: the engine rejects the response then
+   * (`RegionalstatistikNetworkError`) instead of handing back another host's answer.
+   */
+  url?: string;
 }
 
 export type Transport = (request: HttpRequest) => Promise<HttpResponse>;

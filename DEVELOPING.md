@@ -203,7 +203,15 @@ credential is ever bundled.
 
 **Redirects are NOT followed.** Following a cross-origin redirect would forward
 the credential headers to another origin; a 3xx surfaces as an error hinting at
-the canonical host (`https://www.regionalstatistik.de`).
+the canonical host (`https://www.regionalstatistik.de`). That has to hold for
+custom transports too (P3): `fetch` follows redirects by default and strips only
+`Authorization` across origins, not the custom `username`/`password` headers. So
+every `HttpRequest` carries `redirect: "manual"` (a fetch transport passes it on),
+and a response whose reported final URL (`HttpResponse.url`, fetch's `r.url`) is
+on another origin is rejected as a `RegionalstatistikNetworkError` instead of
+being returned as data. `test/redirect-credentials.test.ts` runs a pair of local
+servers, one redirecting to the other, and checks that the second receives
+nothing.
 `engine.ts:redactUrl` additionally scrubs any `username`/`password` that a
 caller managed to put in a URL (defensive — this client keeps them in headers).
 
