@@ -590,6 +590,8 @@ const BAD_LIMITS: Array<[string, number]> = [
   ["maxResponseBytes", 1.5],
   ["retryDelayMs", -1],
   ["retryDelayMs", NaN],
+  // Above MAX_RETRY_AFTER_MS a backoff would overflow Node's timers and fire at once.
+  ["retryDelayMs", 30_001],
 ];
 
 for (const [name, value] of BAD_LIMITS) {

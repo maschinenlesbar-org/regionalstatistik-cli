@@ -179,8 +179,10 @@ regstat data tablefile 12411-01-01-4 --region-key "08*" --format ffcsv -o bevoel
   narrow with `selection`/`term` rather than paging.
 - **Concurrency limit.** `logincheck` reports that requests are killed beyond
   roughly 10 parallel ones on this host. Keep requests serial. Only `429`/`503`
-  are auto-retried (`--max-retries`, each after the server's `Retry-After`, up to
-  30 s — a longer one is not retried), not `500` or timeouts.
+  are auto-retried (`--max-retries`, each after a linear backoff of 200 ms ×
+  attempt, or the server's `Retry-After` when that is longer, up to 30 s — a
+  longer one is not retried, and the error names the requested wait), not `500`,
+  resets or timeouts.
 - **`"boolean"`/count fields are strings.** List items encode e.g. `Values` /
   `Cubes` counts and flags as JSON strings (`"9"`, `"true"`).
 - **Confidentiality dots.** At fine regional depth many cells are `.`

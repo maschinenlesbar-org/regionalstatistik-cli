@@ -80,13 +80,17 @@ export interface EngineOptions {
    */
   timeoutMs?: number;
   /**
-   * Number of automatic retries for transient (429/503) responses, 0 to
-   * `MAX_RETRIES`; defaults to 2. Each waits the response's `Retry-After` (up to
-   * `MAX_RETRY_AFTER_MS`; a longer one is not retried), or else
-   * `retryDelayMs * attempt`.
+   * Number of automatic retries for transient (429/503) responses, 0..`MAX_RETRIES`
+   * (10). Each waits `retryDelayMs * attempt`, or the response's `Retry-After` when that
+   * is longer (up to `MAX_RETRY_AFTER_MS`; a longer one is not retried, and the error
+   * says so).
    */
   maxRetries?: number;
-  /** Base backoff between retries in milliseconds (grows linearly); used without a Retry-After. */
+  /**
+   * Base backoff between retries in milliseconds (grows linearly); a Retry-After can
+   * lengthen a wait, never shorten it. At most `MAX_RETRY_AFTER_MS` (a longer delay
+   * would overflow Node's timers and fire at once).
+   */
   retryDelayMs?: number;
   /**
    * Hard cap on response body size in bytes (defends against memory exhaustion
@@ -402,7 +406,7 @@ export class RequestEngine {
     this.defaultHeaders = defaultHeaders;
     this.timeoutMs = intOption("timeoutMs", options.timeoutMs, 0, MAX_TIMEOUT_MS) ?? 30_000;
     this.maxRetries = intOption("maxRetries", options.maxRetries, 0, MAX_RETRIES) ?? 2;
-    this.retryDelayMs = intOption("retryDelayMs", options.retryDelayMs, 0, Number.MAX_SAFE_INTEGER) ?? 200;
+    this.retryDelayMs = intOption("retryDelayMs", options.retryDelayMs, 0, MAX_RETRY_AFTER_MS) ?? 200;
     this.maxResponseBytes =
       intOption("maxResponseBytes", options.maxResponseBytes, 0, Number.MAX_SAFE_INTEGER) ??
       DEFAULT_MAX_RESPONSE_BYTES;
@@ -525,22 +529,30 @@ export class RequestEngine {
         throw new RegionalstatistikNetworkError(`${method} ${redactUrl(url)} failed: ${sizeLimitMessage(this.maxResponseBytes)}`);
       }
       const retryable = status === 429 || status === 503;
+      let retryNote: string | undefined;
       if (retryable && attempt < this.maxRetries) {
-        // Honour Retry-After; without a usable one, back off linearly. A Retry-After
-        // beyond MAX_RETRY_AFTER_MS is not retried: the error below surfaces at once.
+        // Back off linearly from retryDelayMs. A Retry-After can ask for longer, never
+        // for less: `Retry-After: 0` or a date in the past turned the retries into a
+        // zero-delay burst against a server that had just asked for less load. One
+        // beyond MAX_RETRY_AFTER_MS is not retried at all — retrying early would only
+        // land inside the window the server asked us to wait out — and the error says so.
+        const backoff = this.retryDelayMs * (attempt + 1);
         const retryAfter = parseRetryAfter(responseHeaders["retry-after"]);
         if (retryAfter === undefined || retryAfter <= MAX_RETRY_AFTER_MS) {
           attempt += 1;
-          await this.sleep(retryAfter ?? this.retryDelayMs * attempt);
+          await this.sleep(retryAfter === undefined ? backoff : Math.max(retryAfter, backoff));
           continue;
         }
+        retryNote =
+          `the server asked to wait ${Math.ceil(retryAfter / 1000)} s before retrying (Retry-After), ` +
+          `longer than the ${MAX_RETRY_AFTER_MS / 1000} s the client waits; retries won't help — try again later`;
       }
 
       // Sanitize the server-controlled Content-Type at the source: it is echoed
       // to stderr by renderRaw, so strip any embedded terminal control chars.
       const contentType = sanitizeServerText(String(responseHeaders["content-type"] ?? ""));
       if (status < 200 || status >= 300) {
-        throw this.toApiError(method, url, status, responseBody, ctx);
+        throw this.toApiError(method, url, status, responseBody, ctx, retryNote);
       }
 
       return { data: responseBody, contentType, status };
@@ -724,6 +736,7 @@ export class RequestEngine {
     status: number,
     body: Buffer,
     ctx: RequestContext,
+    note?: string,
   ): RegionalstatistikApiError {
     const sent = ctx.sent;
     // Scrubbed first: everything below (detail, statusType, body) derives from it.
@@ -772,6 +785,7 @@ export class RequestEngine {
       if (detail !== undefined) detail = sanitizeServerText(detail);
       if (statusType !== undefined) statusType = sanitizeServerText(statusType);
     }
+    if (note !== undefined) detail = detail === undefined ? note : `${detail} — ${note}`;
     return new RegionalstatistikApiError({
       httpStatus: status,
       url: redactUrl(url),
