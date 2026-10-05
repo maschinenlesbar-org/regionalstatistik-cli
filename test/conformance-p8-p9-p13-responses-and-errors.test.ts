@@ -9,7 +9,11 @@ import type { HttpResponse } from "../src/client/http.js";
 
 // ---- adapter (per repo) -------------------------------------------------------------
 import { RegionalstatistikClient, type RegionalstatistikClientOptions } from "../src/client/client.js";
-import { RegionalstatistikError as BaseError, RegionalstatistikParseError as ParseError } from "../src/client/errors.js";
+import {
+  RegionalstatistikError as BaseError,
+  RegionalstatistikParseError as ParseError,
+  RegionalstatistikValidationError as ValidationError,
+} from "../src/client/errors.js";
 /** A well-formed fake token. */
 const TOKEN = "0123456789abcdef0123456789abcdef";
 /**
@@ -45,6 +49,30 @@ const malformedBodies: unknown[] = [
   { Tables: [{ Code: "12411-0001" }] },
   { Code: 2, Content: "Ein Fehler ist aufgetreten.", Type: "ERROR" },
 ];
+type Any = never;
+/** Library calls with wrong-typed or out-of-range input. */
+const badCalls: Array<[string, () => unknown]> = [
+  ["find(null)", () => new Client().find(null as Any)],
+  ["find('x')", () => new Client().find("x" as Any)],
+  ["find({ term: 5 })", () => new Client().find({ term: 5 as Any })],
+  ["catalogue.tables('x')", () => new Client({ token: TOKEN }).catalogue.tables("x" as Any)],
+  ["data.table('x', 'y')", () => new Client({ token: TOKEN }).data.table("x", "y" as Any)],
+  ["data.tableFile('x', 5)", () => new Client({ token: TOKEN }).data.tableFile("x", 5 as Any)],
+  ["metadata.table(5)", () => new Client({ token: TOKEN }).metadata.table(5 as Any)],
+  ["logincheck('fr')", () => new Client({ token: TOKEN }).logincheck("fr" as Any)],
+  // The adapter's Client adds a token; these two need the bare constructor.
+  ["options: 5", () => new RegionalstatistikClient(5 as Any)],
+  ["token: 5", () => new Client({ token: 5 as Any })],
+  ["username: {}", () => new RegionalstatistikClient({ username: {} as Any, password: "s3cret-Test-Pw" })],
+  ["timeoutMs: 'x'", () => new Client({ timeoutMs: "x" as Any })],
+  ["timeoutMs: -1", () => new Client({ timeoutMs: -1 })],
+  ["maxRetries: 1.5", () => new Client({ maxRetries: 1.5 })],
+  ["baseUrl: 5", () => new Client({ baseUrl: 5 as Any })],
+  ["userAgent: {}", () => new Client({ userAgent: {} as Any })],
+  ["transport: 'x'", () => new Client({ transport: "x" as Any })],
+  ["sleep: 5", () => new Client({ sleep: 5 as Any })],
+  ["defaultHeaders: 'x'", () => new Client({ defaultHeaders: "x" as Any })],
+];
 // --------------------------------------------------------------------------------------
 
 const respond = (body: Buffer, contentType: string) => async (): Promise<HttpResponse> => ({
@@ -73,5 +101,11 @@ test("P9: a 2xx body without the documented shape is a parse error", async () =>
   for (const raw of ["", "<html>maintenance</html>"]) {
     const client = new Client({ transport: respond(Buffer.from(raw), "text/html"), maxRetries: 0 });
     await assert.rejects(textCall(client), BaseError, `raw ${JSON.stringify(raw)}`);
+  }
+});
+
+test("P13: every rejected input is the validation error, never a raw TypeError", async () => {
+  for (const [label, fn] of badCalls) {
+    await assert.rejects(async () => fn(), (e: unknown) => e instanceof ValidationError, label);
   }
 });

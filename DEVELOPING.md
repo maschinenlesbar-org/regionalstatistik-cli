@@ -135,6 +135,14 @@ What the library rejects:
   default transport's per-hop scheme check (`http.ts`) is a network error.
   Messages never echo the URL. `parseBaseUrl` calls `baseUrlProblem` and only
   appends the flag hint for an embedded credential.
+- **Wrong types** (`plainObjectProblem`, `functionProblem`, P13): a JavaScript
+  caller's `find(null)`, `catalogue.tables("x")`, `data.table(name, 5)`, a non-object
+  `options` or `defaultHeaders`, a non-function `transport` or `sleep`, and a
+  non-string `token`/`username`/`password`/`userAgent` (`Expected a string.`) are a
+  `RegionalstatistikValidationError`, never a raw `TypeError` — and never sent: spreading a
+  string parameter object used to send `0=x`. Server text in an error (`detail` and
+  the message) is cut at `MAX_MESSAGE_VALUE_LENGTH` (500) characters; `body` keeps the
+  full answer.
 - **Half a credential pair** (`credentialPairProblem`): with no token, a
   `username` without a `password` (or the reverse) throws at construction —
   `Invalid credentials: Provide both username and password (or a token).` A lone

@@ -678,3 +678,16 @@ test("the engine accepts the boundary values of every numeric option", async () 
   assert.equal(mt.last().maxResponseBytes, undefined);
   assert.doesNotThrow(() => new RequestEngine({ timeoutMs: 0, maxRetries: 0 }));
 });
+
+test("server text in an error is cut at 500 characters; the body keeps it all (P13)", async () => {
+  const long = "x".repeat(5000);
+  const mt = makeMockTransport(() => jsonResponse({ Status: { Code: -1, Content: long, Type: "Fehler" } }));
+  const e = new RequestEngine({ transport: mt.transport });
+  await assert.rejects(e.postJson("/find/find", {}, {}), (err: unknown) => {
+    assert.ok(err instanceof RegionalstatistikApiError);
+    assert.equal(err.detail?.length, 501);
+    assert.ok(err.message.length < 700, String(err.message.length));
+    assert.ok(err.body.includes(long));
+    return true;
+  });
+});

@@ -33,6 +33,7 @@ import {
   credentialProblem,
   credentialsRequiredProblem,
   nonBlankProblem,
+  plainObjectProblem,
 } from "./validate.js";
 import type {
   CatalogueParams,
@@ -82,10 +83,21 @@ async function postJson<T>(
   return e.postJson<T>(path, params, auth(), shape);
 }
 
+/**
+ * A method's parameter object, checked: `undefined` is none, anything else must be a
+ * plain object (`RegionalstatistikValidationError` otherwise — a string would be spread into
+ * `0=x`, `null` into nothing).
+ */
+function paramsOf(params: unknown): QueryParams {
+  if (params === undefined) return {};
+  assertValid("params", params, plainObjectProblem);
+  return { ...(params as object) } as QueryParams;
+}
+
 /** Validate a request object's required `name` (the object code) and its parameters. */
-function named(name: string, params: object): QueryParams {
+function named(name: string, params: unknown): QueryParams {
   assertValid("name", name, nonBlankProblem);
-  return { name, ...params } as QueryParams;
+  return { name, ...paramsOf(params) } as QueryParams;
 }
 
 /** Options for the Regionalstatistik client (engine options plus credentials). */
@@ -111,8 +123,8 @@ class CatalogueGroup {
     private readonly auth: AuthHeaders,
   ) {}
 
-  private list<TItem>(method: string, params: CatalogueParams): Promise<CatalogueResponse<TItem>> {
-    return postJson(this.e, `${API}/catalogue/${method}`, { ...params } as QueryParams, this.auth);
+  private async list<TItem>(method: string, params: CatalogueParams): Promise<CatalogueResponse<TItem>> {
+    return postJson(this.e, `${API}/catalogue/${method}`, paramsOf(params), this.auth);
   }
 
   tables(params: CatalogueParams = {}): Promise<CatalogueResponse<TableItem>> {
@@ -237,16 +249,18 @@ export class RegionalstatistikClient {
   readonly data: DataGroup;
 
   constructor(options: RegionalstatistikClientOptions = {}) {
+    assertValid("options", options, plainObjectProblem);
     const { token, username, password, ...engineOptions } = options;
     // Token mode collapses onto the `username` field with no password; otherwise
     // use the username/password pair. Blank (empty or whitespace-only) values are
-    // treated as unset (so `token: process.env.REGIONALSTATISTIK_API_TOKEN` works
-    // when the variable is empty); any other value must be a valid credential
-    // header value (`credentialProblem`: no control characters, nothing above
-    // U+00FF, no surrounding whitespace) and is sent exactly as given, never
-    // trimmed. The error names the option, never its value.
-    const set = (name: string, v: string | undefined): string | undefined =>
-      v !== undefined && v.trim() !== "" ? assertValid(name, v, credentialProblem) : undefined;
+    // treated as unset (so `token: process.env.REGIONALSTATISTIK_API_TOKEN` works when the
+    // variable is empty); any other value must be a valid credential header value
+    // (`credentialProblem`: no control characters, nothing above U+00FF, no
+    // surrounding whitespace) and is sent exactly as given, never trimmed.
+    // A non-string (a JavaScript caller's number or null) is a RegionalstatistikValidationError,
+    // not a raw TypeError from `.trim()`.
+    const set = (name: string, v: unknown): string | undefined =>
+      v === undefined || (typeof v === "string" && v.trim() === "") ? undefined : assertValid(name, v as string, credentialProblem);
     const tok = set("token", token);
     if (tok) {
       this.#username = tok;
@@ -302,7 +316,8 @@ export class RegionalstatistikClient {
    * needs an account (rejects with `RegionalstatistikValidationError` without one).
    */
   async find(params: FindParams): Promise<FindResponse> {
+    assertValid("params", params, plainObjectProblem);
     assertValid("term", params.term, nonBlankProblem);
-    return postJson(this.engine, `${API}/find/find`, { ...params } as QueryParams, () => this.requireAuth());
+    return postJson(this.engine, `${API}/find/find`, paramsOf(params), () => this.requireAuth());
   }
 }

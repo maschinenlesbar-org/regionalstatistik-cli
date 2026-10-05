@@ -92,6 +92,8 @@ export function assertRequestParams(params: Readonly<Record<string, unknown>>): 
  * Checked by char code so the source stays free of control bytes.
  */
 export function headerValueProblem(value: unknown): string | undefined {
+  // A JavaScript caller may pass anything; say what was wrong rather than "non-empty".
+  if (typeof value !== "string") return "Expected a string.";
   const blank = nonBlankProblem(value);
   if (blank !== undefined) return blank;
   const text = value as string;
@@ -192,4 +194,18 @@ export function credentialsRequiredProblem(creds: {
  */
 export function looksLikeToken(value: string): boolean {
   return /^[A-Za-z0-9]{32}$/.test(value.trim());
+}
+
+/**
+ * A parameter or options object: a plain object (not `null`, an array, a string or a
+ * number). Spreading a string (`{ ..."x" }`) would send `0=x`; spreading a number or
+ * `null` would silently drop what the caller meant.
+ */
+export function plainObjectProblem(value: unknown): string | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? undefined : "Expected an object.";
+}
+
+/** A callback option (`transport`, `sleep`): a function. */
+export function functionProblem(value: unknown): string | undefined {
+  return typeof value === "function" ? undefined : "Expected a function.";
 }
