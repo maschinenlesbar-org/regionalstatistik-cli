@@ -106,6 +106,13 @@ What the library rejects:
   call the same rules; the secret flags use `parseSecret`, which throws
   `RegionalstatistikUsageError` naming the flag and the reason only (commander's
   own wording, `argument '<value>' is invalid`, would print the password).
+- **Secrets in library objects** (P2): the client keeps the token, username and
+  password in real `#private` fields, so `console.log(client)`, `util.inspect` and
+  `JSON.stringify` never show them. Every error the engine raises is scrubbed of the
+  request's credential values (raw, JSON- and URL-escaped; `redactSecrets`): the
+  `message`, `detail` and `body` of a `RegionalstatistikApiError` (a server may echo them —
+  `logincheck` returns the token as `Username`), a transport's error text and the
+  `cause` chain (`scrubThrown` copies an error only when its text carries one).
 - **Redaction on output** (`run.ts`, `withRedactedOutput`, P1): commander echoes
   rejected values and names unknown commands and options as typed, so `run()`
   wraps `deps.io` first and replaces, on stdout and stderr, the userinfo of every
