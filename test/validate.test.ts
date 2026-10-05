@@ -106,7 +106,10 @@ test("nonBlankProblem accepts text and rejects blank or non-string values", () =
 });
 
 test("assertRequestParams rejects a blank string, naming the parameter, and skips omitted ones", () => {
-  assert.doesNotThrow(() => assertRequestParams({ a: "x", b: undefined, c: null, d: 3, e: true }));
+  assert.doesNotThrow(() => assertRequestParams({ a: "x", b: undefined, c: null, pagelength: 3, compress: true }));
+  // A text parameter takes a string, a boolean one a boolean (P10).
+  assert.throws(() => assertRequestParams({ startyear: 2020 }), /Invalid startyear: Expected a string\./);
+  assert.throws(() => assertRequestParams({ compress: "yes" }), /Invalid compress: Expected true or false\./);
   assert.throws(
     () => assertRequestParams({ selection: "1*", regionalkey: " " }),
     (err: unknown) =>

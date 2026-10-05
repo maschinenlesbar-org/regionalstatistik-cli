@@ -9,7 +9,15 @@
 //     the message `Invalid <name>: <reason>`.
 
 import { RegionalstatistikValidationError } from "./errors.js";
-import { CRITERIA, DATA_FILE_FORMATS, FIND_CATEGORIES, LANGUAGES, MAX_PAGELENGTH } from "./params.js";
+import {
+  BOOLEAN_PARAM_KEYS,
+  CRITERIA,
+  DATA_FILE_FORMATS,
+  FIND_CATEGORIES,
+  LANGUAGES,
+  MAX_PAGELENGTH,
+  type ParamOptions,
+} from "./params.js";
 
 /** Returns why `value` is invalid, or `undefined` when it is valid. */
 export type Problem<T = unknown> = (value: T) => string | undefined;
@@ -68,19 +76,60 @@ const RULES: Readonly<Record<string, Problem<unknown>>> = {
   format: oneOfProblem(DATA_FILE_FORMATS),
 };
 
+/** A `true`/`false` parameter (`structureinformation`, `compress`, `transpose`). */
+export function booleanProblem(value: unknown): string | undefined {
+  return typeof value === "boolean" ? undefined : "Expected true or false.";
+}
+
+/** A free-text parameter (`selection`, `startyear`, `classifyingkey1`, …): a non-blank string. */
+export function textProblem(value: unknown): string | undefined {
+  if (typeof value !== "string") return "Expected a string.";
+  return nonBlankProblem(value);
+}
+
+/** Keys that are never a parameter: they would reach Object.prototype in a careless consumer. */
+const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
 /**
  * Check the parameters of one GENESIS request before it is sent. `undefined`
  * and `null` mean "omitted" and are never sent. A parameter with its own rule
- * (`pagelength`, `timeslices`, `language`, `category`, the criteria, `format`, …) must pass it; every other string that is given must be
- * non-blank. Throws `RegionalstatistikValidationError` naming the parameter.
+ * (`pagelength`, `timeslices`, `language`, `category`, the criteria, `format`, …)
+ * must pass it, `structureinformation`/`compress`/`transpose` must be a boolean;
+ * every other parameter a non-blank string. GENESIS takes one value per parameter,
+ * so an array is rejected (it went out as repeated keys, of which the server read
+ * one). Throws `RegionalstatistikValidationError` naming the parameter.
+ *
+ * With `allowed`, a key outside that list is rejected too (P10): GENESIS ignores a
+ * parameter it does not know and answers unfiltered. `options.allowUnknownParams`
+ * lets such a key through as long as its value is a string, number or boolean;
+ * `__proto__`, `constructor` and `prototype` are never accepted.
  */
-export function assertRequestParams(params: Readonly<Record<string, unknown>>): void {
+export function assertRequestParams(
+  params: Readonly<Record<string, unknown>>,
+  allowed?: readonly string[],
+  options: ParamOptions = {},
+): void {
   for (const [key, value] of Object.entries(params)) {
+    if (FORBIDDEN_KEYS.has(key)) throw new RegionalstatistikValidationError(`Invalid params: "${key}" is not a parameter.`);
+    if (allowed !== undefined && !allowed.includes(key) && options.allowUnknownParams !== true) {
+      throw new RegionalstatistikValidationError(
+        `Invalid params: unknown parameter "${key.slice(0, 100)}" (GENESIS would ignore it and answer unfiltered). ` +
+          `Allowed: ${allowed.join(", ")}. Pass { allowUnknownParams: true } to send it anyway.`,
+      );
+    }
     if (value === undefined || value === null) continue;
+    if (Array.isArray(value)) throw new RegionalstatistikValidationError(`Invalid ${key}: GENESIS takes one value, not a list.`);
     // An own-property lookup, so a key such as "constructor" is never a rule.
     const rule = Object.prototype.hasOwnProperty.call(RULES, key) ? RULES[key] : undefined;
     if (rule !== undefined) assertValid(key, value, rule);
-    else if (typeof value === "string") assertValid(key, value, nonBlankProblem);
+    else if ((BOOLEAN_PARAM_KEYS as readonly string[]).includes(key)) assertValid(key, value, booleanProblem);
+    else if (allowed !== undefined && !allowed.includes(key)) {
+      // An unknown key let through by allowUnknownParams: a plain scalar only.
+      if (typeof value === "string") assertValid(key, value, nonBlankProblem);
+      else if (!(typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value)))) {
+        throw new RegionalstatistikValidationError(`Invalid ${key}: Expected a string, number or boolean.`);
+      }
+    } else assertValid(key, value, textProblem);
   }
 }
 

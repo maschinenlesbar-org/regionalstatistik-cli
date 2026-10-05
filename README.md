@@ -107,6 +107,11 @@ const table = await rdb.data.table("12411-01-01-4", { regionalkey: "08221", star
 // table.Object.Content is the table as a ";"-delimited CSV string.
 ```
 
+Each call accepts only the parameter keys of its endpoint: GENESIS ignores one it
+does not know (a misspelt `startYear`) and would answer unfiltered, so the client
+rejects it with `RegionalstatistikValidationError` before any request. Pass
+`{ allowUnknownParams: true }` as the last argument to send a newer parameter anyway.
+
 The client is usable independently of the CLI. Errors are typed
 (`RegionalstatistikApiError`, `RegionalstatistikNetworkError`,
 `RegionalstatistikParseError`, `RegionalstatistikUsageError`). A custom

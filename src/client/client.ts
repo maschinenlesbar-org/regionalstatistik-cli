@@ -35,13 +35,19 @@ import {
   nonBlankProblem,
   plainObjectProblem,
 } from "./validate.js";
-import type {
-  CatalogueParams,
-  DataFileParams,
-  DataTableParams,
-  FindParams,
-  Language,
-  MetadataParams,
+import {
+  CATALOGUE_PARAM_KEYS,
+  DATA_FILE_PARAM_KEYS,
+  DATA_PARAM_KEYS,
+  FIND_PARAM_KEYS,
+  METADATA_PARAM_KEYS,
+  type CatalogueParams,
+  type DataFileParams,
+  type DataTableParams,
+  type FindParams,
+  type Language,
+  type MetadataParams,
+  type ParamOptions,
 } from "./params.js";
 import type {
   CatalogueResponse,
@@ -86,18 +92,22 @@ async function postJson<T>(
 /**
  * A method's parameter object, checked: `undefined` is none, anything else must be a
  * plain object (`RegionalstatistikValidationError` otherwise — a string would be spread into
- * `0=x`, `null` into nothing).
+ * `0=x`, `null` into nothing), with only the endpoint's keys (`keys`, P10) unless
+ * `options.allowUnknownParams`, and valid values (`assertRequestParams`).
  */
-function paramsOf(params: unknown): QueryParams {
+function paramsOf(params: unknown, keys: readonly string[], options: unknown = {}): QueryParams {
+  assertValid("options", options, plainObjectProblem);
   if (params === undefined) return {};
   assertValid("params", params, plainObjectProblem);
-  return { ...(params as object) } as QueryParams;
+  const copy = { ...(params as object) } as QueryParams;
+  assertRequestParams(copy, keys, options as ParamOptions);
+  return copy;
 }
 
 /** Validate a request object's required `name` (the object code) and its parameters. */
-function named(name: string, params: unknown): QueryParams {
+function named(name: string, params: unknown, keys: readonly string[], options: unknown): QueryParams {
   assertValid("name", name, nonBlankProblem);
-  return { name, ...paramsOf(params) } as QueryParams;
+  return { name, ...paramsOf(params, keys, options) } as QueryParams;
 }
 
 /** Options for the Regionalstatistik client (engine options plus credentials). */
@@ -123,42 +133,42 @@ class CatalogueGroup {
     private readonly auth: AuthHeaders,
   ) {}
 
-  private async list<TItem>(method: string, params: CatalogueParams): Promise<CatalogueResponse<TItem>> {
-    return postJson(this.e, `${API}/catalogue/${method}`, paramsOf(params), this.auth);
+  private async list<TItem>(method: string, params: CatalogueParams, options: ParamOptions): Promise<CatalogueResponse<TItem>> {
+    return postJson(this.e, `${API}/catalogue/${method}`, paramsOf(params, CATALOGUE_PARAM_KEYS, options), this.auth);
   }
 
-  tables(params: CatalogueParams = {}): Promise<CatalogueResponse<TableItem>> {
-    return this.list("tables", params);
+  tables(params: CatalogueParams = {}, options: ParamOptions = {}): Promise<CatalogueResponse<TableItem>> {
+    return this.list("tables", params, options);
   }
-  statistics(params: CatalogueParams = {}): Promise<CatalogueResponse<StatisticItem>> {
-    return this.list("statistics", params);
+  statistics(params: CatalogueParams = {}, options: ParamOptions = {}): Promise<CatalogueResponse<StatisticItem>> {
+    return this.list("statistics", params, options);
   }
-  cubes(params: CatalogueParams = {}): Promise<CatalogueResponse<CubeItem>> {
-    return this.list("cubes", params);
+  cubes(params: CatalogueParams = {}, options: ParamOptions = {}): Promise<CatalogueResponse<CubeItem>> {
+    return this.list("cubes", params, options);
   }
-  timeseries(params: CatalogueParams = {}): Promise<CatalogueResponse<CubeItem>> {
-    return this.list("timeseries", params);
+  timeseries(params: CatalogueParams = {}, options: ParamOptions = {}): Promise<CatalogueResponse<CubeItem>> {
+    return this.list("timeseries", params, options);
   }
-  variables(params: CatalogueParams = {}): Promise<CatalogueResponse<VariableItem>> {
-    return this.list("variables", params);
+  variables(params: CatalogueParams = {}, options: ParamOptions = {}): Promise<CatalogueResponse<VariableItem>> {
+    return this.list("variables", params, options);
   }
-  values(params: CatalogueParams = {}): Promise<CatalogueResponse<VariableItem>> {
-    return this.list("values", params);
+  values(params: CatalogueParams = {}, options: ParamOptions = {}): Promise<CatalogueResponse<VariableItem>> {
+    return this.list("values", params, options);
   }
-  terms(params: CatalogueParams = {}): Promise<CatalogueResponse<TableItem>> {
-    return this.list("terms", params);
+  terms(params: CatalogueParams = {}, options: ParamOptions = {}): Promise<CatalogueResponse<TableItem>> {
+    return this.list("terms", params, options);
   }
-  jobs(params: CatalogueParams = {}): Promise<CatalogueResponse<JobItem>> {
-    return this.list("jobs", params);
+  jobs(params: CatalogueParams = {}, options: ParamOptions = {}): Promise<CatalogueResponse<JobItem>> {
+    return this.list("jobs", params, options);
   }
-  modifiedData(params: CatalogueParams = {}): Promise<CatalogueResponse<ModifiedDataItem>> {
-    return this.list("modifieddata", params);
+  modifiedData(params: CatalogueParams = {}, options: ParamOptions = {}): Promise<CatalogueResponse<ModifiedDataItem>> {
+    return this.list("modifieddata", params, options);
   }
-  results(params: CatalogueParams = {}): Promise<CatalogueResponse<TableItem>> {
-    return this.list("results", params);
+  results(params: CatalogueParams = {}, options: ParamOptions = {}): Promise<CatalogueResponse<TableItem>> {
+    return this.list("results", params, options);
   }
-  qualitySigns(params: CatalogueParams = {}): Promise<CatalogueResponse<TableItem>> {
-    return this.list("qualitysigns", params);
+  qualitySigns(params: CatalogueParams = {}, options: ParamOptions = {}): Promise<CatalogueResponse<TableItem>> {
+    return this.list("qualitysigns", params, options);
   }
 }
 
@@ -169,27 +179,27 @@ class MetadataGroup {
     private readonly auth: AuthHeaders,
   ) {}
 
-  private async get(method: string, name: string, params: MetadataParams): Promise<MetadataResponse> {
-    return postJson(this.e, `${API}/metadata/${method}`, named(name, params), this.auth);
+  private async get(method: string, name: string, params: MetadataParams, options: ParamOptions): Promise<MetadataResponse> {
+    return postJson(this.e, `${API}/metadata/${method}`, named(name, params, METADATA_PARAM_KEYS, options), this.auth);
   }
 
-  table(name: string, params: MetadataParams = {}): Promise<MetadataResponse> {
-    return this.get("table", name, params);
+  table(name: string, params: MetadataParams = {}, options: ParamOptions = {}): Promise<MetadataResponse> {
+    return this.get("table", name, params, options);
   }
-  statistic(name: string, params: MetadataParams = {}): Promise<MetadataResponse> {
-    return this.get("statistic", name, params);
+  statistic(name: string, params: MetadataParams = {}, options: ParamOptions = {}): Promise<MetadataResponse> {
+    return this.get("statistic", name, params, options);
   }
-  cube(name: string, params: MetadataParams = {}): Promise<MetadataResponse> {
-    return this.get("cube", name, params);
+  cube(name: string, params: MetadataParams = {}, options: ParamOptions = {}): Promise<MetadataResponse> {
+    return this.get("cube", name, params, options);
   }
-  timeseries(name: string, params: MetadataParams = {}): Promise<MetadataResponse> {
-    return this.get("timeseries", name, params);
+  timeseries(name: string, params: MetadataParams = {}, options: ParamOptions = {}): Promise<MetadataResponse> {
+    return this.get("timeseries", name, params, options);
   }
-  variable(name: string, params: MetadataParams = {}): Promise<MetadataResponse> {
-    return this.get("variable", name, params);
+  variable(name: string, params: MetadataParams = {}, options: ParamOptions = {}): Promise<MetadataResponse> {
+    return this.get("variable", name, params, options);
   }
-  value(name: string, params: MetadataParams = {}): Promise<MetadataResponse> {
-    return this.get("value", name, params);
+  value(name: string, params: MetadataParams = {}, options: ParamOptions = {}): Promise<MetadataResponse> {
+    return this.get("value", name, params, options);
   }
 }
 
@@ -200,39 +210,39 @@ class DataGroup {
     private readonly auth: AuthHeaders,
   ) {}
 
-  private async json(method: string, name: string, params: DataTableParams): Promise<DataResponse> {
-    return postJson(this.e, `${API}/data/${method}`, named(name, params), this.auth);
+  private async json(method: string, name: string, params: DataTableParams, options: ParamOptions): Promise<DataResponse> {
+    return postJson(this.e, `${API}/data/${method}`, named(name, params, DATA_PARAM_KEYS, options), this.auth);
   }
 
-  table(name: string, params: DataTableParams = {}): Promise<DataResponse> {
-    return this.json("table", name, params);
+  table(name: string, params: DataTableParams = {}, options: ParamOptions = {}): Promise<DataResponse> {
+    return this.json("table", name, params, options);
   }
-  cube(name: string, params: DataTableParams = {}): Promise<DataResponse> {
-    return this.json("cube", name, params);
+  cube(name: string, params: DataTableParams = {}, options: ParamOptions = {}): Promise<DataResponse> {
+    return this.json("cube", name, params, options);
   }
-  timeseries(name: string, params: DataTableParams = {}): Promise<DataResponse> {
-    return this.json("timeseries", name, params);
+  timeseries(name: string, params: DataTableParams = {}, options: ParamOptions = {}): Promise<DataResponse> {
+    return this.json("timeseries", name, params, options);
   }
-  result(name: string, params: DataTableParams = {}): Promise<DataResponse> {
-    return this.json("result", name, params);
+  result(name: string, params: DataTableParams = {}, options: ParamOptions = {}): Promise<DataResponse> {
+    return this.json("result", name, params, options);
   }
 
-  private async file(method: string, name: string, params: DataFileParams): Promise<RawResponse> {
-    const all = named(name, params);
+  private async file(method: string, name: string, params: DataFileParams, options: ParamOptions): Promise<RawResponse> {
+    const all = named(name, params, DATA_FILE_PARAM_KEYS, options);
     assertRequestParams(all);
     return this.e.postRaw(`${API}/data/${method}`, FILE_ACCEPT, all, this.auth());
   }
-  tableFile(name: string, params: DataFileParams = {}): Promise<RawResponse> {
-    return this.file("tablefile", name, params);
+  tableFile(name: string, params: DataFileParams = {}, options: ParamOptions = {}): Promise<RawResponse> {
+    return this.file("tablefile", name, params, options);
   }
-  cubeFile(name: string, params: DataFileParams = {}): Promise<RawResponse> {
-    return this.file("cubefile", name, params);
+  cubeFile(name: string, params: DataFileParams = {}, options: ParamOptions = {}): Promise<RawResponse> {
+    return this.file("cubefile", name, params, options);
   }
-  timeseriesFile(name: string, params: DataFileParams = {}): Promise<RawResponse> {
-    return this.file("timeseriesfile", name, params);
+  timeseriesFile(name: string, params: DataFileParams = {}, options: ParamOptions = {}): Promise<RawResponse> {
+    return this.file("timeseriesfile", name, params, options);
   }
-  resultFile(name: string, params: DataFileParams = {}): Promise<RawResponse> {
-    return this.file("resultfile", name, params);
+  resultFile(name: string, params: DataFileParams = {}, options: ParamOptions = {}): Promise<RawResponse> {
+    return this.file("resultfile", name, params, options);
   }
 }
 
@@ -320,10 +330,11 @@ export class RegionalstatistikClient {
   /**
    * `find/find` — full-text search across object types. `term` must be non-blank;
    * needs an account (rejects with `RegionalstatistikValidationError` without one).
+   * Only the `FindParams` keys are accepted unless `options.allowUnknownParams` (P10).
    */
-  async find(params: FindParams): Promise<FindResponse> {
+  async find(params: FindParams, options: ParamOptions = {}): Promise<FindResponse> {
     assertValid("params", params, plainObjectProblem);
     assertValid("term", params.term, nonBlankProblem);
-    return postJson(this.engine, `${API}/find/find`, paramsOf(params), () => this.requireAuth());
+    return postJson(this.engine, `${API}/find/find`, paramsOf(params, FIND_PARAM_KEYS, options), () => this.requireAuth());
   }
 }

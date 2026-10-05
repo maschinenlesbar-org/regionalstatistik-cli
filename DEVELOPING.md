@@ -69,6 +69,19 @@ What the library rejects:
   GENESIS reads an empty parameter as "no filter", so it would silently return
   unfiltered data. `undefined` still means "omitted". The CLI's `parseNonEmpty`
   calls the same rule.
+- **Unknown parameter keys, lists and wrong value types** (`assertRequestParams`
+  with the endpoint's key list, P10): GENESIS ignores a parameter it does not know
+  and answers unfiltered, so `find`, `catalogue.*`, `metadata.*` and `data.*` accept
+  only their keys (`FIND_PARAM_KEYS`, `CATALOGUE_PARAM_KEYS`, `METADATA_PARAM_KEYS`,
+  `DATA_PARAM_KEYS`, `DATA_FILE_PARAM_KEYS` in `params.ts`); a misspelt `startYear`,
+  `__proto__`, `constructor` or `prototype` is rejected. Each method takes a last
+  `options` argument; `{ allowUnknownParams: true }` sends an unknown key whose value
+  is a string, number or boolean (for a parameter GENESIS adds later). A list is never
+  sent (GENESIS takes one value; it went out as repeated keys), a text parameter must
+  be a string and `structureinformation`/`compress`/`transpose` a boolean. The CLI
+  only sends known keys; it rejects a repeated single-value flag
+  (`--start-year 2020 --start-year 2021`) as a usage error naming the flag
+  (`rejectRepeatedOptions` in `run.ts`) instead of keeping the last value.
 - **Values outside a GENESIS value list** (`oneOfProblem`): `language` must be one
   of `LANGUAGES` (`de`, `en`) on every request path, `logincheck(language)`
   included; `find`'s `category` one of `FIND_CATEGORIES`;

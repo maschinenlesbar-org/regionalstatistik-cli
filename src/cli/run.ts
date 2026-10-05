@@ -43,12 +43,34 @@ export function withoutStrayValues(message: string): string {
  */
 function configureTree(command: Command, deps: CliDeps): void {
   command.exitOverride();
+  rejectRepeatedOptions(command);
   command.configureOutput({
     writeOut: (str) => deps.io.out(str.replace(/\n$/, "")),
     writeErr: (str) => deps.io.err(str.replace(/\n$/, "")),
     outputError: (str, write) => write(withoutStrayValues(str)),
   });
   for (const child of command.commands) configureTree(child, deps);
+}
+
+/**
+ * Make a repeated single-value option a usage error (P10). Commander keeps the last
+ * value of `--start-year 2020 --start-year 2021` without a word, so a script that
+ * builds its argv from two sources silently gets one of them. Every option of
+ * `command` that takes a value counts its occurrences (commander emits
+ * `option:<name>` once per occurrence) and the second one throws — naming the
+ * option, never the value.
+ */
+function rejectRepeatedOptions(command: Command): void {
+  for (const option of command.options) {
+    if (!(option.required || option.optional) || option.variadic) continue;
+    let seen = 0;
+    command.on(`option:${option.name()}`, () => {
+      seen += 1;
+      if (seen > 1) {
+        throw new RegionalstatistikUsageError(`option '${option.flags}' was given more than once; it takes one value.`);
+      }
+    });
+  }
 }
 
 /** The options whose value is a secret on its own (no `@` to anchor a redaction on). */

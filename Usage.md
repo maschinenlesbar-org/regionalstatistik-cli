@@ -20,7 +20,9 @@ export REGIONALSTATISTIK_USERNAME="…"
 export REGIONALSTATISTIK_PASSWORD="…"    # or REGIONALSTATISTIK_API_TOKEN
 ```
 
-Global options (valid on any command):
+Global options (valid on any command). Each option takes one value: giving one
+twice (`--start-year 2020 --start-year 2021`, `--token a --token b`) is a usage
+error (exit 2), not "the last one wins".
 
 | Flag | Meaning |
 |---|---|

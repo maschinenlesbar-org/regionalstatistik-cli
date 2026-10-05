@@ -105,3 +105,59 @@ export interface DataFileParams extends DataTableParams {
   /** Output format; defaults server-side to `datencsv`. */
   format?: DataFileFormat;
 }
+
+// --- The parameter keys each endpoint takes (P10) -------------------------------
+// GENESIS ignores a parameter it does not know: a misspelt `startYear` (for
+// `startyear`) or `selction` answers with the whole unfiltered result and HTTP 200. So
+// the client rejects any other key before the request, unless the call passes
+// `{ allowUnknownParams: true }` (for a parameter GENESIS adds after these lists were
+// written). The lists follow the interfaces above.
+
+/** `find/find` parameter keys. */
+export const FIND_PARAM_KEYS = ["term", "category", "pagelength", "language"] as const;
+/** `catalogue/*` parameter keys. */
+export const CATALOGUE_PARAM_KEYS = ["selection", "area", "searchcriterion", "sortcriterion", "type", "pagelength", "language"] as const;
+/** `metadata/*` parameter keys (the object `name` is passed separately). */
+export const METADATA_PARAM_KEYS = ["area", "language"] as const;
+/** `data/*` parameter keys (the object `name` is passed separately). */
+export const DATA_PARAM_KEYS = [
+  "area",
+  "structureinformation",
+  "compress",
+  "transpose",
+  "contents",
+  "startyear",
+  "endyear",
+  "timeslices",
+  "regionalvariable",
+  "regionalkey",
+  "classifyingvariable1",
+  "classifyingkey1",
+  "classifyingvariable2",
+  "classifyingkey2",
+  "classifyingvariable3",
+  "classifyingkey3",
+  "classifyingvariable4",
+  "classifyingkey4",
+  "classifyingvariable5",
+  "classifyingkey5",
+  "stand",
+  "language",
+] as const;
+/** `data/*file` parameter keys: the `data/*` ones plus `format`. */
+export const DATA_FILE_PARAM_KEYS = [...DATA_PARAM_KEYS, "format"] as const;
+
+/** Parameters GENESIS takes as `true`/`false` (sent as those strings). */
+export const BOOLEAN_PARAM_KEYS = ["structureinformation", "compress", "transpose"] as const;
+
+/** Options for a client call that takes a parameter object. */
+export interface ParamOptions {
+  /**
+   * Send parameter keys that are not in the endpoint's list (`FIND_PARAM_KEYS`, …),
+   * for a parameter GENESIS added after the list was written. Default `false`: an
+   * unknown key is rejected, because GENESIS ignores it and answers unfiltered. The
+   * value must still be a string, number or boolean, and `__proto__`, `constructor`
+   * and `prototype` are never accepted.
+   */
+  allowUnknownParams?: boolean;
+}
