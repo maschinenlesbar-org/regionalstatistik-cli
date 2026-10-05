@@ -94,8 +94,8 @@ Source: Statistische Ämter des Bundes und der Länder, Regionaldatenbank Deutsc
 
 - **HTTP 200 is not success.** The CLI already maps the logical `Status` for
   you: a real failure is a non-zero exit with a clear message. But if you
-  inspect raw JSON, check `Status.Code` (`0`/`22` ok, `90` not found, `98` too
-  large).
+  inspect raw JSON, check `Status.Code` (`0`/`22`/`50` ok, `104` empty, `90` not
+  found, `98` too large; any other code already made the CLI exit non-zero).
 - **Too large (`Status.Code 98`, exit 1).** The table is too big for a direct
   fetch and this CLI does not run the async batch-job flow. **Narrow** — on
   this database that means `--region-key` first (Gemeinde-level tables are
@@ -104,11 +104,17 @@ Source: Statistische Ämter des Bundes und der Länder, Regionaldatenbank Deutsc
 - **Auth failures are exit 1 with a hint** (GENESIS Code 15 = no credentials
   recognized, Code 2 = wrong username/password — the server oddly pairs the
   latter with HTTP 404). Fix the credentials; don't re-resolve the code.
-- **Not found is exit 4** (logical `Status.Code 90`). Re-resolve with the
-  finder skill.
+- **Not found is exit 4** (logical `Status.Code 90`) — but that is rare: a code
+  that does not exist usually comes back as `Status.Code 104`, exit 0 (next
+  trap). Re-resolve with the finder skill.
 - **German number format** — always convert decimal-comma before math, and
   never silently drop value-status symbols; a `.` cell is *confidential*, not
   zero.
-- **Empty (`Status.Code 104`, exit 0)** means your filters excluded everything —
-  check the AGS key (Kreis keys are 5 digits, Gemeinde/AGS 8) and loosen the
-  year filters.
+- **Empty (`Status.Code 104`, exit 0)** means nothing matched — and that has two
+  causes: the **table code does not exist** (GENESIS answers an unknown code on
+  `data`/`metadata` with 104, not 90), or your filters excluded everything. Check
+  the code first: `regstat --compact catalogue tables "<code>"` lists it if it
+  exists; an empty list means a wrong code — re-resolve it with
+  **regionalstatistik-statistics-finder**, don't loosen filters. Only for a code
+  that exists, check the AGS key (Kreis keys are 5 digits, Gemeinde/AGS 8) and
+  loosen the year filters.

@@ -100,11 +100,13 @@ Match: table 12411-01-01-4 — "Bevölkerungsstand: Bevölkerung nach Geschlecht
 
 ## Traps
 
-- **Empty result ≠ error.** A search/catalogue with no matches comes back with
-  `Status.Code 104` and exits `0` (an empty list) — it means "nothing matched",
-  not a failure. Broaden the term or category.
-- **`find` arrays can be `null`.** Don't assume every array is present; read
-  the one for your `--category`.
+- **Empty result ≠ error.** A `catalogue` with no matches comes back with
+  `Status.Code 104` and exits `0` (an empty list). A `find` without hits may
+  instead answer `Status.Code 0` with the array for your category `null` (the
+  same GENESIS software does so on the sibling destatis host). Either way it
+  means "nothing matched", not a failure. Broaden the term or category.
+- **`find` arrays can be `null`.** Don't assume every array is present; a `null`
+  array for your `--category` means no hits of that type.
 - **Codes are exact.** `metadata`/`data` take a precise `name` (e.g.
   `12411-01-01-4`), not a wildcard. Use `catalogue tables "12411*"` to
   discover, then a full code to fetch.

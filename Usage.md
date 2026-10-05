@@ -160,8 +160,10 @@ is gone (`2>&1 | true`).
 
 > **A missing object code usually does not exit 4.** Looking up a code that does
 > not exist on `metadata`/`data` typically returns `Status.Code 104` — a valid
-> **empty** result, so the CLI exits **0**, the same as an empty
-> `catalogue`/`find` search. (A `data <kind>file` download is the exception:
+> **empty** result, so the CLI exits **0**, the same as an empty `catalogue`
+> search or a filter that excludes every row: a 104 alone can't tell a wrong code
+> from an over-narrow filter, so check the code with `catalogue tables "<code>"`
+> first. (A `data <kind>file` download is the exception:
 > there `104` means there is nothing to download, so it exits **4** and writes no
 > file.) To detect "no such object" in a script, inspect
 > `Status.Code` in the payload, not the exit code.
