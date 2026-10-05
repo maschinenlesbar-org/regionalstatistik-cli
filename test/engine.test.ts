@@ -691,3 +691,15 @@ test("server text in an error is cut at 500 characters; the body keeps it all (P
     return true;
   });
 });
+
+test("server text in an error stays on one line, without bidi overrides (result 01, question 3)", async () => {
+  const content = "Ein Fehler ist aufgetreten. (Bitte prüfen ‮abc‬ Nutzernamen bzw.\n das Passwort.)\r\nError: ok";
+  const mt = makeMockTransport(() => jsonResponse({ Code: 2, Content: content, Type: "ERROR" }, 404));
+  const e = new RequestEngine({ transport: mt.transport });
+  await assert.rejects(e.postJson("/x", {}, { username: "U", password: "P" }), (err: unknown) => {
+    assert.ok(err instanceof RegionalstatistikApiError);
+    assert.doesNotMatch(err.message, /[\r\n‮‬]/);
+    assert.match(err.message, /Nutzernamen bzw\. das Passwort\.\) Error: ok$/);
+    return true;
+  });
+});

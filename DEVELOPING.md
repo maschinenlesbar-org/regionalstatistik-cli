@@ -155,7 +155,10 @@ What the library rejects:
   `RegionalstatistikValidationError`, never a raw `TypeError` — and never sent: spreading a
   string parameter object used to send `0=x`. Server text in an error (`detail` and
   the message) is cut at `MAX_MESSAGE_VALUE_LENGTH` (500) characters; `body` keeps the
-  full answer.
+  full answer. It is also put on one line (`sanitizeServerText`): C0/C1 controls and
+  bidi overrides dropped, every run of whitespace — the live wrong-credentials
+  text's `\n` included — one space, so a server can't split or forge an `Error:`
+  line.
 - **Half a credential pair** (`credentialPairProblem`): with no token, a
   `username` without a `password` (or the reverse) throws at construction —
   `Invalid credentials: Provide both username and password (or a token).` A lone

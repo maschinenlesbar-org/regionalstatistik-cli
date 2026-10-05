@@ -165,27 +165,49 @@ const realSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Strip terminal control characters from a server-controlled string before it
- * can reach stdout/stderr. A hostile or MITM'd endpoint can embed ANSI escape
- * sequences (or other C0/C1 controls) in `Status.Content`, a plain-text error
- * body, or the `Content-Type` header to spoof terminal output or abuse terminal
- * features. We drop C0 (0x00..0x08, 0x0B..0x1F), DEL (0x7F) and C1 (0x80..0x9F);
- * tab (0x09), newline (0x0A) and carriage return (0x0D) are kept so multi-line
- * messages survive. Implemented as a code-point filter so this source file never
- * contains a raw control byte.
+ * True for the Unicode bidirectional formatting characters: ALM (U+061C), LRM/RLM
+ * (U+200E/U+200F), the embeddings and overrides U+202A–U+202E and the isolates
+ * U+2066–U+2069. A terminal applies them to the text that follows, so an override
+ * in server text can reorder what the user sees ("Trojan Source" spoofing).
+ */
+export function isBidiControl(code: number): boolean {
+  return (
+    code === 0x061c ||
+    code === 0x200e ||
+    code === 0x200f ||
+    (code >= 0x202a && code <= 0x202e) ||
+    (code >= 0x2066 && code <= 0x2069)
+  );
+}
+
+/**
+ * Make a server-controlled string — `Status.Content`/`Type`, a plain-text error
+ * body, the echoed `Content-Type` — safe to print into a one-line message on
+ * stderr:
+ *
+ * - C0 and C1 controls and DEL are dropped. A hostile or MITM'd endpoint could
+ *   otherwise drive ANSI/OSC sequences into the terminal (display spoofing, title
+ *   changes).
+ * - Bidi formatting characters (isBidiControl) are dropped, so server text cannot
+ *   reorder the visible message.
+ * - Every run of whitespace — CR, LF, tabs, U+2028/U+2029 included — becomes one
+ *   space and the ends are trimmed, so the text stays on one line: the live wrong-
+ *   credentials text ("… Nutzernamen bzw.\n das Passwort.") no longer splits the
+ *   `Error:` line, a CR can't return to column 0 and overwrite it, and a server
+ *   can't forge an `Error:` line of its own.
+ *
+ * Implemented as a code-point filter so this source file never contains a raw
+ * control byte.
  */
 function sanitizeServerText(text: string): string {
   let out = "";
   for (const ch of text) {
     const n = ch.codePointAt(0) ?? 0;
-    if (n === 0x09 || n === 0x0a || n === 0x0d) {
-      out += ch;
-      continue;
-    }
-    if (n <= 8 || (n >= 0x0b && n <= 0x1f) || (n >= 0x7f && n <= 0x9f)) continue;
+    const whitespaceControl = n >= 0x09 && n <= 0x0d;
+    if (!whitespaceControl && (n <= 0x1f || (n >= 0x7f && n <= 0x9f) || isBidiControl(n))) continue;
     out += ch;
   }
-  return out;
+  return out.replace(/\s+/g, " ").trim();
 }
 
 /**
