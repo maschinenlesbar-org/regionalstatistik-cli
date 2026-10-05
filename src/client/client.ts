@@ -24,7 +24,7 @@
 //   await c.find({ term: "Bevölkerung Kreise" });
 //   await c.data.table("12411-01-01-4", { regionalkey: "08*", startyear: "2020" });
 
-import { RequestEngine, type EngineOptions, type RawResponse } from "./engine.js";
+import { RequestEngine, type EngineOptions, type RawResponse, type ResponseShape } from "./engine.js";
 import type { QueryParams } from "./query.js";
 import {
   assertRequestParams,
@@ -76,9 +76,10 @@ async function postJson<T>(
   path: string,
   params: QueryParams,
   auth: AuthHeaders,
+  shape: ResponseShape = "envelope",
 ): Promise<T> {
   assertRequestParams(params);
-  return e.postJson<T>(path, params, auth());
+  return e.postJson<T>(path, params, auth(), shape);
 }
 
 /** Validate a request object's required `name` (the object code) and its parameters. */
@@ -293,7 +294,7 @@ export class RegionalstatistikClient {
    * demand credentials.
    */
   logincheck(language?: Language): Promise<LoginCheckResponse> {
-    return postJson(this.engine, `${API}/helloworld/logincheck`, { language }, () => this.authHeaders());
+    return postJson(this.engine, `${API}/helloworld/logincheck`, { language }, () => this.authHeaders(), "unchecked");
   }
 
   /**

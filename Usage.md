@@ -137,7 +137,9 @@ A JSON or empty reply is never written as a download: it is a GENESIS status the
 server sent instead of the file. The CLI recognises it by its content (a body
 starting with `{`), whatever the Content-Type says, then writes nothing and exits
 non-zero — **4** for `Status.Code 104` (no object with that code) or `90`, **1**
-for anything else (credentials, `98` too large, an empty body).
+for anything else (credentials, `98` too large, an empty body). An HTML page (a
+maintenance or proxy page) is refused the same way, exit **1** — unless it is a
+ZIP, or you asked for `--format html`.
 
 ```bash
 regstat data tablefile 12411-01-01-4 --region-key "08*" --format ffcsv -o bevoelkerung-bw.zip

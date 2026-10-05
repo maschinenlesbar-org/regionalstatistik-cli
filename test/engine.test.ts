@@ -39,7 +39,7 @@ test("postJson sends POST with credential headers and a form-urlencoded body", a
 test("Content-Length is set even for an empty POST body (avoids GENESIS 411)", async () => {
   const mt = makeMockTransport(() => jsonResponse(fx.loginOk));
   const e = new RequestEngine({ transport: mt.transport });
-  await e.postJson("/helloworld/logincheck", {}, { username: "TOK" });
+  await e.postJson("/helloworld/logincheck", {}, { username: "TOK" }, "unchecked");
   assert.equal(mt.last().headers?.["Content-Length"], "0");
 });
 
@@ -142,12 +142,21 @@ test("a 404 with a flat Code 2 body is bad credentials, NOT not-found", async ()
   );
 });
 
-test("a flat non-error body (whoami shape) is returned as-is", async () => {
-  // whoami has no Code/Type at all; logincheck has a *string* Status. Neither
-  // may trip the flat-error mapping.
+test("a bare 404 (no GENESIS code) is still not-found", async () => {
+  const mt = makeMockTransport(() => rawResponse("Not Found", "text/plain", 404));
+  const e = new RequestEngine({ transport: mt.transport });
+  await assert.rejects(
+    () => e.postJson("/x", {}, {}),
+    (err) => err instanceof RegionalstatistikApiError && err.isNotFound && !err.isAuthError,
+  );
+});
+
+test("a flat non-error body (logincheck / whoami shape) is returned as-is where the shape is unchecked", async () => {
   const mt = makeMockTransport(() => jsonResponse(fx.loginOk));
   const e = new RequestEngine({ transport: mt.transport });
-  assert.deepEqual(await e.postJson("/helloworld/logincheck", {}, {}), fx.loginOk);
+  assert.deepEqual(await e.postJson("/helloworld/logincheck", {}, {}, "unchecked"), fx.loginOk);
+  // The enveloped endpoints require the envelope (P9).
+  await assert.rejects(e.postJson("/find/find", {}, {}), RegionalstatistikParseError);
 });
 
 test("maps Status.Code 90 to a not-found error", async () => {

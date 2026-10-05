@@ -241,7 +241,17 @@ the server labels some replies `text/plain` or `application/octet-stream`. An
 empty body or JSON without a GENESIS status → `RegionalstatistikParseError`; a
 GENESIS status → the mapping above, and otherwise a `RegionalstatistikApiError`
 carrying that status — `104` included, which there means "no such object"
-(`isNotFound`, exit 4). Nothing is written.
+(`isNotFound`, exit 4). An HTML page (by Content-Type or a leading
+`<!doctype html`/`<html`) that is not a ZIP is a `RegionalstatistikParseError`
+too, unless the call asked for `format: "html"` (P9). Nothing is written.
+
+The JSON endpoints check the documented shape after the status mapping
+(`shapeProblem`, P9): `find`, `catalogue`, `metadata` and `data` must answer with
+the envelope — an object whose `Status` is an object with a numeric `Code`, its
+lists (`List`, `Tables`, …) arrays or `null`, its `Object` an object or `null` —
+and `whoami` with an object carrying `User-Agent`. `null`, `{}`, `[]`, a bare
+string or an unrelated error object is a `RegionalstatistikParseError` (exit 1),
+never data. `logincheck` has its own check (below).
 
 **Divergence from the destatis reference (its engine misses this):**
 authentication failures arrive as a **flat, envelope-less**

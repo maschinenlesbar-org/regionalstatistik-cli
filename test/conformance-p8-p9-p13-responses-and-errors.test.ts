@@ -9,6 +9,7 @@ import type { HttpResponse } from "../src/client/http.js";
 
 // ---- adapter (per repo) -------------------------------------------------------------
 import { RegionalstatistikClient, type RegionalstatistikClientOptions } from "../src/client/client.js";
+import { RegionalstatistikError as BaseError, RegionalstatistikParseError as ParseError } from "../src/client/errors.js";
 /** A well-formed fake token. */
 const TOKEN = "0123456789abcdef0123456789abcdef";
 /**
@@ -30,6 +31,20 @@ const textBody = (text: string): unknown => ({
   Tables: [{ Code: "12411-0001", Content: text }],
 });
 const readText = (result: unknown): string => (result as { Tables: Array<{ Content: string }> }).Tables[0]!.Content;
+/** 2xx bodies the call must reject (error envelopes, empty or wrong shapes). */
+const malformedBodies: unknown[] = [
+  null,
+  {},
+  [],
+  "text",
+  42,
+  { error: "boom" },
+  { Status: "erfolgreich" },
+  { Status: {} },
+  { Status: { Code: 0 }, Tables: "12411-0001" },
+  { Tables: [{ Code: "12411-0001" }] },
+  { Code: 2, Content: "Ein Fehler ist aufgetreten.", Type: "ERROR" },
+];
 // --------------------------------------------------------------------------------------
 
 const respond = (body: Buffer, contentType: string) => async (): Promise<HttpResponse> => ({
@@ -44,5 +59,19 @@ test("P8: a body is decoded by its declared charset", async () => {
     const body = Buffer.from(JSON.stringify(textBody(text)), encoding);
     const client = new Client({ transport: respond(body, `application/json; charset=${charset}`) });
     assert.equal(readText(await textCall(client)), text, charset);
+  }
+});
+
+test("P9: a 2xx body without the documented shape is a parse error", async () => {
+  for (const body of malformedBodies) {
+    const client = new Client({ transport: respond(Buffer.from(JSON.stringify(body)), "application/json"), maxRetries: 0 });
+    await assert.rejects(textCall(client), BaseError, `body ${JSON.stringify(body)}`);
+    // An error envelope is the API's error; every other wrong shape is a parse error.
+    const isErrorEnvelope = typeof body === "object" && body !== null && "Type" in body;
+    if (!isErrorEnvelope) await assert.rejects(textCall(client), ParseError, `body ${JSON.stringify(body)}`);
+  }
+  for (const raw of ["", "<html>maintenance</html>"]) {
+    const client = new Client({ transport: respond(Buffer.from(raw), "text/html"), maxRetries: 0 });
+    await assert.rejects(textCall(client), BaseError, `raw ${JSON.stringify(raw)}`);
   }
 });

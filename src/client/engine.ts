@@ -288,6 +288,48 @@ function otherOrigin(requested: string, actual: string): boolean {
   }
 }
 
+/** The documented shape a JSON answer must have; see `shapeProblem`. */
+export type ResponseShape = "envelope" | "whoami" | "unchecked";
+
+/** The `find` result arrays and the catalogue `List`: an array, or `null` (not searched / empty). */
+const LIST_KEYS = ["List", "Tables", "Statistics", "Cubes", "Timeseries", "Variables"] as const;
+
+/**
+ * Why a parsed 2xx answer does not have the documented shape, or `undefined` when it
+ * does (P9). Without this, `null`, `{}`, `[]`, an unrelated error object or an HTML
+ * page decoded as JSON were handed back as data with exit 0.
+ *
+ *  - `envelope` (find, catalogue, metadata, data): an object whose `Status` is an
+ *    object with a numeric `Code` (error statuses were raised before this check); a
+ *    list (`List`, `Tables`, …) present must be an array or `null`, an `Object`
+ *    present an object or `null`;
+ *  - `whoami`: an object with a string `User-Agent`;
+ *  - `unchecked`: anything (the caller checks it — `logincheck`).
+ */
+function shapeProblem(parsed: unknown, shape: ResponseShape): string | undefined {
+  if (shape === "unchecked") return undefined;
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return "not a JSON object";
+  const body = parsed as Record<string, unknown>;
+  if (shape === "whoami") return typeof body["User-Agent"] === "string" ? undefined : 'no "User-Agent"';
+  const status = body["Status"];
+  if (typeof status !== "object" || status === null || Array.isArray(status)) return "no GENESIS Status object";
+  if (statusCode((status as GenesisStatus).Code) === undefined) return "a Status without a numeric Code";
+  for (const key of LIST_KEYS) {
+    const value = body[key];
+    if (value !== undefined && value !== null && !Array.isArray(value)) return `"${key}" is not a list`;
+  }
+  const object = body["Object"];
+  if (object !== undefined && object !== null && (typeof object !== "object" || Array.isArray(object))) {
+    return '"Object" is not an object';
+  }
+  return undefined;
+}
+
+/** True for a ZIP file's local-header or empty-archive signature. */
+function isZip(data: Buffer): boolean {
+  return data.length >= 4 && data[0] === 0x50 && data[1] === 0x4b && (data[2] === 0x03 || data[2] === 0x05);
+}
+
 /** The charset a Content-Type names, or undefined when it names none. */
 function charsetOf(contentType: string): string | undefined {
   return /;\s*charset\s*=\s*"?([^";\s]+)"?/i.exec(contentType)?.[1];
@@ -370,6 +412,17 @@ function scrubThrown(thrown: unknown, ctx: RequestContext, depth = 0): unknown {
   const code = (thrown as { code?: unknown }).code;
   if (code !== undefined) Object.assign(copy, { code });
   return copy;
+}
+
+/**
+ * A GENESIS status code as a number. GENESIS stringifies many fields
+ * (`"pagelength":"100"`), so a numeric string (`"90"`) counts too; anything else
+ * is undefined.
+ */
+function statusCode(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "string" && /^-?\d+$/.test(value.trim())) return Number(value.trim());
+  return undefined;
 }
 
 /** The `{ Code, Content, Type }` status object of a GENESIS reply. */
@@ -591,20 +644,24 @@ export class RequestEngine {
     }
   }
 
-  /** GET a JSON body without credentials (helloworld/whoami). */
-  async getJson<T>(path: string): Promise<T> {
+  /** GET a JSON body without credentials (helloworld/whoami), checked against `shape`. */
+  async getJson<T>(path: string, shape: ResponseShape = "whoami"): Promise<T> {
     const res = await this.request("GET", path, { accept: "application/json" });
-    return this.decodeJson<T>("GET", path, res, contextOf(undefined));
+    return this.decodeJson<T>("GET", path, res, contextOf(undefined), shape);
   }
 
-  /** POST form-encoded params (with credential headers) and parse the JSON reply. */
+  /**
+   * POST form-encoded params (with credential headers) and parse the JSON reply, which
+   * must have the GENESIS envelope unless `shape` says otherwise.
+   */
   async postJson<T>(
     path: string,
     params: QueryParams,
     authHeaders: Record<string, string>,
+    shape: ResponseShape = "envelope",
   ): Promise<T> {
     const res = await this.request("POST", path, { params, accept: "application/json", authHeaders });
-    return this.decodeJson<T>("POST", path, res, contextOf(authHeaders));
+    return this.decodeJson<T>("POST", path, res, contextOf(authHeaders), shape);
   }
 
   /**
@@ -639,6 +696,15 @@ export class RequestEngine {
     // A body labelled JSON is decoded by its charset; anything else is only sniffed
     // (after an optional UTF-8 BOM).
     const raw = jsonType ? decodeBody(res.data, res.contentType, path) : stripBom(res.data.toString("utf8"));
+    // An HTML page (a maintenance or proxy page, a login portal) is not the file either;
+    // a ZIP — what GENESIS delivers for every format — always counts as one. Only a
+    // download asked for as `format: "html"` may be HTML itself.
+    const htmlPage = /html/i.test(res.contentType) || /^\s*(<!doctype html|<html)/i.test(raw.slice(0, 1024).replace(/^\uFEFF/, ""));
+    if (!isZip(res.data) && htmlPage && params["format"] !== "html") {
+      throw new RegionalstatistikParseError(
+        `Expected a file download from ${path}, got an HTML page (Content-Type ${res.contentType || "none"}); nothing was saved.`,
+      );
+    }
     if (!jsonType && !raw.trimStart().startsWith("{")) return res;
 
     let parsed: unknown;
@@ -680,6 +746,7 @@ export class RequestEngine {
     path: string,
     res: RawResponse,
     ctx: RequestContext,
+    shape: ResponseShape,
   ): T {
     const text = decodeBody(res.data, res.contentType, path);
     // Every GENESIS endpoint answers with a JSON body (the envelope, or the
@@ -695,6 +762,10 @@ export class RequestEngine {
       throw new RegionalstatistikParseError(`Failed to parse JSON response from ${path}`, { cause: scrubThrown(cause, ctx) });
     }
     this.checkLogicalStatus(method, this.buildUrl(path), scrub(text, ctx), parsed, ctx);
+    const problem = shapeProblem(parsed, shape);
+    if (problem !== undefined) {
+      throw new RegionalstatistikParseError(`Unexpected response from ${path}: ${problem}.`);
+    }
     return parsed as T;
   }
 
