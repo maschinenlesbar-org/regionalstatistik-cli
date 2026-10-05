@@ -380,7 +380,8 @@ for every transport (P5):
 
 ## Testing
 
-`node --test` on the compiled output; no jest/vitest. Tests inject a mock
+`node --test` on the compiled output; no jest/vitest. Node 22.12 or later
+(`engines`); CI (`ci.yml`) type-checks, builds and tests on Node 22/24. Tests inject a mock
 `Transport` and a mocked `CliDeps` (`test/helpers.ts`, `test/fixtures.ts`); no
 real network in the suite. Beyond the cloned destatis coverage, the
 regionalstatistik-specific behaviour under test: flat Code 15/Code 2 mapping on

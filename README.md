@@ -23,7 +23,7 @@ HTTP dependencies (built on `node:http`/`https`), strict TypeScript, ESM.
 npm install -g @maschinenlesbar.org/regionalstatistik-cli
 ```
 
-The command is **`regstat`**.
+The command is **`regstat`**. Requires **Node.js 22.12+**.
 
 ## Credentials
 
