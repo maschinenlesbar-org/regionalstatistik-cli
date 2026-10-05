@@ -114,7 +114,7 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
       parseIntArg,
     )
     .option("--compact", "print JSON on a single line instead of pretty-printed")
-    .option("-o, --output <file>", "write output (JSON, or a download) to this file", parseNonEmpty)
+    .option("-o, --output <file>", "write output (JSON, or a download) to this file; `-` means stdout", parseNonEmpty)
     .option("--force", "overwrite the --output file if it already exists")
     .showHelpAfterError();
 

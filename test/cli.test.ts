@@ -724,3 +724,17 @@ test("a --base-url with embedded userinfo is rejected at parse time", async () =
   assert.match(cli.err.join("\n"), /Must not embed credentials/);
   assert.doesNotMatch(cli.err.join("\n"), /USER:PASS/);
 });
+
+test("-o - writes to stdout and creates no file named '-' (P12)", async () => {
+  const json = makeCli(() => jsonResponse(fx.tablesList));
+  json.files.set("-", Buffer.from("old")); // a file named "-" is neither refused nor written
+  assert.equal(await run([...TOKEN, "-o", "-", "--compact", "catalogue", "tables", "x"], json.deps), 0, json.err.join("\n"));
+  assert.deepEqual([...json.files.keys()], ["-"]);
+  assert.equal(json.files.get("-")?.toString(), "old");
+  assert.deepEqual(JSON.parse(json.out.join("")), fx.tablesList);
+  const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00]);
+  const raw = makeCli(() => rawResponse(zip, "application/zip"));
+  assert.equal(await run([...TOKEN, "data", "tablefile", "12411-01-01-4", "-o", "-"], raw.deps), 0, raw.err.join("\n"));
+  assert.equal(raw.files.size, 0);
+  assert.match(raw.err.join("\n"), /Wrote 6 bytes to stdout/);
+});

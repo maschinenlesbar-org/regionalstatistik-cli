@@ -300,13 +300,21 @@ function stringifyJson(value: unknown, compact: boolean): string {
 }
 
 /**
+ * True when --output names a file. `-o -` means stdout, as in other CLIs (P12): it used
+ * to create a file named "-".
+ */
+function toFile(global: GlobalOptions): global is GlobalOptions & { output: string } {
+  return typeof global.output === "string" && global.output !== "-";
+}
+
+/**
  * Render a JSON value, pretty by default and compact with --compact. Writes to
  * the file given by --output (with a short stderr confirmation so stdout stays
  * clean for piping), or to stdout otherwise.
  */
 export function renderJson(deps: CliDeps, global: GlobalOptions, value: unknown): void {
   const text = escapeControlChars(stringifyJson(value, global.compact === true));
-  if (global.output) {
+  if (toFile(global)) {
     const data = Buffer.from(text + "\n", "utf8");
     writeOutputFile(deps, global, global.output, data);
     deps.io.err(`Wrote ${data.length} bytes to ${global.output}`);
@@ -323,7 +331,7 @@ export function renderJson(deps: CliDeps, global: GlobalOptions, value: unknown)
  */
 export function renderRaw(deps: CliDeps, global: GlobalOptions, response: RawResponse): void {
   const typeNote = response.contentType ? ` (Content-Type: ${response.contentType})` : "";
-  if (global.output) {
+  if (toFile(global)) {
     writeOutputFile(deps, global, global.output, response.data);
     deps.io.err(`Wrote ${response.data.length} bytes to ${global.output}${typeNote}`);
   } else {
@@ -437,7 +445,7 @@ export function action(
     // Refuse an existing --output file before any request, so the refusal costs no
     // download (and no wait up to --timeout). writeOutputFile checks again at write
     // time with an exclusive create, which also catches a file that appears meanwhile.
-    if (global.output !== undefined && global.force !== true && deps.io.fileExists(global.output)) {
+    if (toFile(global) && global.force !== true && deps.io.fileExists(global.output)) {
       throw refuseOverwrite(global.output);
     }
     // A command that takes no credentials (`hello`) never sends any, so they are
