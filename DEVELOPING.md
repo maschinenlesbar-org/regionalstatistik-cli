@@ -274,6 +274,27 @@ reference. The engine turns a `98` into a clear error telling the user to
 narrow the selection (`--start-year`/`--end-year`/`--timeslices`/
 `--region-key`/`--class-key`).
 
+### 6. The transport contract is the engine's, not the transport's
+
+`Transport` is exported, so library users plug in `fetch` or their own `node:http`
+wrapper. The engine (`request()`/`callTransport()` in `engine.ts`) keeps its promises
+for every transport (P5):
+
+- **`timeoutMs`** — the call runs under an overall deadline: the request carries an
+  `AbortSignal` (`HttpRequest.signal`, which the default transport honours and a fetch
+  transport passes on) and the engine rejects with `RegionalstatistikNetworkError` at the
+  deadline whether the transport stops or not.
+- **`maxResponseBytes`** — checked again on the body the transport hands back
+  (`sizeLimitMessage` names the option and `--max-response-bytes`).
+- **Response shape** — `headers` may be a `Headers` object, a `Map` or a record with
+  names in any case (`plainHeaders`), so `Retry-After` and `Content-Type` are read;
+  `body` may be any `ArrayBuffer` view or `ArrayBuffer`, from any realm (`bodyBytes`).
+  Anything else (`responseProblem`: no status, no headers, a string body) is a
+  `RegionalstatistikNetworkError`.
+- **Errors** — whatever a transport throws (fetch's `TypeError`, a string, `null`)
+  becomes a `RegionalstatistikNetworkError` naming the request, with the original (scrubbed)
+  as `cause`. A reset is not retried, from any transport: only 429/503 are.
+
 ## Conventions matched from the blueprint
 
 - **Zero runtime HTTP dependencies** — only `commander`. Strict TS + ESM.

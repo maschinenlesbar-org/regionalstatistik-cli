@@ -109,7 +109,11 @@ const table = await rdb.data.table("12411-01-01-4", { regionalkey: "08221", star
 
 The client is usable independently of the CLI. Errors are typed
 (`RegionalstatistikApiError`, `RegionalstatistikNetworkError`,
-`RegionalstatistikParseError`, `RegionalstatistikUsageError`).
+`RegionalstatistikParseError`, `RegionalstatistikUsageError`). A custom
+`transport` (e.g. one built on `fetch`) gets the same guarantees as the built-in
+one: `timeoutMs` and `maxResponseBytes` are enforced by the client, a `Headers`
+object or `Uint8Array` body is read correctly, and whatever the transport throws
+arrives as a `RegionalstatistikNetworkError`.
 
 ## Relation to sibling tools
 
