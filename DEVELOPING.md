@@ -283,6 +283,27 @@ otherwise the 404-for-bad-credentials would masquerade as a missing object and
 exit 4. destatis-genesis-cli exits 4 in that case; this repo deliberately does
 not. Key off the numeric `Code`, never the German/English `Type` text alone.
 
+`helloworld/logincheck` is different again (P18): it answers HTTP **200** whether
+or not the credentials are right, with a *string* `Status` and the `Username` the
+server logged in. Live (2026-10-05), wrong credentials give `{"Status":"Ein Fehler
+ist aufgetreten. (Bitte prüfen und korrigieren Sie Ihren Nutzernamen bzw.\n das
+Passwort.)","Username":"<the token, or the user name sent>"}`; no credentials give
+the guest answer `{"Status":"Sie wurden erfolgreich an- und abgemeldet! Bei mehr
+als 10 parallelen Requests …","Username":"GAST"}`. `engine.ts:postLoginCheck`
+evaluates the answer with `loginVerdict` (exported): an error text, an error
+`Type` or a `Code` other than 0/22 (string, enveloped or flat `Status`), or an
+unrecognised text with the token echoed as `Username`, is a
+`RegionalstatistikApiError` with `loginRejected` (so `isAuthError`: exit 1 +
+credentials hint); a success text (or Code 0) with a non-empty `Username`
+resolves — the guest answer included, since `logincheck` needs no credentials
+here; anything else confirms nothing and is a `RegionalstatistikParseError`. A
+success text wins over the token echo, since whether GENESIS echoes a *valid*
+token is unknown (no account to check). An error word anywhere in the text wins
+over a success word, so a future notice appended to the success text that
+contains one ("nicht", "Fehler") would turn a good login into exit 1 — loudly,
+not silently. Shared with destatis-genesis-cli:
+`test/conformance-p18-genesis-access-check.test.ts`.
+
 ### 4. `data/*` payloads are opaque — and regional
 
 `data/table` (and cube/timeseries/result) return the whole table as a

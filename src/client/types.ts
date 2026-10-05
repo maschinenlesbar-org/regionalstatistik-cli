@@ -149,10 +149,12 @@ export interface WhoamiResponse {
 }
 
 /**
- * `helloworld/logincheck`. NOTE: `Status` here is a plain string, not the
- * {@link GenesisStatus} object used by every other endpoint.
+ * `helloworld/logincheck`. NOTE: `Status` here is a plain string (live: "Sie wurden
+ * erfolgreich an- und abgemeldet!"), not the {@link GenesisStatus} object used by every
+ * other endpoint — though the client also accepts that object form. `logincheck()`
+ * resolves with this only when the login was confirmed; wrong credentials reject.
  */
 export interface LoginCheckResponse {
-  Status: string;
+  Status: string | GenesisStatus;
   Username: string;
 }

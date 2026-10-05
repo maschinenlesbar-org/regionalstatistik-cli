@@ -628,13 +628,16 @@ test("--compact prints single-line JSON", async () => {
 });
 
 test("logincheck without credentials sends none and prints the guest reply", async () => {
-  const guest = { Status: "Sie wurden erfolgreich an- und abgemeldet!", Username: "GAST" };
-  const cli = makeCli(() => jsonResponse(guest));
-  const code = await run(["logincheck"], cli.deps);
-  assert.equal(code, 0);
-  assert.equal(cli.mt.calls.length, 1);
-  assert.equal(cli.mt.last().headers?.["username"], undefined);
-  assert.deepEqual(JSON.parse(cli.out.join("\n")), guest);
+  // The short text, and the live guest answer with its notice (2026-10-05): both confirm (P18).
+  for (const Status of ["Sie wurden erfolgreich an- und abgemeldet!", fx.loginOk.Status]) {
+    const guest = { Status, Username: "GAST" };
+    const cli = makeCli(() => jsonResponse(guest));
+    const code = await run(["logincheck"], cli.deps);
+    assert.equal(code, 0, cli.err.join("\n"));
+    assert.equal(cli.mt.calls.length, 1);
+    assert.equal(cli.mt.last().headers?.["username"], undefined);
+    assert.deepEqual(JSON.parse(cli.out.join("\n")), guest);
+  }
 });
 
 test("--help exits 0", async () => {

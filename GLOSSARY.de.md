@@ -76,6 +76,10 @@ Jede Antwort außer von `helloworld` steckt in einer Hülle:
 `helloworld/whoami` und `helloworld/logincheck` verwenden diese Hülle **nicht** –
 ebenso wenig **Authentifizierungsfehler**, die als bloßes
 `{ Code, Content, Type }`-Objekt ankommen (siehe unten).
+`logincheck` antwortet mit HTTP 200, ob die Zugangsdaten stimmen oder nicht: `Status` ist
+ein Text – ein Fehlertext („Ein Fehler ist aufgetreten …“) heißt, sie wurden abgelehnt,
+und die CLI endet mit Exit 1 und dem Hinweis auf die Zugangsdaten – und `Username` nennt
+das Konto (ein falscher Token kommt dort als Echo zurück).
 
 ## Werte von `Status.Code`
 

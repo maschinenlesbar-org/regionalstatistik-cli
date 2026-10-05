@@ -367,7 +367,7 @@ for (const dc of defaultCases) {
     const p = await parity({
       argv: ["--compact", ...TOKEN, ...dc.argv],
       lib: (t) => dc.lib(client(t)),
-      responder: dc.zip ? ZIP : () => jsonResponse(fx.findResult),
+      responder: dc.zip ? ZIP : (req) => jsonResponse(req.url.endsWith("/logincheck") ? fx.loginOk : fx.findResult),
     });
     assertSameRequest(p);
     const body = new URLSearchParams(p.cli.requests[0]!.body?.toString() ?? "");

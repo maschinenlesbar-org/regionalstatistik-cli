@@ -43,6 +43,12 @@ regstat logincheck      # helloworld/logincheck — validates your credentials
                         # (without any it answers as the guest user, "Username": "GAST")
 ```
 
+`logincheck` exits **0** only when GENESIS confirms the login. GENESIS answers it
+with HTTP 200 either way; wrong credentials come back as an error text in `Status`
+(and a wrong token echoed as `Username`), which the CLI reports as `GENESIS login
+rejected (HTTP 200) …` plus the credentials hint, exit **1**. An answer that confirms
+nothing (no `Status`, no `Username`) exits 1 without the hint.
+
 ## find — full-text search
 
 ```bash
@@ -172,7 +178,9 @@ is gone (`2>&1 | true`).
 > as HTTP 404 with a flat `{"Code":2,…}` body; the CLI recognizes the GENESIS
 > code and exits **1** with the server's explanation and a
 > `Hint: check your credentials` line, not 4. (`regstat hello` sends no
-> credentials, so a 401/403 there gets no such hint.)
+> credentials, so a 401/403 there gets no such hint.) `logincheck` gets the same
+> text on an HTTP 200 instead; it exits **1** with the hint too
+> (`GENESIS login rejected (HTTP 200) …`).
 
 ## Gotchas
 

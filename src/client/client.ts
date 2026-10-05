@@ -303,12 +303,18 @@ export class RegionalstatistikClient {
   }
 
   /**
-   * `helloworld/logincheck` — validate the supplied credentials. Without any,
-   * GENESIS answers as the guest user (`"Username": "GAST"`), so this does not
-   * demand credentials.
+   * `helloworld/logincheck` — validate the supplied credentials. Resolves only when
+   * GENESIS confirms the login. Wrong credentials — which GENESIS answers with HTTP 200
+   * and an error text in `Status` (or the token echoed as `Username`) — reject with a
+   * `RegionalstatistikApiError` whose `isAuthError` (and `loginRejected`) is true; an
+   * answer that confirms nothing rejects with `RegionalstatistikParseError`. Without
+   * credentials GENESIS answers as the guest user (`"Username": "GAST"`), which
+   * resolves: this does not demand credentials.
    */
-  logincheck(language?: Language): Promise<LoginCheckResponse> {
-    return postJson(this.engine, `${API}/helloworld/logincheck`, { language }, () => this.authHeaders(), "unchecked");
+  async logincheck(language?: Language): Promise<LoginCheckResponse> {
+    const params: QueryParams = { language };
+    assertRequestParams(params);
+    return this.engine.postLoginCheck(`${API}/helloworld/logincheck`, params, this.authHeaders());
   }
 
   /**

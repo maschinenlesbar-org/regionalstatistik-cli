@@ -119,6 +119,13 @@ export class RegionalstatistikApiError extends RegionalstatistikError {
    * none — for an auth error.
    */
   readonly credentialsSent: boolean | undefined;
+  /**
+   * True when `helloworld/logincheck` answered that the credentials were not accepted
+   * — live, an HTTP 200 whose `Status` is an error text (or whose `Username` echoes the
+   * token back). Such an answer carries no code and no error status, so this flag is
+   * what makes it an auth error (`isAuthError`).
+   */
+  readonly loginRejected: boolean;
 
   constructor(args: {
     url: string;
@@ -129,6 +136,7 @@ export class RegionalstatistikApiError extends RegionalstatistikError {
     statusType?: string;
     detail?: string;
     credentialsSent?: boolean;
+    loginRejected?: boolean;
   }) {
     const detail = args.detail === undefined ? undefined : cutForMessage(args.detail);
     const detailPart = detail ? `: ${detail}` : "";
@@ -140,8 +148,9 @@ export class RegionalstatistikApiError extends RegionalstatistikError {
           ? `GENESIS status${typePart}` // an error Type without a usable Code
           : undefined;
     const httpPart = args.httpStatus !== undefined ? `HTTP ${args.httpStatus}` : undefined;
-    const head =
-      genesisPart !== undefined && httpPart !== undefined
+    const head = args.loginRejected
+      ? `GENESIS login rejected (${[genesisPart, httpPart].filter((p) => p !== undefined).join(" / ") || "no status"})`
+      : genesisPart !== undefined && httpPart !== undefined
         ? `${genesisPart} / ${httpPart}`
         : (genesisPart ?? httpPart ?? "HTTP 0");
     super(`${head} for ${args.method} ${args.url}${detailPart}`);
@@ -153,6 +162,7 @@ export class RegionalstatistikApiError extends RegionalstatistikError {
     this.body = args.body;
     this.detail = detail;
     this.credentialsSent = args.credentialsSent;
+    this.loginRejected = args.loginRejected === true;
   }
 
   /**
@@ -166,6 +176,7 @@ export class RegionalstatistikApiError extends RegionalstatistikError {
    * miss to a distinct exit code for scripting.
    */
   get isNotFound(): boolean {
+    if (this.loginRejected) return false;
     return (
       this.code === 90 ||
       this.code === 104 ||
@@ -178,11 +189,13 @@ export class RegionalstatistikApiError extends RegionalstatistikError {
    * ("Sie sind nicht berechtigt ..." — no/unrecognized credentials), the flat
    * code 2 (wrong username/password or token — the live server's HTTP 404 +
    * `{ Code: 2 }`, and the same flat body on HTTP 200, which the engine reports
-   * with `httpStatus: 200`; an enveloped Code 2 carries no HTTP status), or a
-   * transport-level 401/403. The CLI appends a credentials hint for these.
+   * with `httpStatus: 200`; an enveloped Code 2 carries no HTTP status), a
+   * transport-level 401/403, or a rejected `logincheck` (`loginRejected`, live an
+   * HTTP 200 with an error text). The CLI appends a credentials hint for these.
    */
   get isAuthError(): boolean {
     return (
+      this.loginRejected ||
       this.code === 15 ||
       (this.code === 2 && this.httpStatus !== undefined) ||
       this.httpStatus === 401 ||

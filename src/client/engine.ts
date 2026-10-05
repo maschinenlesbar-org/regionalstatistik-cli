@@ -334,6 +334,70 @@ function shapeProblem(parsed: unknown, shape: ResponseShape): string | undefined
   return undefined;
 }
 
+/**
+ * How GENESIS words a login-check outcome in `Status` when it is a plain string: the
+ * success text ("Sie wurden erfolgreich an- und abgemeldet!", English "…successfully…")
+ * and the failure text seen live on 2026-10-05 ("Ein Fehler ist aufgetreten. (Bitte
+ * prüfen und korrigieren Sie Ihren Nutzernamen oder Ihren Token bzw. das Passwort.)").
+ * A failure word wins over a success word.
+ */
+const LOGIN_FAILED_TEXT = /fehler|error|fail|ungültig|invalid|falsch|wrong|nicht|not\b|prüfen|korrigieren/i;
+const LOGIN_OK_TEXT = /erfolgreich|success/i;
+
+/** What a login-check answer says about the credentials. */
+export type LoginVerdict =
+  | { outcome: "accepted" }
+  | { outcome: "rejected"; detail: string | undefined; code?: number; statusType?: string }
+  | { outcome: "malformed"; problem: string };
+
+/**
+ * Evaluate a parsed `helloworld/logincheck` answer (P18). GENESIS answers a login check
+ * with HTTP 200 whether or not the credentials are right; the outcome is in the body:
+ *
+ *  - `Status` as a **string** (the live shape): an error text means rejected, a success
+ *    text accepted;
+ *  - `Status` as an **object**, or a flat `{ Code, Content, Type }` (the shape of every
+ *    other GENESIS answer and of the auth errors): an error `Type`, or a `Code` other
+ *    than 0/22, means rejected;
+ *  - **`Username`**, the account the server logged in: it must be a non-empty string.
+ *    Live, a wrong token comes back echoed as the `Username`; when the `Status` is
+ *    neither a success nor an error text, a `Username` that equals the token sent
+ *    (`token`, when the login was by token) counts as rejected too.
+ *
+ * Anything else — no `Status`, an unrecognised text without that echo, no `Username` —
+ * is `malformed`: the check confirmed nothing.
+ */
+export function loginVerdict(parsed: unknown, token?: string): LoginVerdict {
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return { outcome: "malformed", problem: "not a JSON object" };
+  }
+  const body = parsed as { Status?: unknown; Username?: unknown };
+  const username = typeof body.Username === "string" && body.Username.trim() !== "" ? body.Username : undefined;
+  let verdict: "accepted" | "rejected" | "unknown";
+  let detail: string | undefined;
+  let code: number | undefined;
+  let statusType: string | undefined;
+  if (typeof body.Status === "string") {
+    detail = body.Status;
+    verdict = LOGIN_FAILED_TEXT.test(body.Status) ? "rejected" : LOGIN_OK_TEXT.test(body.Status) ? "accepted" : "unknown";
+  } else {
+    const s = genesisStatus(parsed);
+    if (s === undefined) return { outcome: "malformed", problem: "no GENESIS Status" };
+    code = statusCode(s.Code);
+    statusType = typeof s.Type === "string" ? s.Type : undefined;
+    detail = typeof s.Content === "string" ? s.Content : undefined;
+    const errorType = statusType !== undefined && /error|fehler/i.test(statusType);
+    verdict = errorType || (code !== undefined && code !== 0 && code !== 22) ? "rejected" : code === undefined ? "unknown" : "accepted";
+  }
+  if (verdict === "unknown" && token !== undefined && username === token) verdict = "rejected";
+  if (verdict === "rejected") {
+    return { outcome: "rejected", detail, ...(code !== undefined ? { code } : {}), ...(statusType !== undefined ? { statusType } : {}) };
+  }
+  if (verdict === "unknown") return { outcome: "malformed", problem: "a Status that says neither success nor failure" };
+  if (username === undefined) return { outcome: "malformed", problem: 'no "Username"' };
+  return { outcome: "accepted" };
+}
+
 /** True for a ZIP file's local-header or empty-archive signature. */
 function isZip(data: Buffer): boolean {
   return data.length >= 4 && data[0] === 0x50 && data[1] === 0x4b && (data[2] === 0x03 || data[2] === 0x05);
@@ -672,6 +736,48 @@ export class RequestEngine {
   ): Promise<T> {
     const res = await this.request("POST", path, { params, accept: "application/json", authHeaders });
     return this.decodeJson<T>("POST", path, res, contextOf(authHeaders), shape);
+  }
+
+  /**
+   * POST `helloworld/logincheck` and evaluate the answer (`loginVerdict`, P18): resolves
+   * only when GENESIS confirms the login. Rejected credentials — live an HTTP 200 whose
+   * `Status` is an error text, the token echoed as `Username` — reject with a
+   * `RegionalstatistikApiError` whose `loginRejected` (and so `isAuthError`) is true; an answer
+   * that confirms nothing is a `RegionalstatistikParseError`. The 401/404 auth answers and the
+   * transport errors keep their usual mapping.
+   */
+  async postLoginCheck<T>(path: string, params: QueryParams, authHeaders: Record<string, string>): Promise<T> {
+    const res = await this.request("POST", path, { params, accept: "application/json", authHeaders });
+    const ctx = contextOf(authHeaders);
+    const text = decodeBody(res.data, res.contentType, path);
+    if (text.trim().length === 0) throw new RegionalstatistikParseError(`Empty response body from ${path}`);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch (cause) {
+      throw new RegionalstatistikParseError(`Failed to parse JSON response from ${path}`, { cause: scrubThrown(cause, ctx) });
+    }
+    // In token mode the token travels alone in the `username` header.
+    const token = authHeaders["password"] === undefined ? authHeaders["username"] : undefined;
+    const verdict = loginVerdict(parsed, token);
+    if (verdict.outcome === "malformed") {
+      throw new RegionalstatistikParseError(`Unexpected response from ${path}: ${verdict.problem}; the login was not confirmed.`);
+    }
+    if (verdict.outcome === "rejected") {
+      const detail = verdict.detail === undefined ? undefined : sanitizeServerText(scrub(verdict.detail, ctx));
+      throw new RegionalstatistikApiError({
+        method: "POST",
+        url: redactUrl(this.buildUrl(path)),
+        body: scrub(text, ctx),
+        httpStatus: res.status,
+        ...(verdict.code !== undefined ? { code: verdict.code } : {}),
+        ...(verdict.statusType !== undefined ? { statusType: sanitizeServerText(scrub(verdict.statusType, ctx)) } : {}),
+        ...(ctx.sent !== undefined ? { credentialsSent: ctx.sent } : {}),
+        detail: detail === undefined || detail === "" ? "the server did not accept the credentials" : detail,
+        loginRejected: true,
+      });
+    }
+    return parsed as T;
   }
 
   /**

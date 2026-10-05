@@ -7,10 +7,11 @@ export {
   DEFAULT_BASE_URL,
   MAX_RETRIES,
   MAX_RETRY_AFTER_MS,
+  loginVerdict,
   parseRetryAfter,
   redactUrl,
 } from "./engine.js";
-export type { EngineOptions, RawResponse, ResponseShape } from "./engine.js";
+export type { EngineOptions, LoginVerdict, RawResponse, ResponseShape } from "./engine.js";
 export { MAX_TIMEOUT_MS, nodeHttpTransport } from "./http.js";
 export type { Transport, HttpRequest, HttpResponse } from "./http.js";
 export { buildQueryString } from "./query.js";

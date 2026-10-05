@@ -80,7 +80,7 @@ Heidelberg).
 
 ```bash
 regstat hello                                        # connectivity check (no auth)
-regstat logincheck                                   # validate your credentials
+regstat logincheck                                   # validate your credentials (exit 1 if rejected)
 regstat find "bevölkerung kreise" --category tables  # search for tables
 regstat catalogue tables "12411*"                    # browse tables by code
 regstat metadata table 12411-01-01-4                 # describe a table
