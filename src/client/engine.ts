@@ -38,10 +38,11 @@ const DEFAULT_USER_AGENT = "regionalstatistik-cli";
 // UTF-8 umlaut (e.g. "Bevölkerung") arrives mojibaked and matches nothing.
 const FORM_CONTENT_TYPE = "application/x-www-form-urlencoded; charset=UTF-8";
 
-// GENESIS logical `Status.Code` values this engine acts on. All others (0 ok,
-// 22 ok-with-auto-correction, 50 no-newer-data, ...) are returned as-is so the
-// caller sees the full envelope (Status.Content carries any warning text).
-const CODE_NOT_FOUND = 90; // requested object does not exist
+// GENESIS logical `Status.Code` values this engine acts on. The documented success
+// codes (0 ok, 22 ok-with-auto-correction, 50 no-newer-data) and 104 (empty) are
+// returned as-is so the caller sees the full envelope (Status.Content carries any
+// warning text); any other code is an error, whatever its `Type` says.
+const SUCCESS_CODES: ReadonlySet<number> = new Set([0, 22, 50]);
 const CODE_TOO_LARGE = 98; // result too large for a synchronous fetch (needs the async job flow)
 const CODE_EMPTY = 104; // no object matched the selection/search — a valid *empty* result
 
@@ -446,7 +447,7 @@ function genesisStatus(parsed: unknown): GenesisStatus | undefined {
       ? (top.Status as GenesisStatus)
       : undefined;
   }
-  if (typeof top.Code === "number" && typeof top.Type === "string") return top;
+  if (statusCode(top.Code) !== undefined && typeof top.Type === "string") return top;
   return undefined;
 }
 
@@ -727,7 +728,7 @@ export class RequestEngine {
         `Expected a file download from ${path}, got a JSON reply without a GENESIS status.`,
       );
     }
-    const code = typeof s.Code === "number" ? s.Code : undefined;
+    const code = statusCode(s.Code);
     const type = typeof s.Type === "string" ? sanitizeServerText(scrub(s.Type, ctx)) : undefined;
     const content = typeof s.Content === "string" ? sanitizeServerText(scrub(s.Content, ctx)) : undefined;
     throw new RegionalstatistikApiError({
@@ -797,8 +798,8 @@ export class RequestEngine {
     // (or the flat auth-failure shape) carries a logical `Code` worth inspecting.
     const s = genesisStatus(parsed);
     if (s === undefined) return;
-    const code = typeof s.Code === "number" ? s.Code : undefined;
-    if (code === undefined || code === CODE_EMPTY) return;
+    // GENESIS stringifies many fields, so a numeric string ("90") counts as the code.
+    const code = statusCode(s.Code);
 
     // Type / Content are server-controlled and reach the terminal via the error
     // message; strip any embedded terminal control characters (and any echoed
@@ -807,22 +808,30 @@ export class RequestEngine {
     const content = typeof s.Content === "string" ? sanitizeServerText(scrub(s.Content, ctx)) : undefined;
     const sent = ctx.sent;
     const isErrorType = type !== undefined && /error|fehler/i.test(type);
+    // Key off the numeric Code: the documented success codes and 104 (empty) pass,
+    // unless the Type calls it an error. A missing code is left to the shape check.
+    // Any other code — 90, 98, or one this client doesn't know, whatever its Type
+    // ("Information", "Warnung") — is an error, never data with exit 0.
+    if (!isErrorType && (code === undefined || code === CODE_EMPTY || SUCCESS_CODES.has(code))) return;
 
-    if (code === CODE_NOT_FOUND || code === CODE_TOO_LARGE || isErrorType) {
-      const detail =
-        code === CODE_TOO_LARGE
-          ? `${content ?? "result too large"} — this read-only CLI does not run the async batch-job flow; narrow the selection (--start-year/--end-year/--timeslices/--region-key/--class-key) or download a smaller subset`
-          : content;
-      throw new RegionalstatistikApiError({
-        method,
-        url: redactUrl(url),
-        body,
-        ...(sent !== undefined ? { credentialsSent: sent } : {}),
-        code,
-        statusType: type,
-        detail,
-      });
-    }
+    const detail =
+      code === CODE_TOO_LARGE
+        ? `${content ?? "result too large"} — this read-only CLI does not run the async batch-job flow; narrow the selection (--start-year/--end-year/--timeslices/--region-key/--class-key) or download a smaller subset`
+        : content;
+    // The flat `{ Code, Content, Type }` shape (no envelope) is GENESIS' auth-failure
+    // reply. The live host pairs it with 401/404, but it has also sent it on HTTP 200;
+    // carry that status so a flat Code 2 counts as an auth error there too (isAuthError).
+    const flat = (parsed as { Status?: unknown }).Status === undefined;
+    throw new RegionalstatistikApiError({
+      method,
+      url: redactUrl(url),
+      body,
+      ...(flat ? { httpStatus: 200 } : {}),
+      ...(sent !== undefined ? { credentialsSent: sent } : {}),
+      ...(code !== undefined ? { code } : {}),
+      ...(type !== undefined ? { statusType: type } : {}),
+      ...(detail !== undefined ? { detail } : {}),
+    });
   }
 
   /**
@@ -866,7 +875,7 @@ export class RequestEngine {
               ? parsed
               : undefined;
         if (s) {
-          if (typeof s.Code === "number") code = s.Code;
+          code = statusCode(s.Code);
           if (typeof s.Type === "string") statusType = s.Type;
           if (typeof s.Content === "string") detail = s.Content;
         } else if (typeof parsed?.detail === "string") {

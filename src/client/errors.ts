@@ -159,9 +159,10 @@ export class RegionalstatistikApiError extends RegionalstatistikError {
   /**
    * True when the API rejected the credentials: the GENESIS logical code 15
    * ("Sie sind nicht berechtigt ..." — no/unrecognized credentials), the flat
-   * code 2 on a non-2xx reply (wrong username/password or token — the live
-   * server's HTTP 404 + `{ Code: 2 }`), or a transport-level 401/403. The CLI
-   * appends a credentials hint for these.
+   * code 2 (wrong username/password or token — the live server's HTTP 404 +
+   * `{ Code: 2 }`, and the same flat body on HTTP 200, which the engine reports
+   * with `httpStatus: 200`; an enveloped Code 2 carries no HTTP status), or a
+   * transport-level 401/403. The CLI appends a credentials hint for these.
    */
   get isAuthError(): boolean {
     return (

@@ -232,7 +232,10 @@ in a `Status` object (`{ Code, Content, Type }`). After a successful parse,
 | `104` | **empty result** — returned as a valid empty list, NOT an error (except on a `data/*file` download, below) |
 | `90` | object not found → `RegionalstatistikApiError`, `isNotFound` (exit 4) |
 | `98` | too large → `RegionalstatistikApiError` with narrowing guidance (exit 1) |
-| any `Type` = `Fehler`/`Error` | → `RegionalstatistikApiError` (exit 1) |
+| any `Type` = `Fehler`/`Error` | → `RegionalstatistikApiError` (exit 1), even without a numeric `Code` |
+| any other code, whatever its `Type` (`Information`, `Warnung`) | → `RegionalstatistikApiError` (exit 1) — never data with exit 0 |
+
+The code is read as a number, a numeric string (`"90"`) included (`statusCode`).
 
 A `data/*file` endpoint answers with a file (a ZIP wrapper), so `postRaw` treats
 any JSON or empty reply as a failure rather than a download. A body counts as JSON
@@ -262,6 +265,7 @@ misleading HTTP status (verified live on both hosts):
 |---|---|---|
 | HTTP **401** + flat `Code 15` ("Sie sind nicht berechtigt …") | no/unrecognized credentials | exit 1 + credentials hint (`isAuthError`) |
 | HTTP **404** + flat `Code 2` ("… prüfen … Nutzernamen bzw. das Passwort") | wrong credentials | exit **1** (NOT 4 — see below) + credentials hint (`isAuthError`) |
+| HTTP **200** + flat `Code 2` or `15` (sent on 200 in July 2026) | wrong / missing credentials | the same: `checkLogicalStatus` carries `httpStatus: 200` for the flat shape, so `isAuthError` holds |
 
 `engine.ts` therefore extracts a GENESIS status from non-2xx bodies too
 (`toApiError`), *and* maps the flat shape on 2xx replies defensively
@@ -351,8 +355,8 @@ for every transport (P5):
 4. **Flat auth-error mapping** (engine `toApiError` + `checkLogicalStatus`):
    401+Code 15 and 404+Code 2 surface as typed errors with the GENESIS code;
    `isNotFound` ignores a 404 that carries a GENESIS code; run.ts prints a
-   credentials hint on `isAuthError` (Code 15, Code 2 on a non-2xx reply,
-   HTTP 401/403) worded by `RegionalstatistikApiError.credentialsSent`: "check
+   credentials hint on `isAuthError` (Code 15, a flat Code 2 on any HTTP
+   status, HTTP 401/403) worded by `RegionalstatistikApiError.credentialsSent`: "check
    your credentials" when a `username` header went out, "refused the request
    without credentials" when none did, and no hint for `hello` (whoami takes
    none). destatis-genesis-cli has the same mapping since 2026-09-26.

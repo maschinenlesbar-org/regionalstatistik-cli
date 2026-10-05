@@ -92,8 +92,9 @@ with 401/404:
 | `90` | Fehler | requested object not found | error, **exit 4** |
 | `98` | Information | result too large for a direct fetch | error with narrowing guidance, exit 1 |
 | `15` | ERROR | not authorized (no/unrecognized credentials; flat body on HTTP 401) | error + credentials hint, exit 1 |
-| `2` | ERROR | wrong username/password (flat body on HTTP **404** — not a missing object!) | error + credentials hint, exit 1 |
+| `2` | ERROR | wrong username/password (flat body on HTTP **404** — not a missing object! — or on HTTP 200) | error + credentials hint, exit 1 |
 | any | Fehler / Error | general error | error, exit 1 |
+| any other | Information / Warnung | not a documented success code | error, exit 1 (never returned as data) |
 
 ## Value-status placeholders
 

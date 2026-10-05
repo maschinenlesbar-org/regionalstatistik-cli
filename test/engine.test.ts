@@ -86,7 +86,7 @@ test("maps the flat (envelope-less) Code 15 auth error despite HTTP 200", async 
     (err) => {
       assert.ok(err instanceof RegionalstatistikApiError);
       assert.equal(err.code, 15);
-      assert.equal(err.httpStatus, undefined);
+      assert.equal(err.httpStatus, 200);
       assert.ok(err.isAuthError);
       assert.match(err.message, /GENESIS status 15/);
       assert.match(err.message, /nicht berechtigt/);
@@ -508,12 +508,63 @@ test("credentialsSent: true with a username header, false with none, undefined f
   }
 });
 
-test("a flat Code 2 on HTTP 200 is not an auth error (only the live 404 pairing is)", async () => {
+test("a flat Code 2 on HTTP 200 is an auth error too, like the live 404 pairing (01#2)", async () => {
+  // The fixture's shape is what this host sent on HTTP 200 in July 2026.
   const mt = makeMockTransport(() => jsonResponse(fx.flatBadCredentials));
   const e = new RequestEngine({ transport: mt.transport });
   await assert.rejects(
     () => e.postJson("/x", {}, { username: "U", password: "P" }),
-    (err) => err instanceof RegionalstatistikApiError && err.code === 2 && !err.isAuthError,
+    (err) =>
+      err instanceof RegionalstatistikApiError && err.code === 2 && err.httpStatus === 200 && err.isAuthError && !err.isNotFound,
+  );
+});
+
+test("an enveloped Code 2 is not an auth error: only the flat shape is", async () => {
+  const body = { Status: { Code: 2, Content: "x", Type: "ERROR" }, Object: null };
+  const mt = makeMockTransport(() => jsonResponse(body));
+  const e = new RequestEngine({ transport: mt.transport });
+  await assert.rejects(
+    () => e.postJson("/x", {}, { username: "U", password: "P" }),
+    (err) => err instanceof RegionalstatistikApiError && err.code === 2 && err.httpStatus === undefined && !err.isAuthError,
+  );
+});
+
+test("a non-zero Status.Code outside 0/22/50/104 is an error whatever its Type (03#3)", async () => {
+  for (const type of ["Information", "Warnung", "Hinweis"]) {
+    const body = { Status: { Code: 1, Content: "Parameter regionalkey ungueltig", Type: type }, Object: null };
+    const mt = makeMockTransport(() => jsonResponse(body));
+    const e = new RequestEngine({ transport: mt.transport });
+    await assert.rejects(
+      () => e.postJson("/data/table", {}, { username: "U", password: "P" }),
+      (err) => err instanceof RegionalstatistikApiError && err.code === 1 && !err.isNotFound && /regionalkey ungueltig/.test(err.message),
+      type,
+    );
+  }
+  for (const code of [0, 22, 50, 104]) {
+    const body = { Status: { Code: code, Content: "ok", Type: code === 22 ? "Warnung" : "Information" }, Object: null };
+    const mt = makeMockTransport(() => jsonResponse(body));
+    const e = new RequestEngine({ transport: mt.transport });
+    assert.deepEqual(await e.postJson("/data/table", {}, { username: "U", password: "P" }), body, String(code));
+  }
+});
+
+test("a Status.Code sent as a numeric string is read as the number", async () => {
+  const body = { Status: { Code: "90", Content: "nicht gefunden", Type: "Information" }, Object: null };
+  const mt = makeMockTransport(() => jsonResponse(body));
+  const e = new RequestEngine({ transport: mt.transport });
+  await assert.rejects(
+    () => e.postJson("/data/table", {}, { username: "U", password: "P" }),
+    (err) => err instanceof RegionalstatistikApiError && err.code === 90 && err.isNotFound,
+  );
+});
+
+test("an error Type is an error even without a numeric Code", async () => {
+  const body = { Status: { Content: "kaputt", Type: "Fehler" }, Object: null };
+  const mt = makeMockTransport(() => jsonResponse(body));
+  const e = new RequestEngine({ transport: mt.transport });
+  await assert.rejects(
+    () => e.postJson("/data/table", {}, { username: "U", password: "P" }),
+    (err) => err instanceof RegionalstatistikApiError && err.code === undefined && /kaputt/.test(err.message),
   );
 });
 

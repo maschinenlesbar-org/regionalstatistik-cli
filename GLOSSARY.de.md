@@ -91,8 +91,9 @@ dieselbe Struktur mit 401/404:
 | `90` | Fehler | angefordertes Objekt nicht gefunden | Fehler, **Exit 4** |
 | `98` | Information | Ergebnis zu groß für einen direkten Abruf | Fehler mit Hinweisen zum Eingrenzen, Exit 1 |
 | `15` | ERROR | nicht autorisiert (keine oder nicht erkannte Zugangsdaten; flacher Body bei HTTP 401) | Fehler + Hinweis zu den Zugangsdaten, Exit 1 |
-| `2` | ERROR | falscher Benutzername oder falsches Passwort (flacher Body bei HTTP **404** – kein fehlendes Objekt!) | Fehler + Hinweis zu den Zugangsdaten, Exit 1 |
+| `2` | ERROR | falscher Benutzername oder falsches Passwort (flacher Body bei HTTP **404** – kein fehlendes Objekt! – oder bei HTTP 200) | Fehler + Hinweis zu den Zugangsdaten, Exit 1 |
 | beliebig | Fehler / Error | allgemeiner Fehler | Fehler, Exit 1 |
+| jeder andere | Information / Warnung | kein dokumentierter Erfolgscode | Fehler, Exit 1 (nie als Daten ausgegeben) |
 
 ## Platzhalter für den Wertstatus
 
