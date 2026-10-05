@@ -201,6 +201,11 @@ env var never breaks `--help`, `--version`, `hello` or a run whose flag
 overrides it. No
 credential is ever bundled.
 
+Answers are decoded by the charset their `Content-Type` names (`decodeBody`,
+`TextDecoder`; UTF-8 when none, a byte-order mark dropped); an unknown label is a
+`RegionalstatistikParseError` (P8). GENESIS declares `charset=UTF-8`; a mirror or
+proxy in ISO-8859-1 would otherwise turn every umlaut into U+FFFD.
+
 **Redirects are NOT followed.** Following a cross-origin redirect would forward
 the credential headers to another origin; a 3xx surfaces as an error hinting at
 the canonical host (`https://www.regionalstatistik.de`). That has to hold for
