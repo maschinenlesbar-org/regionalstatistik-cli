@@ -155,3 +155,15 @@ test("a non-http(s) base URL is rejected before any request carries credentials"
     assert.equal(mt.calls.length, 0);
   }
 });
+
+test("text parameters and object codes are sent in Unicode NFC (P11)", async () => {
+  const nfd = "Bevölkerung";
+  const mt = makeMockTransport(() => jsonResponse(fx.findResult));
+  const c = new RegionalstatistikClient({ token: "0123456789abcdef0123456789abcdef", transport: mt.transport });
+  await c.find({ term: nfd });
+  assert.equal(bodyOf(mt.last()).get("term"), "Bevölkerung");
+  await c.catalogue.tables({ selection: `${nfd}*` }).catch(() => undefined);
+  assert.equal(bodyOf(mt.last()).get("selection"), "Bevölkerung*");
+  await c.metadata.table(nfd).catch(() => undefined);
+  assert.equal(bodyOf(mt.last()).get("name"), "Bevölkerung");
+});

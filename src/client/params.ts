@@ -6,7 +6,8 @@
 // "no filter". The enumerated parameters (language, category, the criteria,
 // format) must be one of the values exported below; pagelength is an integer
 // from 1 to MAX_PAGELENGTH and timeslices a non-negative integer. Valid values
-// are sent as-is, never trimmed.
+// are sent as-is, never trimmed — only normalised to Unicode NFC, which GENESIS
+// matches.
 //
 // The Regionaldatenbank's whole point is the regional dimension: on `data/*`
 // requests, `regionalvariable` picks the regional level (e.g. KREISE, GEMEIN)

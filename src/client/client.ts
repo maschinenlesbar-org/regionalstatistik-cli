@@ -101,13 +101,27 @@ function paramsOf(params: unknown, keys: readonly string[], options: unknown = {
   assertValid("params", params, plainObjectProblem);
   const copy = { ...(params as object) } as QueryParams;
   assertRequestParams(copy, keys, options as ParamOptions);
+  for (const [key, value] of Object.entries(copy)) {
+    if (typeof value === "string") copy[key] = normalizeText(value);
+  }
   return copy;
+}
+
+/**
+ * Text as GENESIS matches it: Unicode NFC (P11). A term typed or pasted in decomposed
+ * form ("o" + U+0308, as macOS file names and some clipboards produce) looks identical
+ * but matched nothing — live on the destatis host (same GENESIS software), `find
+ * "Bevölkerung"` decomposed answered every list `null`, composed 80 tables. Nothing
+ * else is changed (no trimming: values are sent as given).
+ */
+function normalizeText(value: string): string {
+  return value.normalize("NFC");
 }
 
 /** Validate a request object's required `name` (the object code) and its parameters. */
 function named(name: string, params: unknown, keys: readonly string[], options: unknown): QueryParams {
   assertValid("name", name, nonBlankProblem);
-  return { name, ...paramsOf(params, keys, options) } as QueryParams;
+  return { name: normalizeText(name), ...paramsOf(params, keys, options) } as QueryParams;
 }
 
 /** Options for the Regionalstatistik client (engine options plus credentials). */

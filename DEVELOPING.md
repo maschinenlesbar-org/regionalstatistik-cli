@@ -173,6 +173,13 @@ What the library rejects:
   guard of its own: `action()` rewords this error with the flags, env vars and
   signup URL (exit 2, message unchanged).
 
+Text is sent in Unicode NFC (P11): every string parameter and the object `name` are
+normalised (`normalizeText` in `client.ts`), nothing else — no trimming, values go out
+as given. A decomposed umlaut (macOS clipboards, file names) looks the same but matches
+nothing: live on the sibling destatis host (same GENESIS software, 2026-10-06), `find`
+with a decomposed "Bevölkerung" answered every list `null`, the composed term 80
+tables. Credentials are never normalised.
+
 Request defaults: neither side fills in a value the caller did not give. The CLI
 has no `.default()` for `--language` or `find --category`, so an omitted value is
 not sent — by the CLI or the library — and GENESIS applies its own defaults
