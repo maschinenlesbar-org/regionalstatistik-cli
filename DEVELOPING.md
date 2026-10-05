@@ -102,8 +102,21 @@ What the library rejects:
   and so does a blank credential env var in the CLI; only a blank credential
   *flag* is a CLI usage error, because it would silently cancel an env
   credential. Messages never echo the value. The CLI's
-  `parseHeaderValue`/`parseCredential` (and the env-var check in `action()`) call
-  the same rules.
+  `parseHeaderValue`/`parseCredential` (and the env-var check in `program.ts`)
+  call the same rules; the secret flags use `parseSecret`, which throws
+  `RegionalstatistikUsageError` naming the flag and the reason only (commander's
+  own wording, `argument '<value>' is invalid`, would print the password).
+- **Redaction on output** (`run.ts`, `withRedactedOutput`, P1): commander echoes
+  rejected values and names unknown commands and options as typed, so `run()`
+  wraps `deps.io` first and replaces, on stdout and stderr, the userinfo of every
+  URL-like argument (`credentialsIn`, exported, parseable or not) with `***@`, and
+  the whole values of `--token`/`--username`/`--password`, of the three
+  `REGIONALSTATISTIK_*` variables and of any token-shaped argument (`looksLikeToken`) with
+  `***` (`redactSecrets`: whole occurrences only, values under 4 characters
+  skipped). `withoutStrayValues` drops the value from commander's "too many
+  arguments" and `--x=value` "unknown option" errors, and from "unknown command"
+  unless it reads like a command name — that is where a secret typed without its
+  flag lands.
 - **Base URL** (`baseUrlProblem`, run by the engine constructor on the raw
   `baseUrl` before the trailing-slash strip): an unparsable URL, a scheme other
   than `http:`/`https:`, embedded userinfo (`https://u:p@host` would become a Basic

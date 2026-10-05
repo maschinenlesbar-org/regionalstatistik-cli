@@ -234,7 +234,8 @@ test("a credential with surrounding whitespace is rejected, not silently trimmed
   const flag = makeCli(() => jsonResponse(fx.loginOk));
   assert.equal(await run(["--username", " spaced user ", "--password", "p", "logincheck"], flag.deps), 2);
   assert.equal(flag.mt.calls.length, 0);
-  assert.match(flag.err.join("\n"), /leading or trailing whitespace/);
+  assert.match(flag.err.join("\n"), /--username <user>' is invalid: Value has leading or trailing whitespace/);
+  assert.doesNotMatch(flag.err.join("\n"), /spaced user/);
 
   const env = makeCli(() => jsonResponse(fx.loginOk), {
     REGIONALSTATISTIK_USERNAME: "testuser",
@@ -690,11 +691,11 @@ test("a --base-url with a path prefix still works", async () => {
 test("a --base-url with embedded userinfo is rejected at parse time", async () => {
   const cli = makeCli(() => jsonResponse(fx.whoami));
   const code = await run(["--base-url", "https://USER:PASS@www.regionalstatistik.de", "hello"], cli.deps);
-  // Rejected before any request is issued, with the conventional usage exit
-  // code. (commander echoes the user's own argv value in its usage error; the
-  // leak this closes is credentials reaching *API error messages / CI logs* on
-  // a later HTTP error, which redactUrl also masks.)
+  // Rejected before any request is issued, with the conventional usage exit code.
+  // Commander echoes the rejected value in its usage error; run() redacts the
+  // userinfo from every line it prints (P1), so the password never shows.
   assert.equal(code, 2);
   assert.equal(cli.mt.calls.length, 0);
   assert.match(cli.err.join("\n"), /Must not embed credentials/);
+  assert.doesNotMatch(cli.err.join("\n"), /USER:PASS/);
 });

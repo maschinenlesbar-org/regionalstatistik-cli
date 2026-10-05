@@ -12,11 +12,8 @@
 
 import { MAX_TIMEOUT_MS, nodeHttpTransport, type Transport } from "./http.js";
 import { buildQueryString, type QueryParams } from "./query.js";
+import { RegionalstatistikApiError, RegionalstatistikParseError, credentialsIn, redactCredentials } from "./errors.js";
 import { assertValid, baseUrlProblem, headerNameProblem, headerValueProblem, intRangeProblem } from "./validate.js";
-import {
-  RegionalstatistikApiError,
-  RegionalstatistikParseError,
-} from "./errors.js";
 
 export const DEFAULT_BASE_URL = "https://www.regionalstatistik.de";
 const DEFAULT_USER_AGENT = "regionalstatistik-cli";
@@ -164,6 +161,11 @@ function sanitizeServerText(text: string): string {
 export function redactUrl(rawUrl: string): string {
   try {
     const u = new URL(rawUrl);
+    // `user:pw@host` without a scheme parses as a URL with the scheme "user:": no
+    // userinfo, so cut the credentials out by text.
+    if (!u.username && !u.password && credentialsIn(rawUrl).length > 0) {
+      return redactCredentials(rawUrl, credentialsIn(rawUrl));
+    }
     for (const key of ["username", "password"]) {
       if (u.searchParams.has(key)) u.searchParams.set(key, "***");
     }
@@ -172,7 +174,9 @@ export function redactUrl(rawUrl: string): string {
     if (u.password) u.password = "***";
     return u.toString();
   } catch {
-    return rawUrl;
+    // A value that doesn't parse (a port typo, an unencoded "#" in the password) can
+    // still carry credentials: cut them out by text.
+    return redactCredentials(rawUrl, credentialsIn(rawUrl));
   }
 }
 

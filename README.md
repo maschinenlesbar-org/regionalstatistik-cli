@@ -47,6 +47,9 @@ command line is the one used. Only `regstat hello` works without credentials
 Credentials are sent exactly as given: a blank credential flag, or one with
 leading or trailing whitespace (which an HTTP header cannot carry), is refused
 with exit 2; a blank env var counts as unset.
+No message repeats a credential: the CLI prints `***` in place of the token,
+username and password (from flags or env vars) and of any `user:pass@` in a URL,
+wherever they would appear — a usage error, an unknown command, the server's echo.
 
 Credentials travel in HTTP header fields, so they can hold only Latin-1
 characters (up to U+00FF). A character beyond that (`€`, an emoji) is refused

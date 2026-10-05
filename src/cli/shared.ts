@@ -91,6 +91,22 @@ export function parseCredential(value: string): string {
 }
 
 /**
+ * Build the commander value-parser for a secret flag (`--token`, `--username`,
+ * `--password`): the library's `credentialProblem`, like {@link parseCredential},
+ * but a rejection never repeats the value. Commander words an `InvalidArgumentError`
+ * as `option '--password <pass>' argument '<the value>' is invalid`, which put a
+ * password pasted with a trailing space on stderr; this parser throws a
+ * `RegionalstatistikUsageError` naming the flag and the reason only (exit 2 all the same).
+ */
+export function parseSecret(flags: string): (value: string) => string {
+  return (value: string) => {
+    const reason = credentialProblem(value);
+    if (reason !== undefined) throw new RegionalstatistikUsageError(`option '${flags}' is invalid: ${reason}`);
+    return value;
+  };
+}
+
+/**
  * Build a commander value-parser for an integer constrained to [min, max]: the
  * string is parsed here, the range is the library's rule (`intRangeProblem`).
  */
