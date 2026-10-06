@@ -99,8 +99,8 @@ regstat data tablefile 12411-01-01-4 --region-key "08*" --format ffcsv -o bevoel
 
 Every command prints the API's JSON envelope (including the `Copyright`
 attribution and a `Status` object). `-o <file>` writes it (or a download) to a
-file instead; `-o -` means stdout. See **[Usage.md](Usage.md)** for the full
-command reference and **[GLOSSARY.md](GLOSSARY.md)** for the regional concepts
+file instead; `-o -` means stdout. See **[Usage.md](https://github.com/maschinenlesbar-org/regionalstatistik-cli/blob/main/Usage.md)** for the full
+command reference and **[GLOSSARY.md](https://github.com/maschinenlesbar-org/regionalstatistik-cli/blob/main/GLOSSARY.md)** for the regional concepts
 (AGS/ARS keys, regionale Tiefe, Kreis/Gemeinde levels, `Status.Code` values).
 
 ## Library use
@@ -151,7 +151,7 @@ return `url: r.url`: a response from another origin is then refused.
   in the body; this client inspects `Status.Code` and raises
   `RegionalstatistikApiError` for real errors. Authentication failures arrive as
   a flat `{Code, Content, Type}` JSON on HTTP 401/404 — mapped too (see
-  [DEVELOPING.md](DEVELOPING.md)).
+  [DEVELOPING.md](https://github.com/maschinenlesbar-org/regionalstatistik-cli/blob/main/DEVELOPING.md)).
 - **The data belongs to the Statistische Ämter des Bundes und der Länder, not
   us** — governed by DL-DE-BY-2.0. See **[DATA_LICENSE.md](DATA_LICENSE.md)**.
 - **Code license:** AGPL-3.0-or-later **OR** commercial — see
@@ -160,7 +160,7 @@ return `url: r.url`: a response from another origin is then refused.
 
 ## Claude Code skills
 
-Three [Agent Skills](SKILLS.md) teach Claude Code to use this CLI for real questions:
+Three [Agent Skills](https://github.com/maschinenlesbar-org/regionalstatistik-cli/blob/main/SKILLS.md) teach Claude Code to use this CLI for real questions:
 turn a regional topic into an object code (**regionalstatistik-statistics-finder**), fetch its
 numbers by region and year (**regionalstatistik-data-fetch**), and export tables to CSV or
 Excel (**regionalstatistik-table-download**). Install them from the maschinenlesbar.org marketplace:
@@ -170,7 +170,7 @@ Excel (**regionalstatistik-table-download**). Install them from the maschinenles
 /plugin install regionalstatistik@maschinenlesbar
 ```
 
-See **[SKILLS.md](SKILLS.md)** for details.
+See **[SKILLS.md](https://github.com/maschinenlesbar-org/regionalstatistik-cli/blob/main/SKILLS.md)** for details.
 
 ## Development
 
@@ -181,4 +181,4 @@ npm test           # builds, then runs node --test on dist/test
 npm run typecheck
 ```
 
-See [DEVELOPING.md](DEVELOPING.md) for architecture and API specifics.
+See [DEVELOPING.md](https://github.com/maschinenlesbar-org/regionalstatistik-cli/blob/main/DEVELOPING.md) for architecture and API specifics.

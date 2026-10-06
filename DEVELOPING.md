@@ -449,7 +449,11 @@ login check, shared with destatis-genesis-cli), and, from the 2026-10-06 follow-
 round, P20 (`conformance-p20-cleartext-warning`: a remote plain-`http:` base URL
 gets one `warning:` line on stderr; the base-URL-variable case is skipped — regstat
 reads none — and so is the userinfo case, because `--base-url` rejects userinfo as
-a usage error; the secret case runs `logincheck` with `--token`).
+a usage error; the secret case runs `logincheck` with `--token`) and P21
+(`conformance-p21-readme-links`: README.md ships in the npm tarball and is shown on
+npmjs.com, so a relative link in it must point to a file `package.json` `files`
+ships — `DATA_LICENSE.md`, `LICENSING.md`, `CONTRIBUTING.md`; any other document is
+linked as `https://github.com/maschinenlesbar-org/regionalstatistik-cli/blob/main/<path>`).
 
 ## Verified live (2026-07-13, without an account)
 
