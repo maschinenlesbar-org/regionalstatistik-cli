@@ -49,7 +49,10 @@ not used. Fields mix: `--username` on the command line takes its password from
 (and `regstat logincheck`, which then answers as the guest user `GAST`).
 Credentials are sent exactly as given: a blank credential flag, or one with
 leading or trailing whitespace (which an HTTP header cannot carry), is refused
-with exit 2; a blank env var counts as unset.
+with exit 2; a blank env var counts as unset. A `--password` value that starts
+with `--` is refused too (exit 2, nothing sent): `--password --compact` almost
+always means the password is missing and the next option was taken for it. A
+password that really starts with `--` goes in `REGIONALSTATISTIK_PASSWORD`.
 No message repeats a credential: the CLI prints `***` in place of the token,
 username and password (from flags or env vars) and of any `user:pass@` in a URL,
 wherever they would appear — a usage error, an unknown command, the server's echo.

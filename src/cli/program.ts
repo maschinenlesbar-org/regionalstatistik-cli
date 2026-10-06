@@ -16,6 +16,7 @@ import {
   parseBoundedInt,
   CREDENTIAL_ENV,
   parseHeaderValue,
+  parsePassword,
   parseSecret,
   parseNonEmpty,
   parseBaseUrl,
@@ -86,7 +87,7 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
     .option("--base-url <url>", "API base URL", parseBaseUrl, "https://www.regionalstatistik.de")
     .option("--token <token>", "GENESIS API token (env: REGIONALSTATISTIK_API_TOKEN)", parseSecret("--token <token>"))
     .option("--username <user>", "GENESIS account username (env: REGIONALSTATISTIK_USERNAME)", parseSecret("--username <user>"))
-    .option("--password <pass>", "GENESIS account password (env: REGIONALSTATISTIK_PASSWORD)", parseSecret("--password <pass>"))
+    .option("--password <pass>", "GENESIS account password (env: REGIONALSTATISTIK_PASSWORD)", parsePassword("--password <pass>"))
     .addOption(
       // No .default(): an omitted --language is not sent, exactly like the library,
       // and GENESIS answers in German.

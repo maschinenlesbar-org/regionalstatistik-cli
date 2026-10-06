@@ -233,7 +233,11 @@ rejected by the library (see above) and reworded by the CLI with the flags (exit
 (`parseCredential`, the library's `credentialProblem`); an env value is seeded unchecked and validated in
 `shared.ts:action()` only when the command is about to send it, so a malformed
 env var never breaks `--help`, `--version`, `hello` or a run whose flag
-overrides it. No
+overrides it. `--password` has its own parser (`parsePassword`): a value that
+starts with `--` is a usage error naming `REGIONALSTATISTIK_PASSWORD`, because
+commander takes the next argument as the value of an option that needs one and
+`--password --compact` used to send `--compact` (decision of 2026-10-06; CLI only —
+argv is where the ambiguity is, the library and the env var take any password). No
 credential is ever bundled.
 
 Answers are decoded by the charset their `Content-Type` names (`decodeBody`,

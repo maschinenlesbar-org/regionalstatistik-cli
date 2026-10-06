@@ -805,3 +805,31 @@ test("P20: an http base URL names what travels with the requests: the login, the
   assert.equal(await run(["--base-url", "http://mirror.example", "logincheck"], half.deps), 2);
   assert.deepEqual(warningOf(half.err), []);
 });
+
+test("--password whose value starts with -- is a usage error pointing to the env var; no request", async () => {
+  for (const argv of [
+    ["--username", "testuser", "--password", "--compact", "logincheck"],
+    ["--username", "testuser", "--password=--s3cret-pw", "logincheck"],
+  ]) {
+    const cli = makeCli(() => jsonResponse(fx.loginOk));
+    assert.equal(await run(argv, cli.deps), 2, argv.join(" "));
+    assert.equal(cli.mt.calls.length, 0);
+    const err = cli.err.join("\n");
+    assert.match(err, /option '--password <pass>' is invalid: the value starts with "--"/);
+    assert.match(err, /REGIONALSTATISTIK_PASSWORD/);
+    assert.ok(!err.includes("s3cret-pw"), err);
+  }
+});
+
+test("a password that starts with -- still works from REGIONALSTATISTIK_PASSWORD, and a lone - is fine as a flag", async () => {
+  const env = makeCli(() => jsonResponse(fx.loginOk), {
+    REGIONALSTATISTIK_USERNAME: "testuser",
+    REGIONALSTATISTIK_PASSWORD: "--s3cret-pw",
+  });
+  assert.equal(await run(["logincheck"], env.deps), 0);
+  assert.equal(env.mt.last().headers?.["password"], "--s3cret-pw");
+
+  const dash = makeCli(() => jsonResponse(fx.loginOk));
+  assert.equal(await run(["--username", "testuser", "--password", "-s3cret-pw", "logincheck"], dash.deps), 0);
+  assert.equal(dash.mt.last().headers?.["password"], "-s3cret-pw");
+});

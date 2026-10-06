@@ -107,6 +107,29 @@ export function parseSecret(flags: string): (value: string) => string {
 }
 
 /**
+ * commander value-parser for `--password`: {@link parseSecret}, and a value that
+ * starts with `--` is refused. Commander takes the next argument as the value of an
+ * option that needs one, so `--password --compact logincheck` sent `--compact` as
+ * the password: such a value is almost always a missing password that swallowed
+ * the next option. The usage error names neither value and points to
+ * `REGIONALSTATISTIK_PASSWORD` for a password that really starts with `--` (the
+ * environment has no such ambiguity, and the library takes any password).
+ */
+export function parsePassword(flags: string): (value: string) => string {
+  const secret = parseSecret(flags);
+  return (value: string) => {
+    if (value.startsWith("--")) {
+      throw new RegionalstatistikUsageError(
+        `option '${flags}' is invalid: the value starts with "--", so the password is probably missing ` +
+          `and the next option was taken as the password. A password that really starts with "--" goes in ` +
+          `${CREDENTIAL_ENV.password} instead.`,
+      );
+    }
+    return secret(value);
+  };
+}
+
+/**
  * Build a commander value-parser for an integer constrained to [min, max]: the
  * string is parsed here, the range is the library's rule (`intRangeProblem`).
  */
