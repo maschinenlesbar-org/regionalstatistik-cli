@@ -5,7 +5,7 @@
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
 import type { CliDeps } from "./io.js";
-import type { RawResponse } from "../client/engine.js";
+import { cleartextProblem, DEFAULT_BASE_URL, type RawResponse } from "../client/engine.js";
 import type { RegionalstatistikClientOptions } from "../client/client.js";
 import {
   RegionalstatistikError,
@@ -380,6 +380,20 @@ function warnArgvCredentials(deps: CliDeps, command: Command): void {
 }
 
 /**
+ * Warn (once, to stderr) when the base URL is plain `http:` to a host other than
+ * loopback (the library's `cleartextProblem`): the requests, and with them the
+ * token or the login when one is sent, travel unencrypted. The line names the host
+ * and what is sent — "the token", "the login" — never a value. Called after the
+ * client is built and before the first request, so `--help`, `--version` and a
+ * parse-time usage error never warn; stdout and the exit code are untouched.
+ */
+function warnCleartext(deps: CliDeps, global: GlobalOptions, creds: ResolvedCredentials): void {
+  const secrets = creds.token !== undefined ? ["the token"] : creds.present ? ["the login"] : [];
+  const problem = cleartextProblem(global.baseUrl ?? DEFAULT_BASE_URL, secrets);
+  if (problem !== undefined) deps.io.err(`warning: ${problem}`);
+}
+
+/**
  * Validate the credentials about to be sent that came from an env var. A flag
  * value was already checked by its commander parser; an env value is seeded
  * unchecked (see program.ts readEnv) so that a malformed one only fails the run
@@ -463,6 +477,7 @@ export function action(
     }
     // A half username/password pair gets the library's pair error, reworded.
     const client = createClient(deps, toClientOptions(global, creds));
+    warnCleartext(deps, global, creds);
     if (creds.present) warnArgvCredentials(deps, command);
     await withCredentialsHint(() => fn({ client, global, opts: command.opts() }, positionals));
   };

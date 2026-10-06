@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MAX_RETRIES, MAX_RETRY_AFTER_MS, RequestEngine, parseRetryAfter, redactUrl } from "../src/client/engine.js";
+import { MAX_RETRIES, MAX_RETRY_AFTER_MS, RequestEngine, cleartextProblem, parseRetryAfter, redactUrl } from "../src/client/engine.js";
 import { MAX_TIMEOUT_MS } from "../src/client/http.js";
 import {
   RegionalstatistikValidationError,
@@ -702,4 +702,18 @@ test("server text in an error stays on one line, without bidi overrides (result 
     assert.match(err.message, /Nutzernamen bzw\. das Passwort\.\) Error: ok$/);
     return true;
   });
+});
+
+test("cleartextProblem: one sentence naming the host and the secrets, never their values", () => {
+  assert.equal(cleartextProblem("https://www.regionalstatistik.de"), undefined);
+  assert.equal(cleartextProblem("not a url"), undefined);
+  for (const loopback of ["http://localhost:8080", "http://127.0.0.1", "http://127.8.9.10:1", "http://[::1]:9"]) {
+    assert.equal(cleartextProblem(loopback, ["the token"]), undefined, loopback);
+  }
+  assert.equal(cleartextProblem("http://mirror.example:81"), "requests to mirror.example:81 are sent unencrypted (http:, not https:)");
+  assert.equal(cleartextProblem("http://mirror.example", ["the login"]), "the login is sent unencrypted to mirror.example (http:, not https:)");
+  assert.equal(
+    cleartextProblem("http://u:pw-value@mirror.example", ["the token"]),
+    "the token and the base URL's credentials are sent unencrypted to mirror.example (http:, not https:)",
+  );
 });

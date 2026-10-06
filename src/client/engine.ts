@@ -41,6 +41,39 @@ import {
 } from "./validate.js";
 
 export const DEFAULT_BASE_URL = "https://www.regionalstatistik.de";
+
+/** True for a loopback host: `localhost`, 127.0.0.0/8 or `::1` (as URL#hostname spells it). */
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "[::1]" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
+}
+
+/**
+ * Whether requests to `baseUrl` would travel unencrypted, as one sentence for a
+ * warning (without a `warning: ` prefix), or `undefined` when they would not: for
+ * `https:`, for a URL that does not parse, and for a loopback host (`localhost`,
+ * 127.0.0.0/8, `::1`), where nothing leaves the machine.
+ *
+ * The sentence names the host (`url.host`: host and port, never the userinfo) and what
+ * secret travels with the requests: the base URL's credentials when it carries
+ * userinfo (which `baseUrlProblem` rejects for a client, but the check stays general),
+ * and every phrase in `secrets` — noun phrases such as `"the token"` or `"the login"`.
+ * It never contains a password or token. The CLI prints it once per run as
+ * `warning: <sentence>` on stderr.
+ */
+export function cleartextProblem(baseUrl: string, secrets: readonly string[] = []): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== "http:" || isLoopbackHost(url.hostname)) return undefined;
+  const userinfo = url.username !== "" || url.password !== "";
+  const phrases = [...secrets, ...(userinfo ? ["the base URL's credentials"] : [])];
+  if (phrases.length === 0) return `requests to ${url.host} are sent unencrypted (http:, not https:)`;
+  const verb = phrases.length === 1 && !userinfo ? "is" : "are";
+  return `${phrases.join(" and ")} ${verb} sent unencrypted to ${url.host} (http:, not https:)`;
+}
 const DEFAULT_USER_AGENT = "regionalstatistik-cli";
 // The charset is REQUIRED: without it GENESIS decodes the body as Latin-1, so a
 // UTF-8 umlaut (e.g. "Bevölkerung") arrives mojibaked and matches nothing.

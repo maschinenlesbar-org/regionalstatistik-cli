@@ -28,7 +28,7 @@ error (exit 2), not "the last one wins".
 |---|---|
 | `--username <u>` · `--password <p>` | account login (env `REGIONALSTATISTIK_USERNAME` / `REGIONALSTATISTIK_PASSWORD`) |
 | `--token <t>` | API token (env `REGIONALSTATISTIK_API_TOKEN`); wins over username/password, but a `--username`/`--password` flag beats a token from the env var |
-| `--base-url <url>` | API base (default `https://www.regionalstatistik.de`); `http(s)` only, a path prefix is fine, but no query, fragment, userinfo, whitespace or control characters |
+| `--base-url <url>` | API base (default `https://www.regionalstatistik.de`); `http(s)` only, a path prefix is fine, but no query, fragment, userinfo, whitespace or control characters. A plain `http:` URL to a host other than loopback prints one `warning:` line on stderr (see below) |
 | `--language <de\|en>` | response language (not sent unless given; the server default is `de`; English labels are partial) |
 | `--pagelength <n>` | max list results, `1..25000` (server default 100) |
 | `--timeout <ms>` · `--max-retries <n>` · `--max-response-bytes <n>` | transport tuning |
@@ -36,6 +36,21 @@ error (exit 2), not "the last one wins".
 | `--compact` | single-line JSON |
 | `-o, --output <file>` | write output (JSON, or a download) to a file instead of stdout; `-o -` means stdout |
 | `--force` | overwrite the `--output` file if it already exists (otherwise the run is refused before any request is sent — also when a symlink, even a dangling one, sits at that path) |
+
+**Plain `http:`.** With a `--base-url` on plain `http:` to a host other than
+loopback (`localhost`, `127.0.0.0/8`, `::1`), each run writes one line to stderr
+before its first request, naming the host and what is sent unencrypted:
+
+```text
+warning: the login is sent unencrypted to mirror.example:8080 (http:, not https:)
+warning: the token is sent unencrypted to mirror.example:8080 (http:, not https:)
+warning: requests to mirror.example:8080 are sent unencrypted (http:, not https:)
+```
+
+"the login" is a username + password, "the token" token mode, and the last form
+is a run that sends no credentials (`hello`, a guest `logincheck`). The line never
+contains a credential; stdout and the exit code are unchanged, and `--help`,
+`--version` and a usage error (one found before the first request) print none.
 
 ## hello / logincheck
 

@@ -69,6 +69,15 @@ export REGIONALSTATISTIK_USERNAME="your-username"
 export REGIONALSTATISTIK_PASSWORD="your-password"
 ```
 
+**Base URL.** `--base-url` (default `https://www.regionalstatistik.de`) takes
+`http:` too, for a local mirror or a test server. When it points at plain `http:`
+on a host other than loopback (`localhost`, `127.0.0.0/8`, `::1`), every run prints
+one stderr line before the first request, naming the host and what travels in
+the clear — `warning: the login is sent unencrypted to mirror.example (http:, not https:)`,
+"the token" in token mode, or just `requests to … are sent unencrypted` for
+`hello`. It never shows a credential, and stdout and the exit code stay as they
+are. Library users get the same check as `cleartextProblem(baseUrl, secrets)`.
+
 ## Quickstart
 
 Table codes look like `12411-01-01-4` — statistic `12411` (Fortschreibung des

@@ -738,3 +738,30 @@ test("-o - writes to stdout and creates no file named '-' (P12)", async () => {
   assert.equal(raw.files.size, 0);
   assert.match(raw.err.join("\n"), /Wrote 6 bytes to stdout/);
 });
+
+test("P20: an http base URL names what travels with the requests: the login, the token, or nothing", async () => {
+  const warningOf = (err: string[]) => err.filter((l) => l.startsWith("warning: "));
+  const login = makeCli(() => jsonResponse(fx.loginOk), {
+    REGIONALSTATISTIK_USERNAME: "USER123456",
+    REGIONALSTATISTIK_PASSWORD: "pw-s3cret-value",
+  });
+  assert.equal(await run(["--base-url", "http://mirror.example:8080", "logincheck"], login.deps), 0);
+  assert.deepEqual(warningOf(login.err), [
+    "warning: the login is sent unencrypted to mirror.example:8080 (http:, not https:)",
+  ]);
+  assert.ok(!login.err.join("\n").includes("pw-s3cret-value"));
+
+  const token = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_API_TOKEN: "0123456789abcdef0123456789abcdef" });
+  assert.equal(await run(["--base-url", "http://mirror.example", "logincheck"], token.deps), 0);
+  assert.deepEqual(warningOf(token.err), ["warning: the token is sent unencrypted to mirror.example (http:, not https:)"]);
+
+  // hello sends no credentials, even with a login in the environment.
+  const hello = makeCli(() => jsonResponse(fx.whoami), { REGIONALSTATISTIK_API_TOKEN: "0123456789abcdef0123456789abcdef" });
+  assert.equal(await run(["--base-url", "http://mirror.example", "hello"], hello.deps), 0);
+  assert.deepEqual(warningOf(hello.err), ["warning: requests to mirror.example are sent unencrypted (http:, not https:)"]);
+
+  // A usage error found before the first request (half a login) does not warn.
+  const half = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_USERNAME: "USER123456" });
+  assert.equal(await run(["--base-url", "http://mirror.example", "logincheck"], half.deps), 2);
+  assert.deepEqual(warningOf(half.err), []);
+});

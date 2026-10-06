@@ -398,6 +398,14 @@ for every transport (P5):
   of scope; note they use the **uppercase** `/genesisWS` path, so cross-pointing
   mostly 404s — use the right sibling CLI instead. The data terms also differ
   (rely on the response `Copyright`).
+- **Plain `http:` warning** (P20): `cleartextProblem(baseUrl, secrets)` in
+  `engine.ts` (exported) returns one sentence when requests to the base URL travel
+  unencrypted — `undefined` for `https:`, an unparseable URL and loopback
+  (`localhost`, `127.0.0.0/8`, `::1`). It names `url.host` and the secret phrases it
+  is given, never a value. `action()` in `shared.ts` (`warnCleartext`) prints it as
+  `warning: <sentence>` once per run, after the client is built (so a half login,
+  a usage error, never warns) and before the first request, passing "the token"
+  in token mode and "the login" for a username + password, nothing for `hello`.
 
 ## Deliberate divergences from destatis-genesis-cli (summary)
 
@@ -431,6 +439,17 @@ real network in the suite. Beyond the cloned destatis coverage, the
 regionalstatistik-specific behaviour under test: flat Code 15/Code 2 mapping on
 both 200 and 401/404 replies, `isNotFound` suppression for 404+Code 2, the 405
 on GET, and the BOM-prefixed HTML error page (`engine.test.ts`, `cli.test.ts`).
+
+`test/conformance-p*.test.ts` are the checks shared across the maschinenlesbar.org
+CLIs, copied with only their adapter block changed: P1 (credentials in CLI output),
+P2 (in library objects and errors), P4/P19 (configuration validation), P5 (the
+transport contract), P6 (retry policy), P7 (pipes and exit codes; runs the built
+bin), P8/P9/P13 (charset, response shapes, validation errors), P18 (the GENESIS
+login check, shared with destatis-genesis-cli), and, from the 2026-10-06 follow-up
+round, P20 (`conformance-p20-cleartext-warning`: a remote plain-`http:` base URL
+gets one `warning:` line on stderr; the base-URL-variable case is skipped — regstat
+reads none — and so is the userinfo case, because `--base-url` rejects userinfo as
+a usage error; the secret case runs `logincheck` with `--token`).
 
 ## Verified live (2026-07-13, without an account)
 
