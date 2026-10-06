@@ -258,12 +258,15 @@ function refuseOverwrite(path: string): RegionalstatistikUsageError {
 
 /**
  * Write bytes to the --output file, guarding against an accidental overwrite and
- * wrapping raw filesystem errors in a typed usage error. Refuses to clobber an
- * existing file — or to write through a symlink, dangling or not — unless --force
- * is set (fail-secure: no silent data loss), and turns an ENOENT/EISDIR/EACCES
- * from writeFile into a clean RegionalstatistikUsageError instead of an untyped
- * "Unexpected error: ENOENT: …". `action()` already refused an existing path
- * before the request; this re-check catches one that appeared meanwhile.
+ * wrapping raw filesystem errors in a typed error. Refuses to clobber an existing
+ * file — or to write through a symlink, dangling or not — unless --force is set
+ * (fail-secure: no silent data loss; a usage error, exit 2, like the same refusal
+ * before the request), and turns an ENOENT/EISDIR/EACCES from writeFile into a
+ * clean RegionalstatistikError (exit 1) instead of an untyped "Unexpected error:
+ * ENOENT: …": the request has been made and answered by then, so a write that
+ * fails is a runtime failure, not a usage error. `action()` already refused an
+ * existing path before the request; this re-check catches one that appeared
+ * meanwhile.
  */
 function writeOutputFile(deps: CliDeps, global: GlobalOptions, path: string, data: Buffer): void {
   const force = global.force === true;
@@ -275,7 +278,7 @@ function writeOutputFile(deps: CliDeps, global: GlobalOptions, path: string, dat
   } catch (err) {
     if (!force && (err as NodeJS.ErrnoException | undefined)?.code === "EEXIST") throw refuseOverwrite(path);
     const reason = err instanceof Error ? err.message : String(err);
-    throw new RegionalstatistikUsageError(`Could not write to "${path}": ${reason}`);
+    throw new RegionalstatistikError(`Could not write to "${path}": ${reason}`, { cause: err });
   }
 }
 

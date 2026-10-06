@@ -581,13 +581,14 @@ test("--force allows overwriting an existing --output file", async () => {
   assert.match(cli.files.get("/tmp/out.json")?.toString("utf8") ?? "", /12411-01-01-4/);
 });
 
-test("a filesystem write error surfaces as a typed usage error, not Unexpected", async () => {
+test("a filesystem write error after the request is a runtime error (exit 1), not usage or Unexpected", async () => {
   const cli = makeCli(() => jsonResponse(fx.tablesList));
   cli.deps.io.writeFile = () => {
     throw new Error("EACCES: permission denied, open '/root/out.json'");
   };
   const code = await run([...TOKEN, "--output", "/root/out.json", "catalogue", "tables"], cli.deps);
-  assert.equal(code, 2);
+  assert.equal(code, 1);
+  assert.equal(cli.mt.calls.length, 1);
   assert.match(cli.err.join("\n"), /Could not write to .*EACCES/);
   assert.doesNotMatch(cli.err.join("\n"), /Unexpected error/);
 });
@@ -832,4 +833,20 @@ test("a password that starts with -- still works from REGIONALSTATISTIK_PASSWORD
   const dash = makeCli(() => jsonResponse(fx.loginOk));
   assert.equal(await run(["--username", "testuser", "--password", "-s3cret-pw", "logincheck"], dash.deps), 0);
   assert.equal(dash.mt.last().headers?.["password"], "-s3cret-pw");
+});
+
+test("a download whose -o write fails exits 1; an existing -o file is still a usage error (exit 2) before the request", async () => {
+  const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00]);
+  const failing = makeCli(() => rawResponse(zip, "application/zip"));
+  failing.deps.io.writeFile = () => {
+    throw new Error("ENOENT: no such file or directory, open 'missing-dir/t.zip'");
+  };
+  assert.equal(await run([...TOKEN, "data", "tablefile", "12411-01-01-4", "-o", "missing-dir/t.zip"], failing.deps), 1);
+  assert.equal(failing.mt.calls.length, 1);
+  assert.match(failing.err.join("\n"), /^Error: Could not write to "missing-dir\/t\.zip": ENOENT/m);
+
+  const existing = makeCli(() => rawResponse(zip, "application/zip"));
+  existing.files.set("t.zip", Buffer.from("old"));
+  assert.equal(await run([...TOKEN, "data", "tablefile", "12411-01-01-4", "-o", "t.zip"], existing.deps), 2);
+  assert.equal(existing.mt.calls.length, 0);
 });

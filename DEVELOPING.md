@@ -387,7 +387,10 @@ for every transport (P5):
 - **Zero runtime HTTP dependencies** — only `commander`. Strict TS + ESM.
 - **Exit codes** (`run.ts`): help/version → 0 (commander's own exit code 0);
   usage/credential error → 2, including a missing command (bare `regstat`,
-  `regstat data`), which prints the help to stderr;
+  `regstat data`), which prints the help to stderr, and an existing `-o` file
+  without `--force`; an `-o` write that fails after the answer is in →
+  `RegionalstatistikError`, exit 1 (`writeOutputFile`; it was 2 until the
+  2026-10-06 follow-up round);
   not-found → 4; other errors → 1 (including auth failures, which additionally
   print a credentials hint).
 - **Retry/backoff:** transient `429`/`503` retried up to `maxRetries` (0..`MAX_RETRIES` = 10, enforced by the engine),

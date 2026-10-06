@@ -164,6 +164,12 @@ for anything else (credentials, `98` too large, an empty body). An HTML page (a
 maintenance or proxy page) is refused the same way, exit **1** — unless it is a
 ZIP, or you asked for `--format html`.
 
+`-o` refuses an existing file (without `--force`) before the request is sent —
+a usage error, exit **2**. A write that fails after the answer is in (a
+directory that doesn't exist, no permission) prints `Error: Could not write to
+"<file>": …` and exits **1**: the request was made, so it is a runtime failure,
+not a usage error.
+
 ```bash
 regstat data tablefile 12411-01-01-4 --region-key "08*" --format ffcsv -o bevoelkerung-bw.zip
 ```
@@ -173,8 +179,8 @@ regstat data tablefile 12411-01-01-4 --region-key "08*" --format ffcsv -o bevoel
 | Code | Meaning |
 |---|---|
 | `0` | success (`--help`, `help` and `--version` included); also an **empty result** — see note |
-| `1` | API/logical error (including auth failures — Code 15/2, also on HTTP 200 — and any `Status.Code` other than 0, 22, 50, 104 or 90), network or parse error |
-| `2` | usage error (missing/partial credentials, bad flags/arguments, unknown command, and no command at all: bare `regstat` or `regstat data` prints the help to stderr and exits 2) |
+| `1` | API/logical error (including auth failures — Code 15/2, also on HTTP 200 — and any `Status.Code` other than 0, 22, 50, 104 or 90), network or parse error, and an `-o` file that can't be written once the answer is in (a missing directory, no permission) |
+| `2` | usage error (missing/partial credentials, bad flags/arguments, unknown command, an existing `-o` file without `--force`, and no command at all: bare `regstat` or `regstat data` prints the help to stderr and exits 2) |
 | `4` | object not found — logical `Status.Code 90`, or an HTTP 404 without a GENESIS code (see note), and a `data <kind>file` download for a code that does not exist (`Status.Code 104`) |
 
 A reader that stops early (`regstat catalogue tables '12411*' | head`) ends the run
