@@ -380,6 +380,30 @@ function warnArgvCredentials(deps: CliDeps, command: Command): void {
 }
 
 /**
+ * Say on stderr when a `--username`/`--password` flag set a token from
+ * `REGIONALSTATISTIK_API_TOKEN` aside (see {@link resolveCredentials}): the run then
+ * logs in with a username and password, or — with `--username` alone and no
+ * password anywhere — fails with the pair error, and without this line the user
+ * may not realise the token was not used. Names the flag and the variable, never a
+ * value. Printed before the pair check, so it explains that error too.
+ */
+function noteEnvTokenSetAside(
+  deps: CliDeps,
+  global: GlobalOptions,
+  fromCli: CredentialSources,
+  creds: ResolvedCredentials,
+): void {
+  if (fromCli.token || nonBlank(global.token) === undefined || creds.token !== undefined) return;
+  const flags = [fromCli.username ? "--username" : undefined, fromCli.password ? "--password" : undefined]
+    .filter((f) => f !== undefined)
+    .join(" and ");
+  deps.io.err(
+    `Note: the token from ${CREDENTIAL_ENV.token} is not used: ${flags} on the command line ` +
+      "selects a username and password login (the other half may come from its environment variable).",
+  );
+}
+
+/**
  * Warn (once, to stderr) when the base URL is plain `http:` to a host other than
  * loopback (the library's `cleartextProblem`): the requests, and with them the
  * token or the login when one is sent, travel unencrypted. The line names the host
@@ -468,11 +492,13 @@ export function action(
     let creds: ResolvedCredentials = { present: false };
     if (opts.auth !== false) {
       const root = rootCommand(command);
-      creds = resolveCredentials(global, {
+      const fromCli: CredentialSources = {
         token: root.getOptionValueSource("token") === "cli",
         username: root.getOptionValueSource("username") === "cli",
         password: root.getOptionValueSource("password") === "cli",
-      });
+      };
+      creds = resolveCredentials(global, fromCli);
+      noteEnvTokenSetAside(deps, global, fromCli, creds);
       checkEnvCredentials(root, creds);
     }
     // A half username/password pair gets the library's pair error, reworded.

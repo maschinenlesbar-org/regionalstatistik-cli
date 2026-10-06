@@ -141,6 +141,46 @@ test("a lone --username flag with an env token is a usage error, not a silent to
   assert.equal(code, 2);
   assert.equal(cli.mt.calls.length, 0);
   assert.match(cli.err.join("\n"), /BOTH --username and --password/);
+  // ...and says that the env token was set aside, before the pair error.
+  assert.equal(
+    cli.err[0],
+    "Note: the token from REGIONALSTATISTIK_API_TOKEN is not used: --username on the command line " +
+      "selects a username and password login (the other half may come from its environment variable).",
+  );
+});
+
+test("a --username flag combines with REGIONALSTATISTIK_PASSWORD (flag wins per field)", async () => {
+  const cli = makeCli(() => jsonResponse(fx.loginOk), {
+    REGIONALSTATISTIK_USERNAME: "envuser",
+    REGIONALSTATISTIK_PASSWORD: "envpass",
+  });
+  assert.equal(await run(["--username", "flaguser", "logincheck"], cli.deps), 0);
+  assert.equal(cli.mt.last().headers?.["username"], "flaguser");
+  assert.equal(cli.mt.last().headers?.["password"], "envpass");
+  // No env token, so nothing was set aside and there is no note.
+  assert.ok(!cli.err.some((l) => l.startsWith("Note:")), cli.err.join("\n"));
+});
+
+test("the set-aside note names each flag, never a value, and is absent without an env token or with --token", async () => {
+  const both = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_API_TOKEN: "envtok0000000000" });
+  assert.equal(await run(["--username", "flaguser", "--password", "flagpass", "logincheck"], both.deps), 0);
+  const notes = both.err.filter((l) => l.startsWith("Note:"));
+  assert.equal(notes.length, 1);
+  assert.match(notes[0]!, /--username and --password on the command line/);
+  assert.ok(!both.err.join("\n").includes("envtok0000000000"));
+
+  const flagToken = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_API_TOKEN: "envtok" });
+  assert.equal(await run([...TOKEN, "--username", "u1", "--password", "p1", "logincheck"], flagToken.deps), 0);
+  assert.ok(!flagToken.err.some((l) => l.startsWith("Note:")));
+
+  const envOnly = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_API_TOKEN: "envtok" });
+  assert.equal(await run(["logincheck"], envOnly.deps), 0);
+  assert.deepEqual(envOnly.err, []);
+
+  // hello takes no credentials: nothing is resolved, nothing is set aside.
+  const hello = makeCli(() => jsonResponse(fx.whoami), { REGIONALSTATISTIK_API_TOKEN: "envtok" });
+  assert.equal(await run(["--username", "flaguser", "hello"], hello.deps), 0);
+  assert.ok(!hello.err.some((l) => l.startsWith("Note:")));
 });
 
 test("an explicit --token flag still beats --username/--password flags", async () => {

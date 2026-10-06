@@ -26,8 +26,8 @@ error (exit 2), not "the last one wins".
 
 | Flag | Meaning |
 |---|---|
-| `--username <u>` · `--password <p>` | account login (env `REGIONALSTATISTIK_USERNAME` / `REGIONALSTATISTIK_PASSWORD`) |
-| `--token <t>` | API token (env `REGIONALSTATISTIK_API_TOKEN`); wins over username/password, but a `--username`/`--password` flag beats a token from the env var |
+| `--username <u>` · `--password <p>` | account login (env `REGIONALSTATISTIK_USERNAME` / `REGIONALSTATISTIK_PASSWORD`); per field, so `--username` from a flag can take its password from the env var |
+| `--token <t>` | API token (env `REGIONALSTATISTIK_API_TOKEN`); wins over username/password, but a `--username`/`--password` flag beats a token from the env var — the CLI then says on stderr that the env token is not used |
 | `--base-url <url>` | API base (default `https://www.regionalstatistik.de`); `http(s)` only, a path prefix is fine, but no query, fragment, userinfo, whitespace or control characters. A plain `http:` URL to a host other than loopback prints one `warning:` line on stderr (see below) |
 | `--language <de\|en>` | response language (not sent unless given; the server default is `de`; English labels are partial) |
 | `--pagelength <n>` | max list results, `1..25000` (server default 100) |

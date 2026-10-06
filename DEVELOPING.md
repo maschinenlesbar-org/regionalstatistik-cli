@@ -224,7 +224,11 @@ with precedence **flag > env > unset** (`--username`/`--password` seeded from
 `REGIONALSTATISTIK_API_TOKEN`, in `program.ts`; values checked by the library's
 `credentialProblem`, precedence in `shared.ts:resolveCredentials`). A token wins over username/password, except
 that a `--username`/`--password` *flag* beats an env-only token (commander's
-value source tells flag from env); supplying only one of username/password is
+value source tells flag from env), and `action()` then says so on stderr
+(`noteEnvTokenSetAside`: `Note: the token from REGIONALSTATISTIK_API_TOKEN is not
+used: …`, the flag named, no value), before any pair error. Fields mix: `--username`
+from a flag takes its password from `REGIONALSTATISTIK_PASSWORD` (flag wins per
+field, by decision of 2026-10-06); supplying only one of username/password is
 rejected by the library (see above) and reworded by the CLI with the flags (exit 2). Flag values are checked by their parser
 (`parseCredential`, the library's `credentialProblem`); an env value is seeded unchecked and validated in
 `shared.ts:action()` only when the command is about to send it, so a malformed
