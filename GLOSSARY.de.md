@@ -99,6 +99,11 @@ dieselbe Struktur mit 401/404:
 | beliebig | Fehler / Error | allgemeiner Fehler | Fehler, Exit 1 |
 | jeder andere | Information / Warnung | kein dokumentierter Erfolgscode | Fehler, Exit 1 (nie als Daten ausgegeben) |
 
+Die Zuordnung ist bewusst streng: Ein Code, den diese CLI nicht kennt, schlägt
+laut fehl (Exit 1), statt mit einer Warnung als Daten durchzugehen. Ein HTTP 404
+ohne GENESIS-Code – etwa die HTML-Fehlerseite eines falschen Pfads – gilt als
+„nicht gefunden“, Exit 4.
+
 ## Platzhalter für den Wertstatus
 
 In einer CSV aus `data/table` kann eine Zelle statt einer Zahl ein Statuszeichen enthalten:

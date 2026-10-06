@@ -850,3 +850,11 @@ test("a download whose -o write fails exits 1; an existing -o file is still a us
   assert.equal(await run([...TOKEN, "data", "tablefile", "12411-01-01-4", "-o", "t.zip"], existing.deps), 2);
   assert.equal(existing.mt.calls.length, 0);
 });
+
+test("an HTML 404 page (wrong path) exits 4 without printing the page", async () => {
+  const page = '﻿<!DOCTYPE html>\n<html lang="de"><body>Seite nicht gefunden</body></html>';
+  const cli = makeCli(() => rawResponse(page, "text/html", 404));
+  assert.equal(await run([...TOKEN, "--base-url", "https://www.regionalstatistik.de/wrong", "find", "x"], cli.deps), 4);
+  assert.doesNotMatch(cli.err.join("\n"), /<html|Seite nicht gefunden/);
+  assert.deepEqual(cli.out, []);
+});

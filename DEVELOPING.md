@@ -274,6 +274,10 @@ in a `Status` object (`{ Code, Content, Type }`). After a successful parse,
 | any `Type` = `Fehler`/`Error` | → `RegionalstatistikApiError` (exit 1), even without a numeric `Code` |
 | any other code, whatever its `Type` (`Information`, `Warnung`) | → `RegionalstatistikApiError` (exit 1) — never data with exit 0 |
 
+The strict mapping of unknown codes is deliberate and was confirmed on
+2026-10-06: an unknown code fails loudly rather than passing as data with a
+warning.
+
 The code is read as a number, a numeric string (`"90"`) included (`statusCode`).
 
 A `data/*file` endpoint answers with a file (a ZIP wrapper), so `postRaw` treats
@@ -312,7 +316,9 @@ misleading HTTP status (verified live on both hosts):
 HTTP 404 as "object not found" when the body carried **no** GENESIS code —
 otherwise the 404-for-bad-credentials would masquerade as a missing object and
 exit 4. destatis-genesis-cli exits 4 in that case; this repo deliberately does
-not. Key off the numeric `Code`, never the German/English `Type` text alone.
+not. A 404 *without* a code — the BOM-prefixed HTML page of a wrong path — stays
+`isNotFound`, exit 4 (confirmed 2026-10-06; the page itself is never printed).
+Key off the numeric `Code`, never the German/English `Type` text alone.
 
 `helloworld/logincheck` is different again (P18): it answers HTTP **200** whether
 or not the credentials are right, with a *string* `Status` and the `Username` the
@@ -332,7 +338,8 @@ success text wins over the token echo, since whether GENESIS echoes a *valid*
 token is unknown (no account to check). An error word anywhere in the text wins
 over a success word, so a future notice appended to the success text that
 contains one ("nicht", "Fehler") would turn a good login into exit 1 — loudly,
-not silently. Shared with destatis-genesis-cli:
+not silently. That word-based verdict is the documented limitation, kept by
+decision of 2026-10-06 (Usage.md says so too). Shared with destatis-genesis-cli:
 `test/conformance-p18-genesis-access-check.test.ts`.
 
 ### 4. `data/*` payloads are opaque — and regional

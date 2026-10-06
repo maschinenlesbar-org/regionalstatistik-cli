@@ -100,6 +100,11 @@ with 401/404:
 | any | Fehler / Error | general error | error, exit 1 |
 | any other | Information / Warnung | not a documented success code | error, exit 1 (never returned as data) |
 
+The mapping is strict on purpose: a code this CLI doesn't know fails loudly
+(exit 1) instead of passing as data with a warning. An HTTP 404 that carries no
+GENESIS code — the HTML error page of a wrong path, for instance — counts as
+"not found", exit 4.
+
 ## Value-status placeholders
 
 In a `data/table` CSV, a cell may be a status symbol instead of a number:
