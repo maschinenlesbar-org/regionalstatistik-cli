@@ -26,6 +26,8 @@ import { registerFindCommand } from "./commands/find.js";
 import { registerCatalogueCommands } from "./commands/catalogue.js";
 import { registerMetadataCommands } from "./commands/metadata.js";
 import { registerDataCommands } from "./commands/data.js";
+import { registerConfigCommands } from "./commands/config.js";
+import { CredentialStore } from "./credentials.js";
 
 /**
  * Single source of truth for the version: read from package.json at runtime
@@ -50,6 +52,7 @@ export const defaultDeps: CliDeps = {
   io: defaultIO,
   createClient: (options) => new RegionalstatistikClient(options),
   env: process.env,
+  credentials: () => CredentialStore.fromEnv(process.env),
 };
 
 /**
@@ -80,7 +83,8 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
         "(https://www.regionalstatistik.de) — official statistics of the Bund and " +
         "Länder down to Kreis and Gemeinde level. Needs a free account: pass " +
         "--username/--password (env REGIONALSTATISTIK_USERNAME / REGIONALSTATISTIK_PASSWORD) " +
-        "or --token (env REGIONALSTATISTIK_API_TOKEN). Register at " +
+        "or --token (env REGIONALSTATISTIK_API_TOKEN), or store them once with " +
+        "`regstat config set token` (or `username` and `password`). Register at " +
         "https://www.regionalstatistik.de/genesis/online; `regstat hello` needs no credentials.",
     )
     .version(VERSION)
@@ -121,7 +125,9 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
 
   // Seed each credential flag from its env var (blank treated as unset).
   // commander treats these as the option's value, which an explicit flag on the
-  // command line overrides during parse: flag > env var > unset, per field.
+  // command line overrides during parse: flag > env var > unset, per field. Only
+  // when neither gives any credential does action() (shared.ts) read the login from
+  // the credentials file (`regstat config`).
   const env = deps.env ?? process.env;
   const tokenEnv = readEnv(env, CREDENTIAL_ENV.token);
   const userEnv = readEnv(env, CREDENTIAL_ENV.username);
@@ -135,6 +141,7 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
   registerCatalogueCommands(program, deps);
   registerMetadataCommands(program, deps);
   registerDataCommands(program, deps);
+  registerConfigCommands(program, deps);
 
   return program;
 }

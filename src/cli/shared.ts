@@ -5,6 +5,7 @@
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
 import type { CliDeps } from "./io.js";
+import type { CredentialStore } from "./credentials.js";
 import { cleartextProblem, DEFAULT_BASE_URL, type RawResponse } from "../client/engine.js";
 import type { RegionalstatistikClientOptions } from "../client/client.js";
 import {
@@ -24,6 +25,9 @@ import {
   type Problem,
 } from "../client/validate.js";
 import type { Language } from "../client/params.js";
+
+/** The names the login is stored under in the credentials file (`regstat config set token`). */
+export const CREDENTIAL_NAMES = ["token", "username", "password"] as const;
 
 /**
  * commander value-parser: a non-negative integer in plain decimal notation.
@@ -464,6 +468,41 @@ function checkEnvCredentials(root: Command, creds: ResolvedCredentials): void {
 }
 
 /**
+ * The login from the credentials file (`regstat config`), for a run where neither a
+ * flag nor an environment variable gives any credential. The same rules as for flags
+ * and env apply: a token wins over a username and password; a username without a
+ * password (or the reverse) is a usage error, worded for the file. Every value is
+ * checked with the library's `credentialProblem` (the file may have been edited by
+ * hand) and named, never shown; the values are added to the run's redaction.
+ */
+function storedCredentials(deps: CliDeps, store: CredentialStore): ResolvedCredentials {
+  const all = store.all();
+  const stored: Partial<Record<(typeof CREDENTIAL_NAMES)[number], string>> = {};
+  for (const name of CREDENTIAL_NAMES) {
+    const value = all[name];
+    if (value === undefined) continue;
+    const reason = credentialProblem(value);
+    if (reason !== undefined) {
+      throw new RegionalstatistikError(
+        `The ${name} in the credentials file ${store.path} is not usable: ${reason} ` +
+          `\`regstat config set ${name}\` replaces it.`,
+      );
+    }
+    stored[name] = value;
+  }
+  deps.io.redact?.(Object.values(stored));
+  const creds = resolveCredentials(stored);
+  if (creds.token === undefined && (creds.username === undefined) !== (creds.password === undefined)) {
+    const [has, missing] = creds.username !== undefined ? ["username", "password"] : ["password", "username"];
+    throw new RegionalstatistikUsageError(
+      `The credentials file ${store.path} holds a ${has} but no ${missing}; ` +
+        `\`regstat config set ${missing}\` stores it (or store a token instead).`,
+    );
+  }
+  return creds;
+}
+
+/**
  * Run a command body, rewording the library's "this endpoint needs an account"
  * error with the flags and env vars that supply credentials, and the signup URL.
  */
@@ -476,6 +515,7 @@ async function withCredentialsHint(body: () => Promise<void>): Promise<void> {
         "This command needs credentials. Set --username/--password " +
           "(env REGIONALSTATISTIK_USERNAME / REGIONALSTATISTIK_PASSWORD) " +
           "or --token (env REGIONALSTATISTIK_API_TOKEN). " +
+          "Or store them once with `regstat config set token` (or `username` and `password`). " +
           "A free account is available at https://www.regionalstatistik.de/genesis/online.",
         { cause: err },
       );
@@ -523,9 +563,18 @@ export function action(
         username: root.getOptionValueSource("username") === "cli",
         password: root.getOptionValueSource("password") === "cli",
       };
-      creds = resolveCredentials(global, fromCli);
-      noteEnvTokenSetAside(deps, global, fromCli, creds);
-      checkEnvCredentials(root, creds);
+      const given = [global.token, global.username, global.password].some((v) => nonBlank(v) !== undefined);
+      if (!given && deps.credentials !== undefined) {
+        // flags > env vars > the credentials file (`regstat config`) > none. The file
+        // is read only here, when neither flags nor env vars give any credential, so a
+        // login is never pieced together from two places, and a problem with the file
+        // never stands in the way of a login given another way.
+        creds = storedCredentials(deps, deps.credentials());
+      } else {
+        creds = resolveCredentials(global, fromCli);
+        noteEnvTokenSetAside(deps, global, fromCli, creds);
+        checkEnvCredentials(root, creds);
+      }
     }
     // A half username/password pair gets the library's pair error, reworded.
     const client = createClient(deps, toClientOptions(global, creds));

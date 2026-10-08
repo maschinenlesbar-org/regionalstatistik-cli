@@ -39,7 +39,9 @@ is bundled with this tool.
 | Username + password | `--username <u>` / `--password <p>` | `REGIONALSTATISTIK_USERNAME` / `REGIONALSTATISTIK_PASSWORD` |
 | Token | `--token <t>` | `REGIONALSTATISTIK_API_TOKEN` |
 
-Precedence per field is **flag > env var > unset**; a token takes precedence
+Precedence per field is **flag > env var > the credentials file > unset** (the
+file is consulted only when no flag and no env var gives any credential — see
+*Store it once* below); a token takes precedence
 over username/password — except that a `--username`/`--password` **flag** beats
 a token from `REGIONALSTATISTIK_API_TOKEN`, so the account you name on the
 command line is the one used, and the CLI says on stderr that the env token is
@@ -54,7 +56,7 @@ with `--` is refused too (exit 2, nothing sent): `--password --compact` almost
 always means the password is missing and the next option was taken for it. A
 password that really starts with `--` goes in `REGIONALSTATISTIK_PASSWORD`.
 No message repeats a credential: the CLI prints `***` in place of the token,
-username and password (from flags or env vars) and of any `user:pass@` in a URL,
+username and password (from flags, env vars or the credentials file) and of any `user:pass@` in a URL,
 wherever they would appear — a usage error, an unknown command, the server's echo.
 
 Credentials travel in HTTP header fields, so they can hold only Latin-1
@@ -68,12 +70,37 @@ in that encoding has not been verified.
 > `/proc`) to other local users and is persisted in your shell history — the
 > account *password* is especially sensitive. The CLI prints a one-line stderr
 > warning when it detects a flag-supplied credential. Set the env var instead;
-> it takes effect whenever the corresponding flag is absent.
+> it takes effect whenever the corresponding flag is absent — or store the login
+> once with `regstat config set` (below).
 
 ```bash
 export REGIONALSTATISTIK_USERNAME="your-username"
 export REGIONALSTATISTIK_PASSWORD="your-password"
 ```
+
+**Or store it once**, in a credentials file of its own (the same mechanism as
+[openka-cli](https://github.com/maschinenlesbar-org/openka-cli)'s `ka config`):
+
+```bash
+regstat config set username                  # typed at a prompt, without echo
+regstat config set password
+regstat config set token                     # or a token instead of the pair
+printf %s "$TOKEN" | regstat config set token  # or piped in
+regstat config get token                     # masked: 0123…cdef (--reveal prints it whole)
+regstat config list                          # what is stored, and where (a password shows as ****)
+regstat config unset password
+```
+
+The value is never taken from the command line, so it reaches neither shell history
+nor `ps`. The file is `$XDG_CONFIG_HOME/regionalstatistik/credentials` (else
+`~/.config/regionalstatistik/credentials`): mode 0600 in a directory of mode 0700,
+replaced atomically, and not read at all while anyone else could read it. It is
+consulted only when no flag and no env var gives any credential — no token, no
+username, no password — so a login is never pieced together from two places; from the
+file, too, a token wins over username and password, and a username without a password
+is refused (exit 2). A stored value follows the same rules as a flag (no surrounding
+whitespace, Latin-1 only; spaces inside a password are fine) and is kept out of the
+output like one from the environment.
 
 **Base URL.** `--base-url` (default `https://www.regionalstatistik.de`) takes
 `http:` too, for a local mirror or a test server. When it points at plain `http:`

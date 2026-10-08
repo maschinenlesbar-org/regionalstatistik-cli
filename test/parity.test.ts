@@ -738,7 +738,7 @@ test("parity #2 control: a username/password pair sends the identical request", 
 // ---- Finding 11 (PAT-7): which endpoints need credentials ------------------------------
 
 const NEEDS_CLI =
-  /^Error: This command needs credentials\. Set --username\/--password \(env REGIONALSTATISTIK_USERNAME \/ REGIONALSTATISTIK_PASSWORD\) or --token \(env REGIONALSTATISTIK_API_TOKEN\)\. A free account is available at https:\/\/www\.regionalstatistik\.de\/genesis\/online\.$/m;
+  /^Error: This command needs credentials\. Set --username\/--password \(env REGIONALSTATISTIK_USERNAME \/ REGIONALSTATISTIK_PASSWORD\) or --token \(env REGIONALSTATISTIK_API_TOKEN\)\. Or store them once with `regstat config set token` \(or `username` and `password`\)\. A free account is available at https:\/\/www\.regionalstatistik\.de\/genesis\/online\.$/m;
 const NEEDS_LIB = /^Invalid credentials: This endpoint needs an account \(a token, or a username and password\)\.$/;
 
 const noCredCases: Array<{

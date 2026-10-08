@@ -95,7 +95,9 @@ const SECRET_ENVS = ["REGIONALSTATISTIK_API_TOKEN", "REGIONALSTATISTIK_USERNAME"
  *   JSON-escaped forms; values under 4 characters are skipped (`redactSecrets`).
  *
  * A pattern alone can't delimit a password with spaces, quotes, `#`, `?` or `/`; the
- * exact strings can. Without secrets the output passes through unchanged.
+ * exact strings can. Without secrets the output passes through unchanged. The
+ * returned `io.redact` adds secrets that become known later — the login read from the
+ * credentials file (`regstat config`), which is in neither argv nor the environment.
  */
 export function withRedactedOutput(deps: CliDeps, argv: readonly string[]): CliDeps {
   const env = deps.env ?? process.env;
@@ -125,13 +127,24 @@ export function withRedactedOutput(deps: CliDeps, argv: readonly string[]): CliD
     if (eq > 0 && SECRET_FLAGS.includes(token.slice(0, eq))) addSecret(token.slice(eq + 1));
   });
   for (const value of values) if (looksLikeToken(value)) addSecret(value);
-  if (userinfo.size === 0 && [...secrets].every((s) => s.trim().length < 4)) return deps;
   const urlList = [...userinfo];
-  const secretList = [...secrets];
-  const redact = (text: string): string => redactSecrets(redactCredentials(text, urlList), secretList);
+  let secretList = [...secrets];
+  const redact = (text: string): string =>
+    urlList.length === 0 && secretList.every((s) => s.trim().length < 4)
+      ? text
+      : redactSecrets(redactCredentials(text, urlList), secretList);
   return {
     ...deps,
-    io: { ...deps.io, out: (text) => deps.io.out(redact(text)), err: (text) => deps.io.err(redact(text)) },
+    io: {
+      ...deps.io,
+      out: (text) => deps.io.out(redact(text)),
+      err: (text) => deps.io.err(redact(text)),
+      // A login read from the credentials file (`action()`) is kept out the same way.
+      redact: (more) => {
+        for (const value of more) addSecret(value);
+        secretList = [...secrets];
+      },
+    },
   };
 }
 
@@ -172,11 +185,12 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
       // takes no credentials (`hello` — a 401/403 there is a wrong --base-url or
       // a proxy, not a login problem).
       if (err.isAuthError && err.credentialsSent === true) {
-        deps.io.err("Hint: check your credentials (--token or --username/--password).");
+        deps.io.err("Hint: check your credentials (--token or --username/--password, or the ones stored with `regstat config`).");
       } else if (err.isAuthError && err.credentialsSent === false) {
         deps.io.err(
           "Hint: GENESIS refused the request without credentials. Set --token (env REGIONALSTATISTIK_API_TOKEN) " +
-            "or --username/--password (env REGIONALSTATISTIK_USERNAME / REGIONALSTATISTIK_PASSWORD).",
+            "or --username/--password (env REGIONALSTATISTIK_USERNAME / REGIONALSTATISTIK_PASSWORD), " +
+            "or store them once with `regstat config set token` (or `username` and `password`).",
         );
       }
       // Map "object not found" (logical 90 / HTTP 404) to a distinct exit code.

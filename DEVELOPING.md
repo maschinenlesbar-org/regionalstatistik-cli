@@ -131,7 +131,8 @@ What the library rejects:
   wraps `deps.io` first and replaces, on stdout and stderr, the userinfo of every
   URL-like argument (`credentialsIn`, exported, parseable or not) with `***@`, and
   the whole values of `--token`/`--username`/`--password`, of the three
-  `REGIONALSTATISTIK_*` variables and of any token-shaped argument (`looksLikeToken`) with
+  `REGIONALSTATISTIK_*` variables, of a login read from the credentials file (added
+  later through `io.redact`) and of any token-shaped argument (`looksLikeToken`) with
   `***` (`redactSecrets`: whole occurrences only, values under 4 characters
   skipped). `withoutStrayValues` drops the value from commander's "too many
   arguments" and `--x=value` "unknown option" errors, and from "unknown command"
@@ -239,6 +240,31 @@ commander takes the next argument as the value of an option that needs one and
 `--password --compact` used to send `--compact` (decision of 2026-10-06; CLI only —
 argv is where the ambiguity is, the library and the env var take any password). No
 credential is ever bundled.
+
+The third source is the **credentials file**, the CLI's, not the library's:
+`src/cli/credentials.ts` (`CredentialStore`, the same mechanism as openka-cli's `ka
+config` and dip-bundestag-cli's `dip config`) and `regstat config set|get|unset|list`
+(`src/cli/commands/config.ts`, names `token`, `username`, `password`). The file is
+`$XDG_CONFIG_HOME/regionalstatistik/credentials` (else
+`$HOME/.config/regionalstatistik/credentials`): JSON, mode 0600 in a 0700 directory,
+replaced atomically (temp file + rename); a link, another user's file or one others can
+read is refused with a `RegionalstatistikError` (exit 1) naming `chmod 600`. It reaches
+the CLI through `CliDeps.credentials`, which only `defaultDeps` sets, so a test that
+does not ask for one never reads the user's file. `action()` reads it only for a
+command that sends credentials (not `hello`) and only when **no** flag and no env var
+gives any credential (`storedCredentials`): a login is never pieced together from two
+places, and a problem with the file never stands in the way of a login given another
+way. From the file the usual rules hold — a token wins over username/password; half a
+pair is a usage error naming the missing half; each value must pass the library's
+`credentialProblem` (named, never shown) — and the values are handed to
+`io.redact`, so they are kept out of the output like env credentials. `config set`
+reads through `CliIO.readSecret` (`readSecretFrom`: raw mode without echo on a terminal,
+the whole input from a pipe), never from argv (excess arguments are refused without
+being repeated); only line ends are dropped, and the value must pass
+`credentialValueProblem` (not blank, no control character) and `credentialProblem` —
+spaces inside are allowed, since a password may hold them, and a password starting with
+`--` is fine (the `parsePassword` ambiguity exists only in argv). `config get` and
+`list` mask a token or username as `abcd…wxyz` and a password always as `****`.
 
 Answers are decoded by the charset their `Content-Type` names (`decodeBody`,
 `TextDecoder`; UTF-8 when none, a byte-order mark dropped); an unknown label is a

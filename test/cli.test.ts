@@ -429,7 +429,7 @@ test("the live 404 + flat Code 2 reply (bad credentials) exits 1, not 4", async 
   const errText = cli.err.join("\n");
   assert.match(errText, /GENESIS status 2/);
   assert.match(errText, /Nutzernamen/);
-  assert.match(errText, /Hint: check your credentials \(--token or --username\/--password\)\./);
+  assert.match(errText, /Hint: check your credentials \(--token or --username\/--password, or the ones stored with `regstat config`\)\./);
   assert.doesNotMatch(errText, /Unexpected error/);
 });
 
