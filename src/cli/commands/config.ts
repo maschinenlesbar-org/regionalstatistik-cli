@@ -73,6 +73,17 @@ export function registerConfigCommands(program: Command, deps: CliDeps): void {
             "The one given is now in your shell history; if it is a secret, replace it there.",
         );
       }
+      // The global --token, --username and --password are not read here either: a user who
+      // knows them will try `config set password --password SECRET`, which used to store
+      // stdin without a word.
+      for (const [option, flag] of [["token", "--token"], ["username", "--username"], ["password", "--password"]] as const) {
+        if (command.getOptionValueSourceWithGlobals(option) === "cli") {
+          throw new RegionalstatistikUsageError(
+            "regstat config set takes the name only: the value is read from a prompt or from stdin, never from the command line, " +
+              `and ${flag} is not read here. The one given is now in your shell history; if it is a secret, replace it there.`,
+          );
+        }
+      }
       const name = credentialNameArg(command, "regstat config set");
       if (deps.io.readSecret === undefined) {
         throw new RegionalstatistikUsageError("No way to read a secret here: pipe it in, or run regstat config set on a terminal.");

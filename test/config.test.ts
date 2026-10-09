@@ -836,3 +836,35 @@ test("a password a server echoes form-encoded (a space as +) is replaced in the 
     }
   }
 });
+
+test("config set refuses a credential given with --token, --username or --password instead of silently storing stdin", async () => {
+  const flagValue = "flagvalue12345-abcdefgh";
+  for (const flag of ["--token", "--username", "--password"]) {
+    for (const name of ["token", "username", "password"]) {
+      for (const argv of [
+        ["config", "set", name, flag, flagValue],
+        [flag, flagValue, "config", "set", name],
+        ["config", "set", name, `${flag}=${flagValue}`],
+      ]) {
+        const cli = makeCli({ secret: "stdinvalue12345-abcdefgh" });
+        try {
+          assert.equal(await run(argv, cli.deps), 2, argv.join(" "));
+          assert.equal(cli.store.get(name), undefined, `${argv.join(" ")}: nothing stored`);
+          const err = cli.err.join("\n");
+          assert.match(err, new RegExp(`takes the name only.*${flag} is not read here.*shell history`), argv.join(" "));
+          assert.ok(!err.includes(flagValue), "the flag's value is not repeated");
+        } finally {
+          cli.cleanup();
+        }
+      }
+    }
+  }
+  // REGIONALSTATISTIK_API_TOKEN is not a value given on the command line: config set reads stdin as before.
+  const env = makeCli({ secret: TOKEN, env: { REGIONALSTATISTIK_API_TOKEN: "envtoken-1234567" } });
+  try {
+    assert.equal(await run(["config", "set", "token"], env.deps), 0);
+    assert.equal(env.store.get("token"), TOKEN);
+  } finally {
+    env.cleanup();
+  }
+});

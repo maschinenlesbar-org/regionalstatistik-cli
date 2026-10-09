@@ -29,7 +29,8 @@ Precedence is flag > env var > the credentials file > unset. `regstat config` ke
 login in `$XDG_CONFIG_HOME/regionalstatistik/credentials` (else
 `~/.config/regionalstatistik/credentials`), mode 0600, written atomically; `config set
 <token|username|password>` reads the value from a prompt without echo or from stdin (at
-most 64 KiB), never from the command line; `config get` shows it masked (`abcd…wxyz`;
+most 64 KiB), never from the command line (an extra argument, or a value given with `--token`,
+`--username` or `--password`, is a usage error, exit 2, nothing stored, and the value is not repeated); `config get` shows it masked (`abcd…wxyz`;
 `****` for a password and for any value below 20 characters; `--reveal` prints it
 whole); `config list` and `config unset` do what they say. `regstat config` prints to
 stdout only and refuses `-o` (exit 2). The file is read
