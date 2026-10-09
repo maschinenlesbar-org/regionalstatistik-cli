@@ -80,6 +80,8 @@ export function registerConfigCommands(program: Command, deps: CliDeps): void {
       // Only the line ends go: a value with spaces around it is refused, not trimmed
       // into another password.
       const value = (await deps.io.readSecret(`${name}: `)).replace(/[\r\n]+$/, "");
+      // A secret of this run from here on, like a flag's or a variable's value.
+      deps.io.redact?.([value]);
       const reason = valueProblem(value);
       if (reason !== undefined) throw new RegionalstatistikUsageError(`${reason} Nothing was stored.`);
       const store = storeOf(deps);
@@ -98,6 +100,7 @@ export function registerConfigCommands(program: Command, deps: CliDeps): void {
       const store = storeOf(deps);
       const value = store.get(name);
       if (value === undefined) throw new RegionalstatistikError(`No ${name} is stored in ${store.path}; regstat config set ${name} stores one.`);
+      deps.io.redact?.([value]);
       // --reveal prints the value as stored: the run's redaction (a credential from a flag
       // or a variable that happens to occur in it) would hand a script a wrong value with
       // exit 0.

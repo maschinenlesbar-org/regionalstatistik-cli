@@ -266,7 +266,8 @@ places, and a problem with the file never stands in the way of a login given ano
 way. From the file the usual rules hold — a token wins over username/password; half a
 pair is a usage error naming the missing half; each value must pass the library's
 `credentialProblem` (named, never shown) — and the values are handed to
-`io.redact`, so they are kept out of the output like env credentials. `config set`
+`io.redact`, so they are kept out of the output like env credentials; `config get` and
+`config set` do the same with the value they read. `config set`
 reads through `CliIO.readSecret` (`readSecretFrom`: raw mode without echo on a terminal,
 the whole input from a pipe, at most 64 KiB either way: `MAX_SECRET_BYTES`), never from
 argv (excess arguments are refused without being repeated). On a terminal it drops

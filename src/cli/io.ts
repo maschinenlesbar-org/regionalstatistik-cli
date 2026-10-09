@@ -34,7 +34,8 @@ export interface CliIO {
   /**
    * Keep these values out of everything printed from here on, like the secrets of
    * the command line and the environment (`run()` sets it; `action()` calls it for a
-   * login read from the credentials file).
+   * login read from the credentials file, and `config get` and `config set` for the
+   * value they read).
    */
   redact?(secrets: readonly string[]): void;
 }

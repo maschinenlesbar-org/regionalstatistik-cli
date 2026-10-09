@@ -11,6 +11,7 @@ import { Readable } from "node:stream";
 import { EventEmitter } from "node:events";
 import { run } from "../src/cli/run.js";
 import { RegionalstatistikClient } from "../src/client/client.js";
+import { RegionalstatistikError } from "../src/client/errors.js";
 import type { CliDeps } from "../src/cli/io.js";
 import { readSecretFrom } from "../src/cli/io.js";
 import { CredentialStore, credentialValueProblem, maskCredential, resolveCredentialsPath } from "../src/cli/credentials.js";
@@ -599,6 +600,43 @@ test("config get --reveal prints the value as stored, untouched by the run's red
     // The same token exported and stored.
     assert.equal(await run(["config", "get", "token", "--reveal"], { ...cli.deps, env: { REGIONALSTATISTIK_API_TOKEN: TOKEN } }), 0);
     assert.deepEqual(cli.out, ["my pass word", "my pass word", TOKEN]);
+  } finally {
+    cli.cleanup();
+  }
+});
+
+test("every stored value is a secret of the run the moment it is read: no record shows it (C5)", async () => {
+  const personal = { token: "personal-token-of-another-shape-0123", username: "personal-user-0123", password: "personal pass 0123" };
+  for (const names of [["token"], ["username", "password"]] as const) {
+    const cli = makeCli();
+    try {
+      for (const name of names) cli.store.set(name, personal[name]);
+      for (const format of ["text", "jsonl"]) {
+        cli.err.length = 0;
+        // Whatever path a value takes to a message — here a client that quotes them all.
+        const deps: CliDeps = {
+          ...cli.deps,
+          createClient: (opts) => {
+            throw new RegionalstatistikError(`could not use ${String(opts.token)} ${String(opts.username)} ${String(opts.password)}`);
+          },
+        };
+        assert.equal(await run(["--log-format", format, "logincheck"], deps), 1);
+        const err = cli.err.join("\n");
+        assert.ok(!err.includes("personal"), `${format}: ${err}`);
+      }
+    } finally {
+      cli.cleanup();
+    }
+  }
+  // config set reads a value too: it is a secret of its run, should a message quote it.
+  const cli = makeCli({ secret: personal.password });
+  try {
+    const store = new CredentialStore(cli.store.path);
+    store.set = (name: string, value: string) => {
+      throw new RegionalstatistikError(`could not store ${name}: ${value}`);
+    };
+    assert.equal(await run(["config", "set", "password"], { ...cli.deps, credentials: () => store }), 1);
+    assert.match(cli.err.join("\n"), /could not store password: \*\*\*/);
   } finally {
     cli.cleanup();
   }
