@@ -156,7 +156,8 @@ What the library rejects:
   non-string `token`/`username`/`password`/`userAgent` (`Expected a string.`) are a
   `RegionalstatistikValidationError`, never a raw `TypeError` — and never sent: spreading a
   string parameter object used to send `0=x`. Server text in an error (`detail` and
-  the message) is cut at `MAX_MESSAGE_VALUE_LENGTH` (500) characters; `body` keeps the
+  the message) is cut at `MAX_MESSAGE_VALUE_LENGTH` (500) characters, never inside a
+  surrogate pair (`cutText`), so the message stays well-formed; `body` keeps the
   full answer. It is also put on one line (`sanitizeServerText`): C0/C1 controls and
   bidi overrides dropped, every run of whitespace — the live wrong-credentials
   text's `\n` included — one space, so a server can't split or forge a log
@@ -558,7 +559,9 @@ and `msg`. A record is always one line: `formatLogRecord` runs `escapeForRecord`
 the message (text) or the whole JSON object (jsonl), which writes CR and LF as `\r`/`\n`,
 every other C0 control but TAB, DEL and C1 as `\u00XX`, and U+2028, U+2029 and the bidi
 controls as `\uXXXX`, so no text that reaches a record, by whatever path, can split it,
-forge another one or steer the terminal. The areas are `cli` (usage errors, commander's messages, validation errors, the
+forge another one or steer the terminal. Before that a lone surrogate (half a
+character, which jq rejects, stopping the whole stream) becomes U+FFFD (`toWellFormed`).
+The areas are `cli` (usage errors, commander's messages, validation errors, the
 warning about a credential on the command line, the note that an env token was set aside,
 unexpected errors), `api` (GENESIS's error answers and the credentials hints), `http` (the
 connection: network errors, the cleartext warning), `config` (`regstat config`) and
