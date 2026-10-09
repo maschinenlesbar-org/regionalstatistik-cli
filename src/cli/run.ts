@@ -5,7 +5,7 @@
 import { CommanderError, type Command } from "commander";
 import { buildProgram, defaultDeps } from "./program.js";
 import { escapeControlChars } from "./shared.js";
-import { logOf, type CliDeps } from "./io.js";
+import { OutputError, OutputRefusedError, logOf, type CliDeps } from "./io.js";
 import { DEFAULT_LOG_FORMAT, createLogger, logFormatFromArgv, type LogFormat, type Logger } from "./log.js";
 import {
   RegionalstatistikApiError,
@@ -308,9 +308,10 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
     const log = logOf(deps);
     if (err instanceof RegionalstatistikValidationError || err instanceof RegionalstatistikUsageError) {
       // Bad/missing arguments or credentials -> conventional usage exit code. A
-      // RegionalstatistikValidationError is the library rejecting an input before
-      // any request (it extends RegionalstatistikUsageError; named for clarity).
-      log.error("cli", err.message);
+      // RegionalstatistikValidationError is the library rejecting an input before any
+      // request (it extends RegionalstatistikUsageError; named here for clarity). An
+      // existing -o file is a usage error too, logged in the area of the -o file.
+      log.error(err instanceof OutputRefusedError ? "output" : "cli", err.message);
       return 2;
     }
     if (err instanceof RegionalstatistikApiError) {
@@ -336,7 +337,7 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
       return 1;
     }
     if (err instanceof RegionalstatistikError) {
-      log.error(err instanceof RegionalstatistikNetworkError ? "http" : "cli", err.message);
+      log.error(err instanceof RegionalstatistikNetworkError ? "http" : err instanceof OutputError ? "output" : "cli", err.message);
       return 1;
     }
     log.error("cli", `Unexpected error: ${err instanceof Error ? err.message : String(err)}`);

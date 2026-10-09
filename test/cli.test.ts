@@ -846,7 +846,7 @@ test("a download whose -o write fails exits 1; an existing -o file is still a us
   };
   assert.equal(await run([...TOKEN, "data", "tablefile", "12411-01-01-4", "-o", "missing-dir/t.zip"], failing.deps), 1);
   assert.equal(failing.mt.calls.length, 1);
-  assert.match(untimed(failing.err.join("\n")), /^ERROR \[regstat\.cli\] Could not write to "missing-dir\/t\.zip": ENOENT/m);
+  assert.match(untimed(failing.err.join("\n")), /^ERROR \[regstat\.output\] Could not write to "missing-dir\/t\.zip": ENOENT/m);
 
   const existing = makeCli(() => rawResponse(zip, "application/zip"));
   existing.files.set("t.zip", Buffer.from("old"));
@@ -890,4 +890,29 @@ test("a parse error is logged in the format commander would have parsed: the fir
   const sub = makeCli(() => jsonResponse(fx.findResult));
   assert.equal(await run(["data", "table", "12411-01-01-4", "--region-key", "--log-format", "jsonl"], sub.deps), 2);
   assert.match((JSON.parse(sub.err[0] ?? "") as Record<string, unknown>)["msg"] as string, /--region-key <key>' argument missing/);
+});
+
+test("every -o failure is an ERROR record of regstat.output, with its exit code as before (L8)", async () => {
+  const failures: Array<(cli: ReturnType<typeof makeCli>) => void> = [
+    (cli) => cli.files.set("out.json", Buffer.from("existing")), // an existing file, no --force
+    (cli) => {
+      cli.deps.io.writeFile = () => {
+        throw new Error("EACCES: permission denied, open 'out.json'");
+      };
+    },
+    (cli) => {
+      cli.deps.io.writeFile = () => {
+        throw Object.assign(new Error("EISDIR: illegal operation on a directory, open 'out.json'"), { code: "EISDIR" });
+      };
+    },
+  ];
+  // An existing file is refused before the request (a usage error, 2); a write that
+  // fails once the answer is in is a runtime failure (1).
+  for (const [fail, exit] of failures.map((f, i) => [f, i === 0 ? 2 : 1] as const)) {
+    const cli = makeCli(() => jsonResponse(fx.tablesList));
+    fail(cli);
+    assert.equal(await run([...TOKEN, "-o", "out.json", "catalogue", "tables"], cli.deps), exit);
+    assert.match(untimed(cli.err.join("\n")), /^ERROR \[regstat\.output\] (Refusing to overwrite|Could not write to)/m);
+    assert.doesNotMatch(cli.err.join("\n"), /Unexpected error|ERROR \[regstat\.cli\]/);
+  }
 });

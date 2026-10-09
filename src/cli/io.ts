@@ -7,6 +7,19 @@ import { RegionalstatistikError, RegionalstatistikUsageError } from "../client/e
 import type { CredentialStore } from "./credentials.js";
 import { createLogger, type Logger } from "./log.js";
 
+/**
+ * The `-o` file could not be written once the answer was in (a missing directory, a
+ * directory, EACCES, …): a runtime failure as before (exit 1), logged as an ERROR of
+ * `regstat.output`, the area of the `-o` file.
+ */
+export class OutputError extends RegionalstatistikError {}
+
+/**
+ * The `-o` file exists and `--force` is not given: a usage error as before (exit 2),
+ * logged as an ERROR of `regstat.output`, the area of the `-o` file.
+ */
+export class OutputRefusedError extends RegionalstatistikUsageError {}
+
 export interface CliIO {
   out(text: string): void;
   err(text: string): void;

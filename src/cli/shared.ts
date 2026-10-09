@@ -4,7 +4,7 @@
 
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
-import { logOf, type CliDeps } from "./io.js";
+import { OutputError, OutputRefusedError, logOf, type CliDeps } from "./io.js";
 import type { CredentialStore } from "./credentials.js";
 import { cleartextProblem, DEFAULT_BASE_URL, type RawResponse } from "../client/engine.js";
 import type { RegionalstatistikClientOptions } from "../client/client.js";
@@ -253,9 +253,12 @@ export function toClientOptions(
   return options;
 }
 
-/** The usage error for an --output path that already exists (without --force). */
-function refuseOverwrite(path: string): RegionalstatistikUsageError {
-  return new RegionalstatistikUsageError(
+/**
+ * The usage error for an --output path that already exists (without --force), logged
+ * under `regstat.output`.
+ */
+function refuseOverwrite(path: string): OutputRefusedError {
+  return new OutputRefusedError(
     `Refusing to overwrite existing file "${path}". Pass --force to overwrite, or choose a different --output path.`,
   );
 }
@@ -264,10 +267,10 @@ function refuseOverwrite(path: string): RegionalstatistikUsageError {
  * Write bytes to the --output file, guarding against an accidental overwrite and
  * wrapping raw filesystem errors in a typed error. Refuses to clobber an existing
  * file — or to write through a symlink, dangling or not — unless --force is set
- * (fail-secure: no silent data loss; a usage error, exit 2, like the same refusal
- * before the request), and turns an ENOENT/EISDIR/EACCES from writeFile into a
- * clean RegionalstatistikError (exit 1) instead of an untyped "Unexpected error:
- * ENOENT: …": the request has been made and answered by then, so a write that
+ * (fail-secure: no silent data loss; an `OutputRefusedError`, a usage error, exit 2,
+ * like the same refusal before the request), and turns an ENOENT/EISDIR/EACCES from
+ * writeFile into a clean `OutputError` (a RegionalstatistikError, exit 1) instead of an
+ * untyped "Unexpected error: ENOENT: …" — both logged under `regstat.output`: the request has been made and answered by then, so a write that
  * fails is a runtime failure, not a usage error. `action()` already refused an
  * existing path before the request; this re-check catches one that appeared
  * meanwhile.
@@ -282,7 +285,7 @@ function writeOutputFile(deps: CliDeps, global: GlobalOptions, path: string, dat
   } catch (err) {
     if (!force && (err as NodeJS.ErrnoException | undefined)?.code === "EEXIST") throw refuseOverwrite(path);
     const reason = err instanceof Error ? err.message : String(err);
-    throw new RegionalstatistikError(`Could not write to "${path}": ${reason}`, { cause: err });
+    throw new OutputError(`Could not write to "${path}": ${reason}`, { cause: err });
   }
 }
 

@@ -189,8 +189,8 @@ maintenance or proxy page) is refused the same way, exit **1** — unless it is 
 ZIP, or you asked for `--format html`.
 
 `-o` refuses an existing file (without `--force`) before the request is sent —
-a usage error, exit **2**. A write that fails after the answer is in (a
-directory that doesn't exist, no permission) logs `ERROR [regstat.cli] Could not write to
+a usage error, exit **2**, logged as `ERROR [regstat.output] Refusing to overwrite …`. A write that fails after the answer is in (a
+directory that doesn't exist, no permission) logs `ERROR [regstat.output] Could not write to
 "<file>": …` and exits **1**: the request was made, so it is a runtime failure,
 not a usage error.
 

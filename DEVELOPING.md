@@ -579,7 +579,9 @@ code point and ends in `… (N more characters)`. The areas are `cli` (usage err
 warning about a credential on the command line, the note that an env token was set aside,
 unexpected errors), `api` (GENESIS's error answers and the credentials hints), `http` (the
 connection: network errors, the cleartext warning), `config` (`regstat config`) and
-`output` (`Wrote N bytes …`). Code logs through `logOf(deps)` and never writes diagnostics
+`output` (the `-o` file written, `Wrote N bytes …`, or any failure to write it: an
+`OutputRefusedError` for an existing file, exit 2, an `OutputError` for a write that
+fails once the answer is in, exit 1; and a stdout write error). Code logs through `logOf(deps)` and never writes diagnostics
 with `io.err` directly. `run()` builds the logger from argv before commander parses it
 (`logFormatFromArgv`, used only for the records of a parse error: the first
 `--log-format`, the value of one of the program's own value options skipped, as
