@@ -6,7 +6,7 @@ import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
 import { OutputError, OutputRefusedError, logOf, type CliDeps } from "./io.js";
 import { CredentialsFileError, type CredentialStore } from "./credentials.js";
-import { cleartextProblem, DEFAULT_BASE_URL, type RawResponse } from "../client/engine.js";
+import { cleartextProblem, DEFAULT_BASE_URL, type RawResponse, type RetryEvent } from "../client/engine.js";
 import type { RegionalstatistikClientOptions } from "../client/client.js";
 import {
   RegionalstatistikError,
@@ -400,6 +400,19 @@ export function renderRaw(deps: CliDeps, global: GlobalOptions, response: RawRes
   }
 }
 
+/** `HTTP 503 from host: retry 1 of 3 in 2 s` (host only; whole seconds, ms under 1 s). */
+export function retryMessage(event: RetryEvent): string {
+  let host: string;
+  try {
+    host = new URL(event.url).host;
+  } catch {
+    host = "the server";
+  }
+  const why = event.status === undefined ? "connection reset" : `HTTP ${event.status}`;
+  const wait = event.delayMs < 1000 ? `${event.delayMs} ms` : `${Math.round(event.delayMs / 1000)} s`;
+  return `${why} from ${host}: retry ${event.retry} of ${event.maxRetries} in ${wait}`;
+}
+
 export interface ActionContext {
   client: ReturnType<CliDeps["createClient"]>;
   global: GlobalOptions;
@@ -615,7 +628,9 @@ export function action(
       }
     }
     // A half username/password pair gets the library's pair error, reworded.
-    const client = createClient(deps, toClientOptions(global, creds), setBy);
+    const clientOptions = toClientOptions(global, creds);
+    clientOptions.onRetry = (event) => logOf(deps).warn("http", retryMessage(event));
+    const client = createClient(deps, clientOptions, setBy);
     warnCleartext(deps, global, creds);
     if (creds.present) warnArgvCredentials(deps, command);
     await withCredentialsHint(() => fn({ client, global, opts: command.opts() }, positionals));

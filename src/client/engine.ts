@@ -149,6 +149,25 @@ export interface EngineOptions {
   maxResponseBytes?: number;
   /** Injectable sleep, primarily for deterministic tests. */
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * Called once per retry, right before the backoff sleep, for each retried 429/503;
+   * never when there is no retry. A throw is swallowed.
+   */
+  onRetry?: (event: RetryEvent) => void;
+}
+
+/** What `EngineOptions.onRetry` is told about one retry. */
+export interface RetryEvent {
+  /** Which retry this is, counting from 1. */
+  retry: number;
+  /** The most retries this request may make (`maxRetries`). */
+  maxRetries: number;
+  /** How long the engine waits before sending the request again. */
+  delayMs: number;
+  /** The HTTP status that caused the retry; absent for a reset connection. */
+  status?: number;
+  /** The URL being retried, userinfo and credential parameters redacted. */
+  url: string;
 }
 
 const DEFAULT_MAX_RESPONSE_BYTES = 100 * 1024 * 1024;
@@ -597,6 +616,7 @@ export class RequestEngine {
   private readonly retryDelayMs: number;
   private readonly maxResponseBytes: number;
   private readonly sleep: (ms: number) => Promise<void>;
+  private readonly onRetry: ((event: RetryEvent) => void) | undefined;
 
   constructor(options: EngineOptions = {}) {
     const baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
@@ -629,6 +649,23 @@ export class RequestEngine {
       intOption("maxResponseBytes", options.maxResponseBytes, 0, Number.MAX_SAFE_INTEGER) ??
       DEFAULT_MAX_RESPONSE_BYTES;
     this.sleep = options.sleep === undefined ? realSleep : assertValid("sleep", options.sleep, functionProblem);
+    this.onRetry = options.onRetry === undefined ? undefined : assertValid("onRetry", options.onRetry, functionProblem);
+  }
+
+  /** Tell `onRetry` about a retry, then wait. A throwing callback never breaks the request. */
+  private async backOff(attempt: number, delayMs: number, url: string, status?: number): Promise<void> {
+    try {
+      this.onRetry?.({
+        retry: attempt,
+        maxRetries: this.maxRetries,
+        delayMs,
+        ...(status !== undefined ? { status } : {}),
+        url: redactUrl(url),
+      });
+    } catch {
+      // a logging hook is no reason to fail the request
+    }
+    await this.sleep(delayMs);
   }
 
   /**
@@ -758,7 +795,7 @@ export class RequestEngine {
         const retryAfter = parseRetryAfter(responseHeaders["retry-after"]);
         if (retryAfter === undefined || retryAfter <= MAX_RETRY_AFTER_MS) {
           attempt += 1;
-          await this.sleep(retryAfter === undefined ? backoff : Math.max(retryAfter, backoff));
+          await this.backOff(attempt, retryAfter === undefined ? backoff : Math.max(retryAfter, backoff), url, status);
           continue;
         }
         retryNote =

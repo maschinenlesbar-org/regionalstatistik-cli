@@ -12,7 +12,7 @@ export {
   parseRetryAfter,
   redactUrl,
 } from "./engine.js";
-export type { EngineOptions, LoginVerdict, RawResponse, ResponseShape } from "./engine.js";
+export type { EngineOptions, LoginVerdict, RawResponse, ResponseShape, RetryEvent } from "./engine.js";
 export { MAX_TIMEOUT_MS, nodeHttpTransport } from "./http.js";
 export type { Transport, HttpRequest, HttpResponse } from "./http.js";
 export { buildQueryString } from "./query.js";

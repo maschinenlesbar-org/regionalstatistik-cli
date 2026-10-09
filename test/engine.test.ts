@@ -789,3 +789,84 @@ test("a password a server echoes form-encoded (a space as +) is scrubbed from th
     return true;
   });
 });
+
+test("onRetry is called once per retry, with the event fields, right before the sleep", async () => {
+  const log: string[] = [];
+  const events: unknown[] = [];
+  let n = 0;
+  const mt = makeMockTransport(() =>
+    n++ < 2
+      ? { status: 503, headers: n === 1 ? { "retry-after": "2" } : {}, body: Buffer.from("{}") }
+      : jsonResponse(fx.whoami),
+  );
+  const e = new RequestEngine({
+    transport: mt.transport,
+    baseUrl: "https://example.test",
+    maxRetries: 3,
+    sleep: async (ms) => void log.push(`sleep ${ms}`),
+    onRetry: (ev) => {
+      events.push(ev);
+      log.push("retry");
+    },
+  });
+  await e.getJson("/x");
+  assert.deepEqual(log, ["retry", "sleep 2000", "retry", "sleep 400"]);
+  assert.deepEqual(events, [
+    { retry: 1, maxRetries: 3, delayMs: 2000, status: 503, url: "https://example.test/x" },
+    { retry: 2, maxRetries: 3, delayMs: 400, status: 503, url: "https://example.test/x" },
+  ]);
+});
+
+test("onRetry is never called without a retry (a reset connection is not retried here)", async () => {
+  const events: unknown[] = [];
+  const onRetry = (ev: unknown) => void events.push(ev);
+  const ok = new RequestEngine({ transport: makeMockTransport(() => jsonResponse(fx.whoami)).transport, sleep: async () => {}, onRetry });
+  await ok.getJson("/x");
+  const notFound = new RequestEngine({
+    transport: makeMockTransport(() => jsonResponse({ detail: "no" }, 404)).transport,
+    sleep: async () => {},
+    onRetry,
+  });
+  await assert.rejects(notFound.getJson("/x"), RegionalstatistikApiError);
+  const reset = new RequestEngine({
+    transport: makeMockTransport(() => {
+      throw Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
+    }).transport,
+    sleep: async () => {},
+    onRetry,
+  });
+  await assert.rejects(reset.getJson("/x"), RegionalstatistikNetworkError);
+  // retries exhausted: the last 503 is an error, not a retry
+  const down = new RequestEngine({
+    transport: makeMockTransport(() => ({ status: 503, headers: {}, body: Buffer.from("{}") })).transport,
+    maxRetries: 1,
+    sleep: async () => {},
+    onRetry,
+  });
+  await assert.rejects(down.getJson("/x"), RegionalstatistikApiError);
+  assert.equal(events.length, 1);
+  // a Retry-After over the cap is not retried
+  const long = new RequestEngine({
+    transport: makeMockTransport(() => ({ status: 503, headers: { "retry-after": "999999" }, body: Buffer.from("{}") })).transport,
+    sleep: async () => {},
+    onRetry,
+  });
+  await assert.rejects(long.getJson("/x"), RegionalstatistikApiError);
+  assert.equal(events.length, 1);
+});
+
+test("a throw in onRetry is swallowed", async () => {
+  let n = 0;
+  const e = new RequestEngine({
+    transport: makeMockTransport(() => (n++ === 0 ? { status: 503, headers: {}, body: Buffer.from("{}") } : jsonResponse(fx.whoami))).transport,
+    sleep: async () => {},
+    onRetry: () => {
+      throw new Error("boom");
+    },
+  });
+  await e.getJson("/x");
+});
+
+test("onRetry must be a function", () => {
+  assert.throws(() => new RequestEngine({ onRetry: 5 as never }), RegionalstatistikValidationError);
+});

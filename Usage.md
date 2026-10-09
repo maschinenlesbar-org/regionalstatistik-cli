@@ -248,7 +248,8 @@ is gone (`2>&1 | true`).
   roughly 10 parallel ones on this host. Keep requests serial. Only `429`/`503`
   are auto-retried (`--max-retries`, each after a linear backoff of 200 ms ×
   attempt, or the server's `Retry-After` when that is longer, up to 30 s — a
-  longer one is not retried, and the error names the requested wait), not `500`,
+  longer one is not retried, and the error names the requested wait; each retry logs one
+  WARN record of `regstat.http` before it waits, `HTTP 503 from host: retry 1 of 3 in 2 s`), not `500`,
   resets or timeouts.
 - **`"boolean"`/count fields are strings.** List items encode e.g. `Values` /
   `Cubes` counts and flags as JSON strings (`"9"`, `"true"`).

@@ -132,6 +132,7 @@ characters is cut and ends in `… (N more characters)`. A credential is kept ou
 
 ```text
 2026-10-09T14:03:12.481Z WARN  [regstat.http] the login is sent unencrypted to mirror.example (http:, not https:)
+2026-10-09T14:03:12.700Z WARN  [regstat.http] HTTP 503 from www.regionalstatistik.de: retry 1 of 2 in 200 ms
 2026-10-09T14:03:12.902Z ERROR [regstat.api] GENESIS status 2 (ERROR) / HTTP 404 for POST …
 2026-10-09T14:03:12.902Z INFO  [regstat.api] check your credentials (--token or --username/--password, or the ones stored with `regstat config`).
 ```

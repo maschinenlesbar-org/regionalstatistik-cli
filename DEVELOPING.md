@@ -462,6 +462,12 @@ for every transport (P5):
   (logincheck reports killing requests beyond ~10 parallel on this host) and does
   not reliably emit `429`/`503`, so this path is largely inert — keep it, don't
   rely on it.
+  Each retry is announced: the engine option `onRetry(event: RetryEvent)` (exported type:
+  `{ retry` (1-based), `maxRetries`, `delayMs`, `status`, `url` (userinfo and credential
+  parameters redacted) `}`) is called once per retry right before the sleep, never when there is
+  none, and a throw in it is swallowed. The CLI's `action()` sets it to log one `WARN` record of
+  `regstat.http`, `HTTP 503 from <host>: retry 1 of 3 in 2 s` (`retryMessage`; host only,
+  whole seconds, ms under 1 s). Tests: `test/engine.test.ts`, `test/retry-log.test.ts`.
 - **`--base-url`** accepts only `http:`/`https:` and refuses embedded userinfo,
   a query, a fragment, and whitespace or control characters (paths are appended
   as a string; the engine applies the same `baseUrlProblem` for library users).
