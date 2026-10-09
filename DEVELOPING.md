@@ -277,7 +277,9 @@ spaces inside are allowed, since a password may hold them, and a password starti
 `--` is fine (the `parsePassword` ambiguity exists only in argv). `config get` and
 `list` (and the record `set` logs) mask a value as `abcd…wxyz` only from 20 characters
 (`maskCredential(value, name)`), and as `****` below that and for a password, whatever
-its length.
+its length. `config get --reveal` prints the value as stored, through `io.outRaw` (stdout
+without the run's redaction): a credential from a flag or variable that occurs in the
+stored value would otherwise hand a script a wrong value with exit 0.
 
 Answers are decoded by the charset their `Content-Type` names (`decodeBody`,
 `TextDecoder`; UTF-8 when none, a byte-order mark dropped); an unknown label is a

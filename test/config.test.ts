@@ -587,3 +587,19 @@ test("a held lock fails config set with exit 1 and the stored values kept (C8)",
     cli.cleanup();
   }
 });
+
+test("config get --reveal prints the value as stored, untouched by the run's redaction (C9)", async () => {
+  const cli = makeCli();
+  try {
+    cli.store.set("password", "my pass word");
+    cli.store.set("token", TOKEN);
+    // A credential from a variable or a flag that occurs in the stored value.
+    assert.equal(await run(["config", "get", "password", "--reveal"], { ...cli.deps, env: { REGIONALSTATISTIK_USERNAME: "word" } }), 0);
+    assert.equal(await run(["--password", "word", "config", "get", "password", "--reveal"], cli.deps), 0);
+    // The same token exported and stored.
+    assert.equal(await run(["config", "get", "token", "--reveal"], { ...cli.deps, env: { REGIONALSTATISTIK_API_TOKEN: TOKEN } }), 0);
+    assert.deepEqual(cli.out, ["my pass word", "my pass word", TOKEN]);
+  } finally {
+    cli.cleanup();
+  }
+});

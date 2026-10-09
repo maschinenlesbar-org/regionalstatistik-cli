@@ -171,6 +171,8 @@ export function withRedactedOutput(deps: CliDeps, argv: readonly string[]): CliD
     io: {
       ...deps.io,
       out: (text) => out(redaction.out(text)),
+      // `config get --reveal`: the value as stored, not as the run's redaction makes it.
+      outRaw: deps.io.outRaw ?? out,
       err: (text) => err(redaction.err(text)),
       // A login read from the credentials file (`action()`) is kept out the same way.
       redact: (more) => {
