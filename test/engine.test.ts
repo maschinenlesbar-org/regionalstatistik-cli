@@ -771,3 +771,9 @@ test("a long Status.Type is quoted cut in every answer shape: envelope, flat 404
     });
   }
 });
+
+test("a download's Content-Type is quoted cut in the library's own messages (results/03 bug 03-2)", async () => {
+  const type = `text/html; x=${"y".repeat(5000)}`;
+  const e = new RequestEngine({ transport: async () => ({ status: 200, headers: { "content-type": type }, body: Buffer.from("<html>login</html>") }) });
+  await assert.rejects(e.postRaw("/data/tablefile", "application/zip", {}, { username: "TOK" }), (err: Error) => err.message.length < 1000 && /Content-Type text\/html; x=y+…\)/.test(err.message));
+});

@@ -875,7 +875,7 @@ export class RequestEngine {
     const htmlPage = /html/i.test(res.contentType) || /^\s*(<!doctype html|<html)/i.test(raw.slice(0, 1024).replace(/^\uFEFF/, ""));
     if (!isZip(res.data) && htmlPage && params["format"] !== "html") {
       throw new RegionalstatistikParseError(
-        `Expected a file download from ${path}, got an HTML page (Content-Type ${res.contentType || "none"}); nothing was saved.`,
+        `Expected a file download from ${path}, got an HTML page (Content-Type ${cutForMessage(res.contentType) || "none"}); nothing was saved.`,
       );
     }
     if (!jsonType && !raw.trimStart().startsWith("{")) return res;
@@ -886,7 +886,7 @@ export class RequestEngine {
     } catch (cause) {
       if (!jsonType) return res; // starts with "{" but is not JSON: a real file
       throw new RegionalstatistikParseError(
-        `Expected a file download from ${path}, got an unparseable reply labelled ${res.contentType}.`,
+        `Expected a file download from ${path}, got an unparseable reply labelled ${cutForMessage(res.contentType)}.`,
         { cause: scrubThrown(cause, ctx) },
       );
     }

@@ -167,7 +167,8 @@ What the library rejects:
   the message) is cut at `MAX_MESSAGE_VALUE_LENGTH` (500) characters, never inside a
   surrogate pair (`cutText`), so the message stays well-formed; `body` keeps the
   full answer. Every other server value an own message quotes (a `Status.Type` in every
-  answer shape, a charset) goes through the same `cutForMessage`, so `err.message` stays
+  answer shape, a charset, a download's Content-Type in the library's errors and in the
+  CLI's `Wrote … (Content-Type: …)` record) goes through the same `cutForMessage`, so `err.message` stays
   bounded for a library caller. It is also put on one line (`sanitizeServerText`): C0/C1 controls and
   bidi overrides dropped, every run of whitespace — the live wrong-credentials
   text's `\n` included — one space, so a server can't split or forge a log

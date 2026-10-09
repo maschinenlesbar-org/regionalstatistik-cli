@@ -12,6 +12,7 @@ import {
   RegionalstatistikError,
   RegionalstatistikUsageError,
   RegionalstatistikValidationError,
+  cutForMessage,
 } from "../client/errors.js";
 import {
   BASE_URL_USERINFO_PROBLEM,
@@ -363,7 +364,8 @@ export function renderJson(deps: CliDeps, global: GlobalOptions, value: unknown)
  * Content-Type so the user can tell what the bytes actually are (e.g. a ZIP).
  */
 export function renderRaw(deps: CliDeps, global: GlobalOptions, response: RawResponse): void {
-  const typeNote = response.contentType ? ` (Content-Type: ${response.contentType})` : "";
+  // Server text: sanitised by the engine, and cut here like every quoted value.
+  const typeNote = response.contentType ? ` (Content-Type: ${cutForMessage(response.contentType)})` : "";
   if (toFile(global)) {
     writeOutputFile(deps, global, global.output, response.data);
     logOf(deps).info("output", `Wrote ${response.data.length} bytes to ${global.output}${typeNote}`);

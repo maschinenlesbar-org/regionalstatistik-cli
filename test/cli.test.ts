@@ -916,3 +916,13 @@ test("every -o failure is an ERROR record of regstat.output, with its exit code 
     assert.doesNotMatch(cli.err.join("\n"), /Unexpected error|ERROR \[regstat\.cli\]/);
   }
 });
+
+test("the Content-Type a download is logged with is quoted cut, its control characters gone (results/03 bug 03-2)", async () => {
+  const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00]);
+  const type = `application/zip; x=${"y".repeat(10_000)}\u009b31m`;
+  const cli = makeCli(() => rawResponse(zip, type), { REGIONALSTATISTIK_API_TOKEN: "0123456789abcdef0123456789abcdef" });
+  assert.equal(await run(["data", "tablefile", "12411-01-01-4", "-o", "t.zip"], cli.deps), 0, cli.err.join("\n"));
+  const record = cli.err.find((line) => line.includes("Wrote ")) ?? "";
+  assert.match(record, /Wrote 8 bytes to t\.zip \(Content-Type: application\/zip; x=y+…\)$/);
+  assert.ok(record.length < 700, `${record.length}`);
+});
