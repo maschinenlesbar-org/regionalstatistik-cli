@@ -66,6 +66,18 @@ export function bodyOf(req: HttpRequest): URLSearchParams {
   return new URLSearchParams(raw);
 }
 
+// ---- the log on stderr -------------------------------------------------------
+
+/**
+ * stderr with each text record's timestamp taken off: `ERROR [regstat.api] HTTP 404 …`.
+ * The format itself — timestamp, level, topic — is the conformance test's
+ * (conformance-p23-log-format); the other tests check what was said, at which level
+ * and under which topic.
+ */
+export function untimed(text: string): string {
+  return text.replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z /gm, "");
+}
+
 // ---- CLI <-> library parity ---------------------------------------------------
 
 /** What one side of a parity run did: its outcome and the requests it sent. */
@@ -132,7 +144,7 @@ export async function parity(input: ParityInput): Promise<ParityResult> {
   } catch (error) {
     lib = { ok: false, error, requests: mt.calls.splice(0) };
   }
-  return { cli: { code, out: out.join("\n"), err: err.join("\n"), requests: cliRequests }, lib };
+  return { cli: { code, out: out.join("\n"), err: untimed(err.join("\n")), requests: cliRequests }, lib };
 }
 
 /**

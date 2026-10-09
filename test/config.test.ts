@@ -14,7 +14,7 @@ import type { CliDeps } from "../src/cli/io.js";
 import { readSecretFrom } from "../src/cli/io.js";
 import { CredentialStore, credentialValueProblem, maskCredential, resolveCredentialsPath } from "../src/cli/credentials.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
-import { makeMockTransport, jsonResponse } from "./helpers.js";
+import { makeMockTransport, jsonResponse, untimed } from "./helpers.js";
 import * as fx from "./fixtures.js";
 
 const TOKEN = "0123456789abcdef0123456789abcdef";
@@ -89,7 +89,7 @@ for (const [name, [value, mask]] of Object.entries(MASKED)) {
       assert.equal(cli.store.get(name), value);
       assert.equal(statSync(cli.store.path).mode & 0o777, 0o600);
       assert.equal(statSync(join(cli.dir, "regionalstatistik")).mode & 0o777, 0o700);
-      assert.ok(cli.err.join("\n").includes(`Stored ${name} (${mask}) in `));
+      assert.ok(untimed(cli.err.join("\n")).includes(`INFO  [regstat.config] Stored ${name} (${mask}) in `), cli.err.join("\n"));
       assert.ok(!(cli.err.join("\n") + cli.out.join("\n")).includes(value));
 
       cli.out.length = 0;
@@ -101,7 +101,7 @@ for (const [name, [value, mask]] of Object.entries(MASKED)) {
       cli.out.length = 0;
       assert.equal(await run(["config", "list"], cli.deps), 0);
       assert.deepEqual(cli.out, [`${name}  ${mask}`]);
-      assert.match(cli.err.join("\n"), /Credentials file: .*regionalstatistik\/credentials/);
+      assert.match(untimed(cli.err.join("\n")), /^INFO  \[regstat\.config\] Credentials file: .*regionalstatistik\/credentials/m);
 
       assert.equal(await run(["config", "unset", name], cli.deps), 0);
       assert.equal(cli.store.get(name), undefined);
@@ -287,6 +287,23 @@ test("a login from the file is kept out of the output, like one from the environ
     assert.match(cli.out.join("\n"), /"Username": "\*\*\*"/);
   } finally {
     cli.cleanup();
+  }
+});
+
+test("a login from the file is kept out of the log on stderr, in either --log-format", async () => {
+  for (const format of ["text", "jsonl"]) {
+    const cli = makeCli({ responder: () => jsonResponse({ Code: 2, Content: `Nutzer ${USER} / ${PASS} unbekannt`, Type: "ERROR" }, 404) });
+    try {
+      cli.store.set("username", USER);
+      cli.store.set("password", PASS);
+      assert.equal(await run(["--log-format", format, "logincheck"], cli.deps), 1, format);
+      const err = cli.err.join("\n");
+      assert.match(err, /check your credentials/, format);
+      assert.match(err, /Nutzer \*\*\* \/ \*\*\* unbekannt/, format);
+      assert.ok(!err.includes(USER) && !err.includes(PASS), `${format}: ${err}`);
+    } finally {
+      cli.cleanup();
+    }
   }
 });
 

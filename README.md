@@ -68,8 +68,8 @@ in that encoding has not been verified.
 > **Prefer the environment variables.** A credential passed as a `--token` /
 > `--username` / `--password` **flag** is visible in the process table (`ps`,
 > `/proc`) to other local users and is persisted in your shell history — the
-> account *password* is especially sensitive. The CLI prints a one-line stderr
-> warning when it detects a flag-supplied credential. Set the env var instead;
+> account *password* is especially sensitive. The CLI logs a warning on stderr
+> (`WARN  [regstat.cli] …`) when it detects a flag-supplied credential. Set the env var instead;
 > it takes effect whenever the corresponding flag is absent — or store the login
 > once with `regstat config set` (below).
 
@@ -106,10 +106,27 @@ output like one from the environment.
 `http:` too, for a local mirror or a test server. When it points at plain `http:`
 on a host other than loopback (`localhost`, `127.0.0.0/8`, `::1`), every run prints
 one stderr line before the first request, naming the host and what travels in
-the clear — `warning: the login is sent unencrypted to mirror.example (http:, not https:)`,
+the clear — `WARN  [regstat.http] the login is sent unencrypted to mirror.example (http:, not https:)`,
 "the token" in token mode, or just `requests to … are sent unencrypted` for
 `hello`. It never shows a credential, and stdout and the exit code stay as they
 are. Library users get the same check as `cleartextProblem(baseUrl, secrets)`.
+
+**The log on stderr.** Data goes to stdout; each line on stderr is a **log record**: a
+timestamp (UTC), a level (`ERROR`, `WARN`, `INFO`) and a topic, the program and the area
+it comes from (`regstat.cli` for usage errors and credential notes, `regstat.api` for
+GENESIS's answers, `regstat.http` for the connection, `regstat.config` for `regstat
+config`, `regstat.output` for `-o`). By default it is written log4j style; `--log-format
+jsonl` writes one JSON object per line instead. A credential is kept out of both:
+
+```text
+2026-10-09T14:03:12.481Z WARN  [regstat.http] the login is sent unencrypted to mirror.example (http:, not https:)
+2026-10-09T14:03:12.902Z ERROR [regstat.api] GENESIS status 2 (ERROR) / HTTP 404 for POST …
+2026-10-09T14:03:12.902Z INFO  [regstat.api] check your credentials (--token or --username/--password, or the ones stored with `regstat config`).
+```
+
+```bash
+regstat --log-format jsonl logincheck 2>log.jsonl   # {"ts":"…","level":"ERROR","topic":"regstat.api","msg":"…"}
+```
 
 ## Quickstart
 

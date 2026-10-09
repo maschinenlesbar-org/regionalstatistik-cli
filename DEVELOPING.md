@@ -24,7 +24,8 @@ src/
     client.ts    # RegionalstatistikClient — helloworld/find + catalogue/metadata/data groups
     index.ts
   cli/
-    io.ts        # injectable I/O + env seam (CliDeps / CliIO)
+    io.ts        # injectable I/O + env seam (CliDeps / CliIO), the logger and the clock
+    log.ts       # the stderr log: records with ts, level, topic; --log-format text|jsonl
     shared.ts    # option parsers, credential resolution, option->client mapping, render
     commands/    # hello, find, catalogue, metadata, data
     program.ts   # assembles the commander program; seeds credential flags from env
@@ -54,8 +55,8 @@ reason a value is invalid, or `undefined`). The client enforces them before any
 request through `assertValid(name, value, problem)`, which throws
 **`RegionalstatistikValidationError`** (`Invalid <name>: <reason>`); a client
 method rejects its promise, a constructor throws. `RegionalstatistikValidationError`
-extends `RegionalstatistikUsageError`, so `run.ts` maps it to exit 2 and prints
-`Error: <message>`. The CLI's commander parsers call the same `…Problem`
+extends `RegionalstatistikUsageError`, so `run.ts` maps it to exit 2 and logs it as
+an `ERROR` record of `regstat.cli`. The CLI's commander parsers call the same `…Problem`
 functions and turn a reason into commander's `InvalidArgumentError` (exit 2 too).
 Parity tests (`test/parity.test.ts`, the `parity()` helper in `test/helpers.ts`)
 drive one input through `run()` and through the library on one recording mock
@@ -158,8 +159,8 @@ What the library rejects:
   the message) is cut at `MAX_MESSAGE_VALUE_LENGTH` (500) characters; `body` keeps the
   full answer. It is also put on one line (`sanitizeServerText`): C0/C1 controls and
   bidi overrides dropped, every run of whitespace — the live wrong-credentials
-  text's `\n` included — one space, so a server can't split or forge an `Error:`
-  line.
+  text's `\n` included — one space, so a server can't split or forge a log
+  record.
 - **Half a credential pair** (`credentialPairProblem`): with no token, a
   `username` without a `password` (or the reverse) throws at construction —
   `Invalid credentials: Provide both username and password (or a token).` A lone
@@ -226,7 +227,7 @@ with precedence **flag > env > unset** (`--username`/`--password` seeded from
 `credentialProblem`, precedence in `shared.ts:resolveCredentials`). A token wins over username/password, except
 that a `--username`/`--password` *flag* beats an env-only token (commander's
 value source tells flag from env), and `action()` then says so on stderr
-(`noteEnvTokenSetAside`: `Note: the token from REGIONALSTATISTIK_API_TOKEN is not
+(`noteEnvTokenSetAside`: `INFO  [regstat.cli] the token from REGIONALSTATISTIK_API_TOKEN is not
 used: …`, the flag named, no value), before any pair error. Fields mix: `--username`
 from a flag takes its password from `REGIONALSTATISTIK_PASSWORD` (flag wins per
 field, by decision of 2026-10-06); supplying only one of username/password is
@@ -446,8 +447,8 @@ for every transport (P5):
   `engine.ts` (exported) returns one sentence when requests to the base URL travel
   unencrypted — `undefined` for `https:`, an unparseable URL and loopback
   (`localhost`, `127.0.0.0/8`, `::1`). It names `url.host` and the secret phrases it
-  is given, never a value. `action()` in `shared.ts` (`warnCleartext`) prints it as
-  `warning: <sentence>` once per run, after the client is built (so a half login,
+  is given, never a value. `action()` in `shared.ts` (`warnCleartext`) logs it as a
+  `WARN` record of `regstat.http` once per run, after the client is built (so a half login,
   a usage error, never warns) and before the first request, passing "the token"
   in token mode and "the login" for a username + password, nothing for `hello`.
 
@@ -491,7 +492,7 @@ transport contract), P6 (retry policy), P7 (pipes and exit codes; runs the built
 bin), P8/P9/P13 (charset, response shapes, validation errors), P18 (the GENESIS
 login check, shared with destatis-genesis-cli), and, from the 2026-10-06 follow-up
 round, P20 (`conformance-p20-cleartext-warning`: a remote plain-`http:` base URL
-gets one `warning:` line on stderr; the base-URL-variable case is skipped — regstat
+gets one `WARN` record of `regstat.http` on stderr; the base-URL-variable case is skipped — regstat
 reads none — and so is the userinfo case, because `--base-url` rejects userinfo as
 a usage error; the secret case runs `logincheck` with `--token`) and P21
 (`conformance-p21-readme-links`: README.md ships in the npm tarball and is shown on
@@ -538,3 +539,23 @@ npm run build                        # the CLI, for the command reference
 cd site && npm ci && bundle install  # once (Node >= 22.12, Ruby 3.4, Bundler)
 npm run serve                        # http://127.0.0.1:4000/regionalstatistik-cli/
 ```
+
+## The log on stderr
+
+Every diagnostic line on stderr is a log record (`src/cli/log.ts`): a timestamp, a level
+(`ERROR`, `WARN`, `INFO`) and a topic, `regstat.<area>`. `--log-format text` (the default)
+writes it log4j style, `<ISO 8601 UTC> <LEVEL padded to 5> [<topic>] <message>`;
+`--log-format jsonl` writes one JSON object per line with exactly `ts`, `level`, `topic`
+and `msg`. The areas are `cli` (usage errors, commander's messages, validation errors, the
+warning about a credential on the command line, the note that an env token was set aside,
+unexpected errors), `api` (GENESIS's error answers and the credentials hints), `http` (the
+connection: network errors, the cleartext warning), `config` (`regstat config`) and
+`output` (`Wrote N bytes …`). Code logs through `logOf(deps)` and never writes diagnostics
+with `io.err` directly. `run()` builds the logger from argv before commander parses it, so
+commander's own usage errors are records too, and on top of the redacted `io.err`, so a
+secret is kept out of the log in either format — a login read later from the credentials
+file too, because `io.redact` extends that same redaction. `CliDeps.now` makes the
+timestamps testable. stdout carries data only; the `config set` prompt is not a record.
+Two lines stay raw: `Output error: …` from `handleOutputErrors` and the bin shim's
+last-resort `Unexpected error: …`, both written outside `run()`. Conformance test P23
+checks all of this, and its body is shared across the *-cli repos.

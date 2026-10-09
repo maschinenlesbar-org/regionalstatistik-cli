@@ -4,7 +4,7 @@ import { run } from "../src/cli/run.js";
 import { RegionalstatistikClient } from "../src/client/client.js";
 import type { CliDeps } from "../src/cli/io.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
-import { makeMockTransport, jsonResponse, rawResponse, bodyOf } from "./helpers.js";
+import { makeMockTransport, jsonResponse, rawResponse, bodyOf, untimed } from "./helpers.js";
 import * as fx from "./fixtures.js";
 
 function makeCli(
@@ -81,7 +81,7 @@ test("a credential passed via --token warns to stderr, recommending the env var"
   const code = await run([...TOKEN, "catalogue", "tables", "12411*"], cli.deps);
   assert.equal(code, 0);
   const errText = cli.err.join("\n");
-  assert.match(errText, /command line are visible in the process list/);
+  assert.match(untimed(errText), /^WARN  \[regstat\.cli\] credential\(s\) passed on the command line are visible in the process list/m);
   assert.match(errText, /REGIONALSTATISTIK_API_TOKEN/);
   // The credential value itself is never printed.
   assert.doesNotMatch(errText, /0123456789abcdef/);
@@ -143,8 +143,8 @@ test("a lone --username flag with an env token is a usage error, not a silent to
   assert.match(cli.err.join("\n"), /BOTH --username and --password/);
   // ...and says that the env token was set aside, before the pair error.
   assert.equal(
-    cli.err[0],
-    "Note: the token from REGIONALSTATISTIK_API_TOKEN is not used: --username on the command line " +
+    untimed(cli.err[0] ?? ""),
+    "INFO  [regstat.cli] the token from REGIONALSTATISTIK_API_TOKEN is not used: --username on the command line " +
       "selects a username and password login (the other half may come from its environment variable).",
   );
 });
@@ -158,20 +158,20 @@ test("a --username flag combines with REGIONALSTATISTIK_PASSWORD (flag wins per 
   assert.equal(cli.mt.last().headers?.["username"], "flaguser");
   assert.equal(cli.mt.last().headers?.["password"], "envpass");
   // No env token, so nothing was set aside and there is no note.
-  assert.ok(!cli.err.some((l) => l.startsWith("Note:")), cli.err.join("\n"));
+  assert.ok(!cli.err.map(untimed).some((l) => l.startsWith("INFO  [regstat.cli] ")), cli.err.join("\n"));
 });
 
 test("the set-aside note names each flag, never a value, and is absent without an env token or with --token", async () => {
   const both = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_API_TOKEN: "envtok0000000000" });
   assert.equal(await run(["--username", "flaguser", "--password", "flagpass", "logincheck"], both.deps), 0);
-  const notes = both.err.filter((l) => l.startsWith("Note:"));
+  const notes = both.err.map(untimed).filter((l) => l.startsWith("INFO  [regstat.cli] "));
   assert.equal(notes.length, 1);
   assert.match(notes[0]!, /--username and --password on the command line/);
   assert.ok(!both.err.join("\n").includes("envtok0000000000"));
 
   const flagToken = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_API_TOKEN: "envtok" });
   assert.equal(await run([...TOKEN, "--username", "u1", "--password", "p1", "logincheck"], flagToken.deps), 0);
-  assert.ok(!flagToken.err.some((l) => l.startsWith("Note:")));
+  assert.ok(!flagToken.err.map(untimed).some((l) => l.startsWith("INFO  [regstat.cli] ")));
 
   const envOnly = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_API_TOKEN: "envtok" });
   assert.equal(await run(["logincheck"], envOnly.deps), 0);
@@ -180,7 +180,7 @@ test("the set-aside note names each flag, never a value, and is absent without a
   // hello takes no credentials: nothing is resolved, nothing is set aside.
   const hello = makeCli(() => jsonResponse(fx.whoami), { REGIONALSTATISTIK_API_TOKEN: "envtok" });
   assert.equal(await run(["--username", "flaguser", "hello"], hello.deps), 0);
-  assert.ok(!hello.err.some((l) => l.startsWith("Note:")));
+  assert.ok(!hello.err.map(untimed).some((l) => l.startsWith("INFO  [regstat.cli] ")));
 });
 
 test("an explicit --token flag still beats --username/--password flags", async () => {
@@ -325,7 +325,7 @@ test("a malformed env credential still fails the command that would send it", as
   });
   assert.equal(await run(["logincheck"], cli.deps), 2);
   assert.equal(cli.mt.calls.length, 0);
-  assert.equal(cli.err.join("\n"), "Error: Environment variable REGIONALSTATISTIK_PASSWORD contains control characters.");
+  assert.equal(untimed(cli.err.join("\n")), "ERROR [regstat.cli] Environment variable REGIONALSTATISTIK_PASSWORD contains control characters.");
 });
 
 test("a blank <term> on find is rejected before any request", async () => {
@@ -409,7 +409,7 @@ test("a flat Code 15 auth error exits 1 with a credentials hint, not a stack tra
   const errText = cli.err.join("\n");
   assert.match(errText, /GENESIS status 15/);
   assert.match(errText, /nicht berechtigt/);
-  assert.match(errText, /Hint: check your credentials/);
+  assert.match(untimed(errText), /^INFO  \[regstat\.api\] check your credentials/m);
   assert.doesNotMatch(errText, /Unexpected error/);
 });
 
@@ -419,7 +419,7 @@ test("the live 401 + flat Code 15 reply exits 1 with a credentials hint", async 
   assert.equal(code, 1);
   const errText = cli.err.join("\n");
   assert.match(errText, /GENESIS status 15/);
-  assert.match(errText, /Hint: check your credentials/);
+  assert.match(untimed(errText), /^INFO  \[regstat\.api\] check your credentials/m);
 });
 
 test("the live 404 + flat Code 2 reply (bad credentials) exits 1, not 4", async () => {
@@ -429,7 +429,7 @@ test("the live 404 + flat Code 2 reply (bad credentials) exits 1, not 4", async 
   const errText = cli.err.join("\n");
   assert.match(errText, /GENESIS status 2/);
   assert.match(errText, /Nutzernamen/);
-  assert.match(errText, /Hint: check your credentials \(--token or --username\/--password, or the ones stored with `regstat config`\)\./);
+  assert.match(untimed(errText), /^INFO  \[regstat\.api\] check your credentials \(--token or --username\/--password, or the ones stored with `regstat config`\)\./m);
   assert.doesNotMatch(errText, /Unexpected error/);
 });
 
@@ -440,7 +440,7 @@ test("a wrong-credentials reply on a data download gets the credentials hint too
   });
   const code = await run(["data", "tablefile", "12411-01-01-4", "-o", "t.zip"], cli.deps);
   assert.equal(code, 1);
-  assert.match(cli.err.join("\n"), /Hint: check your credentials/);
+  assert.match(untimed(cli.err.join("\n")), /^INFO  \[regstat\.api\] check your credentials/m);
   assert.equal(cli.files.size, 0);
 });
 
@@ -450,7 +450,7 @@ test("hello (no credentials sent) gets no credentials hint on a 401/403", async 
     const code = await run(["hello"], cli.deps);
     assert.equal(code, 1);
     assert.match(cli.err.join("\n"), new RegExp(`HTTP ${status} for GET`));
-    assert.doesNotMatch(cli.err.join("\n"), /Hint/);
+    assert.doesNotMatch(untimed(cli.err.join("\n")), /^INFO /m);
   }
 });
 
@@ -458,7 +458,7 @@ test("a bare HTTP 404 still exits 4, without a hint", async () => {
   const cli = makeCli(() => jsonResponse({ detail: "nope" }, 404));
   const code = await run([...TOKEN, "metadata", "table", "12411-01-01-4"], cli.deps);
   assert.equal(code, 4);
-  assert.doesNotMatch(cli.err.join("\n"), /Hint/);
+  assert.doesNotMatch(untimed(cli.err.join("\n")), /^INFO /m);
 });
 
 test("a not-found (Status.Code 90) exits 4", async () => {
@@ -518,7 +518,7 @@ test("--output writes JSON to a file and keeps stdout clean", async () => {
   assert.equal(code, 0);
   assert.match(cli.files.get("/tmp/out.json")?.toString("utf8") ?? "", /12411-01-01-4/);
   assert.equal(cli.out.length, 0);
-  assert.match(cli.err.join("\n"), /Wrote \d+ bytes to \/tmp\/out\.json/);
+  assert.match(untimed(cli.err.join("\n")), /^INFO  \[regstat\.output\] Wrote \d+ bytes to \/tmp\/out\.json/m);
 });
 
 test("--output refuses to overwrite an existing file without --force", async () => {
@@ -633,14 +633,14 @@ test("a deeply nested response fails pretty-printing cleanly and still prints wi
   const pretty = makeCli(deep);
   assert.equal(await run([...TOKEN, "find", "x"], pretty.deps), 1);
   assert.deepEqual(pretty.out, []);
-  assert.match(pretty.err.join("\n"), /Error: The response is nested too deeply to pretty-print; try --compact\./);
+  assert.match(untimed(pretty.err.join("\n")), /^ERROR \[regstat\.cli\] The response is nested too deeply to pretty-print; try --compact\./m);
 
   // Compact serialisation goes much deeper (it prints this one on current Node);
   // should a runtime's stack still be too small, it must fail just as cleanly.
   const compact = makeCli(deep);
   const code = await run([...TOKEN, "--compact", "find", "x"], compact.deps);
   if (code === 0) assert.equal(compact.out.join("").length, text.length);
-  else assert.match(compact.err.join("\n"), /Error: The response is nested too deeply to print\./);
+  else assert.match(untimed(compact.err.join("\n")), /^ERROR \[regstat\.cli\] The response is nested too deeply to print\./m);
 });
 
 test("BOM-prefixed JSON replies are read like plain ones", async () => {
@@ -658,7 +658,7 @@ test("BOM-prefixed JSON replies are read like plain ones", async () => {
   const badCreds = makeCli(() => bom(fx.flatBadCredentials, 404));
   assert.equal(await run([...TOKEN, "find", "x"], badCreds.deps), 1);
   assert.match(badCreds.err.join("\n"), /GENESIS status 2 \(ERROR\) \/ HTTP 404/);
-  assert.match(badCreds.err.join("\n"), /Hint: check your credentials/);
+  assert.match(untimed(badCreds.err.join("\n")), /^INFO  \[regstat\.api\] check your credentials/m);
 });
 
 test("--compact prints single-line JSON", async () => {
@@ -695,7 +695,8 @@ test("help/version exit 0; a missing command prints the help to stderr and exits
     const cli = makeCli(() => jsonResponse(fx.whoami));
     assert.equal(await run(argv, cli.deps), 2, argv.join(" "));
     assert.deepEqual(cli.out, []);
-    assert.match(cli.err.join("\n"), /^Usage: regstat/);
+    // commander's help after a missing command is an INFO record of regstat.cli.
+    assert.match(untimed(cli.err.join("\n")), /^INFO  \[regstat\.cli\] Usage: regstat/);
   }
 });
 
@@ -777,29 +778,29 @@ test("-o - writes to stdout and creates no file named '-' (P12)", async () => {
   const raw = makeCli(() => rawResponse(zip, "application/zip"));
   assert.equal(await run([...TOKEN, "data", "tablefile", "12411-01-01-4", "-o", "-"], raw.deps), 0, raw.err.join("\n"));
   assert.equal(raw.files.size, 0);
-  assert.match(raw.err.join("\n"), /Wrote 6 bytes to stdout/);
+  assert.match(untimed(raw.err.join("\n")), /^INFO  \[regstat\.output\] Wrote 6 bytes to stdout/m);
 });
 
 test("P20: an http base URL names what travels with the requests: the login, the token, or nothing", async () => {
-  const warningOf = (err: string[]) => err.filter((l) => l.startsWith("warning: "));
+  const warningOf = (err: string[]) => err.map(untimed).filter((l) => l.startsWith("WARN  [regstat.http] "));
   const login = makeCli(() => jsonResponse(fx.loginOk), {
     REGIONALSTATISTIK_USERNAME: "USER123456",
     REGIONALSTATISTIK_PASSWORD: "pw-s3cret-value",
   });
   assert.equal(await run(["--base-url", "http://mirror.example:8080", "logincheck"], login.deps), 0);
   assert.deepEqual(warningOf(login.err), [
-    "warning: the login is sent unencrypted to mirror.example:8080 (http:, not https:)",
+    "WARN  [regstat.http] the login is sent unencrypted to mirror.example:8080 (http:, not https:)",
   ]);
   assert.ok(!login.err.join("\n").includes("pw-s3cret-value"));
 
   const token = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_API_TOKEN: "0123456789abcdef0123456789abcdef" });
   assert.equal(await run(["--base-url", "http://mirror.example", "logincheck"], token.deps), 0);
-  assert.deepEqual(warningOf(token.err), ["warning: the token is sent unencrypted to mirror.example (http:, not https:)"]);
+  assert.deepEqual(warningOf(token.err), ["WARN  [regstat.http] the token is sent unencrypted to mirror.example (http:, not https:)"]);
 
   // hello sends no credentials, even with a login in the environment.
   const hello = makeCli(() => jsonResponse(fx.whoami), { REGIONALSTATISTIK_API_TOKEN: "0123456789abcdef0123456789abcdef" });
   assert.equal(await run(["--base-url", "http://mirror.example", "hello"], hello.deps), 0);
-  assert.deepEqual(warningOf(hello.err), ["warning: requests to mirror.example are sent unencrypted (http:, not https:)"]);
+  assert.deepEqual(warningOf(hello.err), ["WARN  [regstat.http] requests to mirror.example are sent unencrypted (http:, not https:)"]);
 
   // A usage error found before the first request (half a login) does not warn.
   const half = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_USERNAME: "USER123456" });
@@ -843,7 +844,7 @@ test("a download whose -o write fails exits 1; an existing -o file is still a us
   };
   assert.equal(await run([...TOKEN, "data", "tablefile", "12411-01-01-4", "-o", "missing-dir/t.zip"], failing.deps), 1);
   assert.equal(failing.mt.calls.length, 1);
-  assert.match(failing.err.join("\n"), /^Error: Could not write to "missing-dir\/t\.zip": ENOENT/m);
+  assert.match(untimed(failing.err.join("\n")), /^ERROR \[regstat\.cli\] Could not write to "missing-dir\/t\.zip": ENOENT/m);
 
   const existing = makeCli(() => rawResponse(zip, "application/zip"));
   existing.files.set("t.zip", Buffer.from("old"));

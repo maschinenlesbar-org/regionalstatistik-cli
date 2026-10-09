@@ -24,7 +24,7 @@ import { RequestEngine } from "../src/client/engine.js";
 import { run } from "../src/cli/run.js";
 import type { CliDeps } from "../src/cli/io.js";
 import { RegionalstatistikClient } from "../src/client/client.js";
-import { jsonResponse, parity } from "./helpers.js";
+import { jsonResponse, parity, untimed } from "./helpers.js";
 import * as fx from "./fixtures.js";
 
 const evenProblem: Problem<number> = (n) => (n % 2 === 0 ? undefined : "Expected an even number.");
@@ -75,13 +75,13 @@ function depsThrowing(err: unknown): { deps: CliDeps; out: string[]; errs: strin
   return { deps, out, errs };
 }
 
-test("run maps a RegionalstatistikValidationError raised during an action to exit 2 with 'Error: <message>'", async () => {
+test("run maps a RegionalstatistikValidationError raised during an action to exit 2 and an ERROR record", async () => {
   const { deps, errs } = depsThrowing(
     new RegionalstatistikValidationError("Invalid thing: Expected a non-empty value."),
   );
   const code = await run(["hello"], deps);
   assert.equal(code, 2);
-  assert.deepEqual(errs, ["Error: Invalid thing: Expected a non-empty value."]);
+  assert.deepEqual(errs.map(untimed), ["ERROR [regstat.cli] Invalid thing: Expected a non-empty value."]);
 });
 
 test("parity() runs the CLI and the library on one recording transport", async () => {

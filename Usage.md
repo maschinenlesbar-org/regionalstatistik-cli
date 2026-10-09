@@ -43,23 +43,24 @@ error (exit 2), not "the last one wins".
 |---|---|
 | `--username <u>` · `--password <p>` | account login (env `REGIONALSTATISTIK_USERNAME` / `REGIONALSTATISTIK_PASSWORD`); per field, so `--username` from a flag can take its password from the env var. A `--password` value starting with `--` is a usage error (exit 2) — usually a missing password that took the next option; put such a password in the env var |
 | `--token <t>` | API token (env `REGIONALSTATISTIK_API_TOKEN`); wins over username/password, but a `--username`/`--password` flag beats a token from the env var — the CLI then says on stderr that the env token is not used |
-| `--base-url <url>` | API base (default `https://www.regionalstatistik.de`); `http(s)` only, a path prefix is fine, but no query, fragment, userinfo, whitespace or control characters. A plain `http:` URL to a host other than loopback prints one `warning:` line on stderr (see below) |
+| `--base-url <url>` | API base (default `https://www.regionalstatistik.de`); `http(s)` only, a path prefix is fine, but no query, fragment, userinfo, whitespace or control characters. A plain `http:` URL to a host other than loopback logs one warning on stderr (see below) |
 | `--language <de\|en>` | response language (not sent unless given; the server default is `de`; English labels are partial) |
 | `--pagelength <n>` | max list results, `1..25000` (server default 100) |
 | `--timeout <ms>` · `--max-retries <n>` · `--max-response-bytes <n>` | transport tuning |
 | `--user-agent <ua>` | User-Agent header |
 | `--compact` | single-line JSON |
+| `--log-format <format>` | how errors, warnings and notes are written to stderr: `text` (default; log4j style, `2026-10-09T14:03:12.481Z WARN  [regstat.http] …`) or `jsonl` (one JSON object per line: `ts`, `level`, `topic`, `msg`). stdout is not affected |
 | `-o, --output <file>` | write output (JSON, or a download) to a file instead of stdout; `-o -` means stdout |
 | `--force` | overwrite the `--output` file if it already exists (otherwise the run is refused before any request is sent — also when a symlink, even a dangling one, sits at that path) |
 
 **Plain `http:`.** With a `--base-url` on plain `http:` to a host other than
-loopback (`localhost`, `127.0.0.0/8`, `::1`), each run writes one line to stderr
-before its first request, naming the host and what is sent unencrypted:
+loopback (`localhost`, `127.0.0.0/8`, `::1`), each run logs one `WARN` record of
+`regstat.http` on stderr before its first request, naming the host and what is sent unencrypted:
 
 ```text
-warning: the login is sent unencrypted to mirror.example:8080 (http:, not https:)
-warning: the token is sent unencrypted to mirror.example:8080 (http:, not https:)
-warning: requests to mirror.example:8080 are sent unencrypted (http:, not https:)
+2026-10-09T14:03:12.481Z WARN  [regstat.http] the login is sent unencrypted to mirror.example:8080 (http:, not https:)
+2026-10-09T14:03:12.481Z WARN  [regstat.http] the token is sent unencrypted to mirror.example:8080 (http:, not https:)
+2026-10-09T14:03:12.481Z WARN  [regstat.http] requests to mirror.example:8080 are sent unencrypted (http:, not https:)
 ```
 
 "the login" is a username + password, "the token" token mode, and the last form
@@ -187,7 +188,7 @@ ZIP, or you asked for `--format html`.
 
 `-o` refuses an existing file (without `--force`) before the request is sent —
 a usage error, exit **2**. A write that fails after the answer is in (a
-directory that doesn't exist, no permission) prints `Error: Could not write to
+directory that doesn't exist, no permission) logs `ERROR [regstat.cli] Could not write to
 "<file>": …` and exits **1**: the request was made, so it is a runtime failure,
 not a usage error.
 
@@ -221,7 +222,7 @@ is gone (`2>&1 | true`).
 > **A 404 is not always "not found" on this host.** Wrong credentials come back
 > as HTTP 404 with a flat `{"Code":2,…}` body; the CLI recognizes the GENESIS
 > code and exits **1** with the server's explanation and a
-> `Hint: check your credentials` line, not 4. (`regstat hello` sends no
+> `INFO  [regstat.api] check your credentials` record, not 4. (`regstat hello` sends no
 > credentials, so a 401/403 there gets no such hint.) `logincheck` gets the same
 > text on an HTTP 200 instead; it exits **1** with the hint too
 > (`GENESIS login rejected (HTTP 200) …`).

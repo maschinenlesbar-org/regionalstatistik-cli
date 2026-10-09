@@ -31,7 +31,7 @@ landed.
 
 This skill drives the `regstat` command. **Before anything else, validate it is available** — run `command -v regstat` (or `regstat --version`). If it is not on your PATH, STOP and inform the user that the `regstat` CLI (`@maschinenlesbar.org/regionalstatistik-cli`) is not installed — installing it is their responsibility; never install it yourself, and do not fall back to `npx` or a local `node dist/...` build.
 
-**Credentials are required** for everything except `regstat hello` (and `regstat logincheck`, which without them answers as the guest user `"Username":"GAST"`, exit 0). The Regionaldatenbank needs a free registered account (mandatory since May 2025). Supply a login via `REGIONALSTATISTIK_USERNAME` + `REGIONALSTATISTIK_PASSWORD` (or `--username`/`--password`), or an API token via `REGIONALSTATISTIK_API_TOKEN` (or `--token`) if the account has one — or the login stored once with `regstat config set token` (or `username` and `password`, typed at a prompt by the user, never as an argument), which the CLI reads by itself when no flag or env var gives a credential; `regstat config list` shows what is stored. There is **no bundled credential** — register at https://www.regionalstatistik.de/genesis/online. A command run without credentials exits `2` with guidance: stop and tell the user rather than retrying. **Wrong credentials exit `1`** with `GENESIS status 2 (ERROR) / HTTP 404 …` (missing or unrecognised ones: `GENESIS status 15 … / HTTP 401`; from `regstat logincheck`: `GENESIS login rejected (HTTP 200) …`) and a `Hint: check your credentials` line — stop and tell the user to check the token or username/password; don't retry. Confirm access with `regstat logincheck`.
+**Credentials are required** for everything except `regstat hello` (and `regstat logincheck`, which without them answers as the guest user `"Username":"GAST"`, exit 0). The Regionaldatenbank needs a free registered account (mandatory since May 2025). Supply a login via `REGIONALSTATISTIK_USERNAME` + `REGIONALSTATISTIK_PASSWORD` (or `--username`/`--password`), or an API token via `REGIONALSTATISTIK_API_TOKEN` (or `--token`) if the account has one — or the login stored once with `regstat config set token` (or `username` and `password`, typed at a prompt by the user, never as an argument), which the CLI reads by itself when no flag or env var gives a credential; `regstat config list` shows what is stored. There is **no bundled credential** — register at https://www.regionalstatistik.de/genesis/online. A command run without credentials exits `2` with guidance: stop and tell the user rather than retrying. **Wrong credentials exit `1`** with `GENESIS status 2 (ERROR) / HTTP 404 …` (missing or unrecognised ones: `GENESIS status 15 … / HTTP 401`; from `regstat logincheck`: `GENESIS login rejected (HTTP 200) …`) and an `INFO  [regstat.api] check your credentials` record on stderr — stop and tell the user to check the token or username/password; don't retry. Confirm access with `regstat logincheck`.
 
 Resolve the object code with **regionalstatistik-statistics-finder** first if
 you don't have it. Cite the response's `Copyright` for attribution
@@ -73,8 +73,8 @@ will scramble the terminal.
 
 ## Step 3 — Report what was written
 
-The CLI prints a stderr confirmation like
-`Wrote 40213 bytes to bevoelkerung-bw.zip (Content-Type: application/zip)`.
+The CLI logs a confirmation on stderr like
+`INFO  [regstat.output] Wrote 40213 bytes to bevoelkerung-bw.zip (Content-Type: application/zip)`.
 Relay that to the user: the **path**, the **byte count**, and the **format**.
 Report success only on exit `0`: when GENESIS sends a status reply instead of
 the file, the CLI writes nothing, prints the `GENESIS status …` message and

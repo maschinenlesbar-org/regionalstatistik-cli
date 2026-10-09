@@ -49,7 +49,7 @@ function isLoopbackHost(hostname: string): boolean {
 
 /**
  * Whether requests to `baseUrl` would travel unencrypted, as one sentence for a
- * warning (without a `warning: ` prefix), or `undefined` when they would not: for
+ * warning (no prefix), or `undefined` when they would not: for
  * `https:`, for a URL that does not parse, and for a loopback host (`localhost`,
  * 127.0.0.0/8, `::1`), where nothing leaves the machine.
  *
@@ -57,8 +57,8 @@ function isLoopbackHost(hostname: string): boolean {
  * secret travels with the requests: the base URL's credentials when it carries
  * userinfo (which `baseUrlProblem` rejects for a client, but the check stays general),
  * and every phrase in `secrets` — noun phrases such as `"the token"` or `"the login"`.
- * It never contains a password or token. The CLI prints it once per run as
- * `warning: <sentence>` on stderr.
+ * It never contains a password or token. The CLI logs it once per run as a
+ * `WARN` record of `regstat.http` on stderr.
  */
 export function cleartextProblem(baseUrl: string, secrets: readonly string[] = []): string | undefined {
   let url: URL;
@@ -226,8 +226,8 @@ export function isBidiControl(code: number): boolean {
  * - Every run of whitespace — CR, LF, tabs, U+2028/U+2029 included — becomes one
  *   space and the ends are trimmed, so the text stays on one line: the live wrong-
  *   credentials text ("… Nutzernamen bzw.\n das Passwort.") no longer splits the
- *   `Error:` line, a CR can't return to column 0 and overwrite it, and a server
- *   can't forge an `Error:` line of its own.
+ *   log record, a CR can't return to column 0 and overwrite it, and a server
+ *   can't forge a log record of its own.
  *
  * Implemented as a code-point filter so this source file never contains a raw
  * control byte.

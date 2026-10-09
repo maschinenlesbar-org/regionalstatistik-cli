@@ -15,7 +15,7 @@ import type { Transport } from "../src/client/http.js";
 import * as params from "../src/client/params.js";
 import { buildProgram } from "../src/cli/program.js";
 import type { Command } from "commander";
-import { jsonResponse, makeMockTransport, parity, requestKey, rawResponse, type ParityResult } from "./helpers.js";
+import { jsonResponse, makeMockTransport, parity, requestKey, rawResponse, untimed, type ParityResult } from "./helpers.js";
 import * as fx from "./fixtures.js";
 
 const TOKEN_VALUE = "test-key";
@@ -661,7 +661,7 @@ test("parity #5 control: a base URL with a path prefix sends the identical reque
 // ---- Finding 2 (PAT-7): username and password come as a pair --------------------------
 
 const PAIR_CLI =
-  /^Error: Provide BOTH --username and --password \(or use --token\)\. Env: REGIONALSTATISTIK_USERNAME \+ REGIONALSTATISTIK_PASSWORD, or REGIONALSTATISTIK_API_TOKEN\.$/m;
+  /^ERROR \[regstat\.cli\] Provide BOTH --username and --password \(or use --token\)\. Env: REGIONALSTATISTIK_USERNAME \+ REGIONALSTATISTIK_PASSWORD, or REGIONALSTATISTIK_API_TOKEN\.$/m;
 const PAIR_LIB = /^Invalid credentials: Provide both username and password \(or a token\)\.$/;
 
 const pairCases: Array<{
@@ -738,7 +738,7 @@ test("parity #2 control: a username/password pair sends the identical request", 
 // ---- Finding 11 (PAT-7): which endpoints need credentials ------------------------------
 
 const NEEDS_CLI =
-  /^Error: This command needs credentials\. Set --username\/--password \(env REGIONALSTATISTIK_USERNAME \/ REGIONALSTATISTIK_PASSWORD\) or --token \(env REGIONALSTATISTIK_API_TOKEN\)\. Or store them once with `regstat config set token` \(or `username` and `password`\)\. A free account is available at https:\/\/www\.regionalstatistik\.de\/genesis\/online\.$/m;
+  /^ERROR \[regstat\.cli\] This command needs credentials\. Set --username\/--password \(env REGIONALSTATISTIK_USERNAME \/ REGIONALSTATISTIK_PASSWORD\) or --token \(env REGIONALSTATISTIK_API_TOKEN\)\. Or store them once with `regstat config set token` \(or `username` and `password`\)\. A free account is available at https:\/\/www\.regionalstatistik\.de\/genesis\/online\.$/m;
 const NEEDS_LIB = /^Invalid credentials: This endpoint needs an account \(a token, or a username and password\)\.$/;
 
 const noCredCases: Array<{
@@ -846,5 +846,5 @@ test("parity #12: the library's base-URL error alone maps to exit 2 in run()", a
   };
   assert.equal(await run(["hello"], deps), 2);
   assert.equal(mt.calls.length, 0);
-  assert.deepEqual(err, ['Error: Invalid baseUrl: Only "http:" and "https:" URLs are allowed.']);
+  assert.deepEqual(err.map(untimed), ['ERROR [regstat.cli] Invalid baseUrl: Only "http:" and "https:" URLs are allowed.']);
 });

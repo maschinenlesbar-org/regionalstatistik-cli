@@ -4,7 +4,7 @@
 
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
-import type { CliDeps } from "./io.js";
+import { logOf, type CliDeps } from "./io.js";
 import type { CredentialStore } from "./credentials.js";
 import { cleartextProblem, DEFAULT_BASE_URL, type RawResponse } from "../client/engine.js";
 import type { RegionalstatistikClientOptions } from "../client/client.js";
@@ -347,7 +347,7 @@ export function renderJson(deps: CliDeps, global: GlobalOptions, value: unknown)
   if (toFile(global)) {
     const data = Buffer.from(text + "\n", "utf8");
     writeOutputFile(deps, global, global.output, data);
-    deps.io.err(`Wrote ${data.length} bytes to ${global.output}`);
+    logOf(deps).info("output", `Wrote ${data.length} bytes to ${global.output}`);
   } else {
     deps.io.out(text);
   }
@@ -363,10 +363,10 @@ export function renderRaw(deps: CliDeps, global: GlobalOptions, response: RawRes
   const typeNote = response.contentType ? ` (Content-Type: ${response.contentType})` : "";
   if (toFile(global)) {
     writeOutputFile(deps, global, global.output, response.data);
-    deps.io.err(`Wrote ${response.data.length} bytes to ${global.output}${typeNote}`);
+    logOf(deps).info("output", `Wrote ${response.data.length} bytes to ${global.output}${typeNote}`);
   } else {
     deps.io.outBinary(response.data);
-    deps.io.err(`Wrote ${response.data.length} bytes to stdout${typeNote}`);
+    logOf(deps).info("output", `Wrote ${response.data.length} bytes to stdout${typeNote}`);
   }
 }
 
@@ -402,8 +402,9 @@ function warnArgvCredentials(deps: CliDeps, command: Command): void {
     if (root.getOptionValueSource(opt) === "cli") flagged.push(`--${opt} (env ${env})`);
   }
   if (flagged.length > 0) {
-    deps.io.err(
-      `Warning: credential(s) passed on the command line are visible in the process ` +
+    logOf(deps).warn(
+      "cli",
+      `credential(s) passed on the command line are visible in the process ` +
         `list and shell history. Prefer the environment variable(s): ${flagged.join(", ")}.`,
     );
   }
@@ -427,8 +428,9 @@ function noteEnvTokenSetAside(
   const flags = [fromCli.username ? "--username" : undefined, fromCli.password ? "--password" : undefined]
     .filter((f) => f !== undefined)
     .join(" and ");
-  deps.io.err(
-    `Note: the token from ${CREDENTIAL_ENV.token} is not used: ${flags} on the command line ` +
+  logOf(deps).info(
+    "cli",
+    `the token from ${CREDENTIAL_ENV.token} is not used: ${flags} on the command line ` +
       "selects a username and password login (the other half may come from its environment variable).",
   );
 }
@@ -444,7 +446,7 @@ function noteEnvTokenSetAside(
 function warnCleartext(deps: CliDeps, global: GlobalOptions, creds: ResolvedCredentials): void {
   const secrets = creds.token !== undefined ? ["the token"] : creds.present ? ["the login"] : [];
   const problem = cleartextProblem(global.baseUrl ?? DEFAULT_BASE_URL, secrets);
-  if (problem !== undefined) deps.io.err(`warning: ${problem}`);
+  if (problem !== undefined) logOf(deps).warn("http", problem);
 }
 
 /**
