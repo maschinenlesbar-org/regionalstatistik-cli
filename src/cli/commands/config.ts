@@ -4,9 +4,9 @@
 // reaches neither shell history nor `ps`; it comes out masked unless asked for in full.
 
 import type { Command } from "commander";
-import { RegionalstatistikError, RegionalstatistikUsageError } from "../../client/errors.js";
+import { RegionalstatistikUsageError } from "../../client/errors.js";
 import { credentialProblem } from "../../client/validate.js";
-import { CONFIG_DIR_NAME, credentialValueProblem, maskCredential, type CredentialStore } from "../credentials.js";
+import { CONFIG_DIR_NAME, CredentialsFileError, credentialValueProblem, maskCredential, type CredentialStore } from "../credentials.js";
 import { logOf, type CliDeps } from "../io.js";
 import { CREDENTIAL_NAMES, type GlobalOptions } from "../shared.js";
 
@@ -37,7 +37,7 @@ function valueProblem(value: string): string | undefined {
 }
 
 function storeOf(deps: CliDeps): CredentialStore {
-  if (deps.credentials === undefined) throw new RegionalstatistikError("This program was built without a credentials file.");
+  if (deps.credentials === undefined) throw new CredentialsFileError("This program was built without a credentials file.");
   return deps.credentials();
 }
 
@@ -99,7 +99,7 @@ export function registerConfigCommands(program: Command, deps: CliDeps): void {
       const name = credentialNameArg(command, "regstat config get");
       const store = storeOf(deps);
       const value = store.get(name);
-      if (value === undefined) throw new RegionalstatistikError(`No ${name} is stored in ${store.path}; regstat config set ${name} stores one.`);
+      if (value === undefined) throw new CredentialsFileError(`No ${name} is stored in ${store.path}; regstat config set ${name} stores one.`);
       deps.io.redact?.([value]);
       // --reveal prints the value as stored: the run's redaction (a credential from a flag
       // or a variable that happens to occur in it) would hand a script a wrong value with
@@ -116,7 +116,7 @@ export function registerConfigCommands(program: Command, deps: CliDeps): void {
     .action(async (_name: string, _options: unknown, command: Command) => {
       const name = credentialNameArg(command, "regstat config unset");
       const store = storeOf(deps);
-      if (!store.unset(name)) throw new RegionalstatistikError(`No ${name} is stored in ${store.path}.`);
+      if (!store.unset(name)) throw new CredentialsFileError(`No ${name} is stored in ${store.path}.`);
       logOf(deps).info("config", `Removed ${name} from ${store.path}.`);
     });
 

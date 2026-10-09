@@ -6,6 +6,7 @@ import { CommanderError, type Command } from "commander";
 import { buildProgram, defaultDeps } from "./program.js";
 import { escapeControlChars } from "./shared.js";
 import { OutputError, OutputRefusedError, logOf, type CliDeps } from "./io.js";
+import { CredentialsFileError } from "./credentials.js";
 import { DEFAULT_LOG_FORMAT, createLogger, logFormatFromArgv, type LogFormat, type Logger } from "./log.js";
 import {
   RegionalstatistikApiError,
@@ -270,6 +271,18 @@ export function processLogger(argv: readonly string[], env: Record<string, strin
   });
 }
 
+/**
+ * The log area of a `RegionalstatistikError` that is neither an API error nor a usage
+ * error: the connection (`http`), the `-o` file (`output`), the credentials file
+ * (`config`, like its successes), else `cli`.
+ */
+function areaOf(err: RegionalstatistikError): string {
+  if (err instanceof RegionalstatistikNetworkError) return "http";
+  if (err instanceof OutputError) return "output";
+  if (err instanceof CredentialsFileError) return "config";
+  return "cli";
+}
+
 export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<number> {
   // The log replaces the secrets of the run in every message, in either format —
   // including a credential that `action()` adds later through `deps.redact`.
@@ -337,7 +350,7 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
       return 1;
     }
     if (err instanceof RegionalstatistikError) {
-      log.error(err instanceof RegionalstatistikNetworkError ? "http" : err instanceof OutputError ? "output" : "cli", err.message);
+      log.error(areaOf(err), err.message);
       return 1;
     }
     log.error("cli", `Unexpected error: ${err instanceof Error ? err.message : String(err)}`);

@@ -578,7 +578,11 @@ and a message longer than `MAX_RECORD_MESSAGE` (4000 characters, exported) is cu
 code point and ends in `… (N more characters)`. The areas are `cli` (usage errors, commander's messages, validation errors, the
 warning about a credential on the command line, the note that an env token was set aside,
 unexpected errors), `api` (GENESIS's error answers and the credentials hints), `http` (the
-connection: network errors, the cleartext warning), `config` (`regstat config`) and
+connection: network errors, the cleartext warning), `config` (the credentials file:
+what `regstat config set|unset|list` did, and every failure to read, write or use the
+file — a `CredentialsFileError`, exit 1 — whether `config` or a command that needs the
+login read it; a usage error of `config`, such as a refused name or value, stays `cli`)
+and
 `output` (the `-o` file written, `Wrote N bytes …`, or any failure to write it: an
 `OutputRefusedError` for an existing file, exit 2, an `OutputError` for a write that
 fails once the answer is in, exit 1; and a stdout write error). Code logs through `logOf(deps)` and never writes diagnostics

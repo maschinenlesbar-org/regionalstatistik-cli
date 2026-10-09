@@ -5,7 +5,7 @@
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
 import { OutputError, OutputRefusedError, logOf, type CliDeps } from "./io.js";
-import type { CredentialStore } from "./credentials.js";
+import { CredentialsFileError, type CredentialStore } from "./credentials.js";
 import { cleartextProblem, DEFAULT_BASE_URL, type RawResponse } from "../client/engine.js";
 import type { RegionalstatistikClientOptions } from "../client/client.js";
 import {
@@ -488,7 +488,7 @@ function storedCredentials(deps: CliDeps, store: CredentialStore): ResolvedCrede
     if (value === undefined) continue;
     const reason = credentialProblem(value);
     if (reason !== undefined) {
-      throw new RegionalstatistikError(
+      throw new CredentialsFileError(
         `The ${name} in the credentials file ${store.path} is not usable: ${reason} ` +
           `\`regstat config set ${name}\` replaces it.`,
       );

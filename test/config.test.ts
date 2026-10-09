@@ -582,7 +582,7 @@ test("a held lock fails config set with exit 1 and the stored values kept (C8)",
     writeFileSync(`${cli.store.path}.lock`, "4242");
     const store = new CredentialStore(cli.store.path, { sleep: () => undefined, now: (() => { let t = Date.now(); return () => (t += 500); })() });
     assert.equal(await run(["config", "set", "password"], { ...cli.deps, credentials: () => store }), 1);
-    assert.match(cli.err.join("\n"), /ERROR \[regstat\.cli\] Another regstat config is writing/);
+    assert.match(cli.err.join("\n"), /ERROR \[regstat\.config\] Another regstat config is writing/);
     assert.deepEqual(cli.store.all(), { username: USER });
   } finally {
     cli.cleanup();
@@ -683,5 +683,40 @@ test("a password with C1 characters that a server echoes is replaced on stdout, 
     } finally {
       cli.cleanup();
     }
+  }
+});
+
+test("a failure of the credentials file is an ERROR record of regstat.config, like its successes (destatis-genesis 04-1)", async () => {
+  const cli = makeCli({ secret: TOKEN });
+  try {
+    const records = async (argv: string[], deps: CliDeps = cli.deps): Promise<Array<Record<string, unknown>>> => {
+      cli.err.length = 0;
+      await run(["--log-format", "jsonl", ...argv], deps);
+      return cli.err.map((line) => JSON.parse(line) as Record<string, unknown>);
+    };
+    const errorTopic = (rs: Array<Record<string, unknown>>): unknown => rs.find((r) => r["level"] === "ERROR")?.["topic"];
+    // Nothing stored: get and unset.
+    assert.equal(errorTopic(await records(["config", "get", "token"])), "regstat.config");
+    assert.equal(errorTopic(await records(["config", "unset", "token"])), "regstat.config");
+    // A file others can read: from config list and from a command that needs the login.
+    cli.store.set("token", TOKEN);
+    chmodSync(cli.store.path, 0o644);
+    for (const argv of [["config", "list"], ["find", "x"]]) {
+      const rs = await records(argv);
+      assert.equal(errorTopic(rs), "regstat.config", JSON.stringify(rs));
+      assert.match(String(rs.find((r) => r["level"] === "ERROR")?.["msg"]), /can be read by others/);
+    }
+    chmodSync(cli.store.path, 0o600);
+    // A stored value the library refuses.
+    writeFileSync(cli.store.path, JSON.stringify({ token: ` ${TOKEN}` }), { mode: 0o600 });
+    assert.equal(errorTopic(await records(["find", "x"])), "regstat.config");
+    // The success is config too.
+    rmSync(cli.store.path);
+    const stored = await records(["config", "set", "token"]);
+    assert.deepEqual([stored[0]?.["level"], stored[0]?.["topic"]], ["INFO", "regstat.config"]);
+    // A usage error of config stays cli.
+    assert.equal(errorTopic(await records(["config", "get", "nope"])), "regstat.cli");
+  } finally {
+    cli.cleanup();
   }
 });
