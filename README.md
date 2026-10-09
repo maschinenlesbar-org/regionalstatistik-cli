@@ -94,7 +94,8 @@ regstat config unset password
 The value is never taken from the command line, so it reaches neither shell history
 nor `ps`. The file is `$XDG_CONFIG_HOME/regionalstatistik/credentials` (else
 `~/.config/regionalstatistik/credentials`): mode 0600 in a directory of mode 0700,
-replaced atomically, and not read at all while anyone else could read it. It is
+replaced atomically by one writer at a time (`credentials.lock` beside it; a second
+`config set` waits up to 2 s, then fails with exit 1 and changes nothing), and not read at all while anyone else could read it. It is
 consulted only when no flag and no env var gives any credential — no token, no
 username, no password — so a login is never pieced together from two places; from the
 file, too, a token wins over username and password, and a username without a password
