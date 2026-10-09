@@ -243,7 +243,9 @@ value source tells flag from env), and `action()` then says so on stderr
 used: …`, the flag named, no value), before any pair error. Fields mix: `--username`
 from a flag takes its password from `REGIONALSTATISTIK_PASSWORD` (flag wins per
 field, by decision of 2026-10-06); supplying only one of username/password is
-rejected by the library (see above) and reworded by the CLI with the flags (exit 2). Flag values are checked by their parser
+rejected by the library (see above) and reworded by the CLI with the flags (exit 2),
+naming the half that was set and where (`Set: REGIONALSTATISTIK_USERNAME only.`) and,
+when the credentials file holds a login, that it was set aside. Flag values are checked by their parser
 (`parseCredential`, the library's `credentialProblem`); an env value is seeded unchecked and validated in
 `shared.ts:action()` only when the command is about to send it, so a malformed
 env var never breaks `--help`, `--version`, `hello` or a run whose flag

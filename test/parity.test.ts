@@ -661,7 +661,7 @@ test("parity #5 control: a base URL with a path prefix sends the identical reque
 // ---- Finding 2 (PAT-7): username and password come as a pair --------------------------
 
 const PAIR_CLI =
-  /^ERROR \[regstat\.cli\] Provide BOTH --username and --password \(or use --token\)\. Env: REGIONALSTATISTIK_USERNAME \+ REGIONALSTATISTIK_PASSWORD, or REGIONALSTATISTIK_API_TOKEN\.$/m;
+  /^ERROR \[regstat\.cli\] Provide BOTH --username and --password \(or use --token\)\. Env: REGIONALSTATISTIK_USERNAME \+ REGIONALSTATISTIK_PASSWORD, or REGIONALSTATISTIK_API_TOKEN\. Set: (--username|--password|REGIONALSTATISTIK_USERNAME|REGIONALSTATISTIK_PASSWORD) only\.$/m;
 const PAIR_LIB = /^Invalid credentials: Provide both username and password \(or a token\)\.$/;
 
 const pairCases: Array<{

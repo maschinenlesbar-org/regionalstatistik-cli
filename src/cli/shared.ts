@@ -216,12 +216,30 @@ export function resolveCredentials(
 }
 
 /**
+ * Whether the credentials file holds any part of a login, for a message about a half
+ * login given another way: the user who stored one believes it is in effect. Only the
+ * names are looked at; a file that cannot be read counts as holding none (the run
+ * fails on the half login anyway, and the file is not what it needed).
+ */
+function holdsStoredLogin(deps: CliDeps): boolean {
+  if (deps.credentials === undefined) return false;
+  try {
+    return deps.credentials().names().some((name) => (CREDENTIAL_NAMES as readonly string[]).includes(name));
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Build the client, rewording the library's credential-pair error with the
- * flags and env vars that supply the pair.
+ * flags and env vars that supply the pair. `setBy` names the flag or variable that
+ * gave the half (`--username`, `REGIONALSTATISTIK_PASSWORD`): the message says so, and,
+ * when the credentials file holds a login, that it was set aside because of it.
  */
 function createClient(
   deps: CliDeps,
   options: RegionalstatistikClientOptions,
+  setBy: readonly string[] = [],
 ): ReturnType<CliDeps["createClient"]> {
   try {
     return deps.createClient(options);
@@ -229,7 +247,14 @@ function createClient(
     if (err instanceof RegionalstatistikValidationError && err.message.endsWith(CREDENTIAL_PAIR_PROBLEM)) {
       throw new RegionalstatistikUsageError(
         "Provide BOTH --username and --password (or use --token). " +
-          "Env: REGIONALSTATISTIK_USERNAME + REGIONALSTATISTIK_PASSWORD, or REGIONALSTATISTIK_API_TOKEN.",
+          "Env: REGIONALSTATISTIK_USERNAME + REGIONALSTATISTIK_PASSWORD, or REGIONALSTATISTIK_API_TOKEN." +
+          (setBy.length === 0
+            ? ""
+            : ` Set: ${setBy.join(", ")} only.` +
+              (holdsStoredLogin(deps)
+                ? " A login is stored in the credentials file, but it is not read while a flag or a REGIONALSTATISTIK_* " +
+                  `variable gives any credential: remove ${setBy.join(" and ")} to use it.`
+                : "")),
         { cause: err },
       );
     }
@@ -563,6 +588,8 @@ export function action(
     // not resolved at all: a half-configured or malformed env login must not fail
     // the very connectivity check used to debug it.
     let creds: ResolvedCredentials = { present: false };
+    // The flag or variable that gave half a login, for the pair error.
+    let setBy: string[] = [];
     if (opts.auth !== false) {
       const root = rootCommand(command);
       const fromCli: CredentialSources = {
@@ -579,12 +606,16 @@ export function action(
         creds = storedCredentials(deps, deps.credentials());
       } else {
         creds = resolveCredentials(global, fromCli);
+        setBy = [
+          ...(creds.username !== undefined ? [fromCli.username ? "--username" : "REGIONALSTATISTIK_USERNAME"] : []),
+          ...(creds.password !== undefined ? [fromCli.password ? "--password" : "REGIONALSTATISTIK_PASSWORD"] : []),
+        ];
         noteEnvTokenSetAside(deps, global, fromCli, creds);
         checkEnvCredentials(root, creds);
       }
     }
     // A half username/password pair gets the library's pair error, reworded.
-    const client = createClient(deps, toClientOptions(global, creds));
+    const client = createClient(deps, toClientOptions(global, creds), setBy);
     warnCleartext(deps, global, creds);
     if (creds.present) warnArgvCredentials(deps, command);
     await withCredentialsHint(() => fn({ client, global, opts: command.opts() }, positionals));

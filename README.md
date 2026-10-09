@@ -97,7 +97,8 @@ nor `ps`. The file is `$XDG_CONFIG_HOME/regionalstatistik/credentials` (else
 replaced atomically by one writer at a time (`credentials.lock` beside it; a second
 `config set` waits up to 2 s, then fails with exit 1 and changes nothing), and not read at all while anyone else could read it. It is
 consulted only when no flag and no env var gives any credential — no token, no
-username, no password — so a login is never pieced together from two places; from the
+username, no password — so a login is never pieced together from two places (the error
+for half a login names the half that was set, and a stored login it set aside); from the
 file, too, a token wins over username and password, and a username without a password
 is refused (exit 2). A stored value follows the same rules as a flag (no surrounding
 whitespace, Latin-1 only; spaces inside a password are fine) and is kept out of the

@@ -251,6 +251,50 @@ test("a login is never pieced together from two places", async () => {
   }
 });
 
+test("half a login names where it came from, and a stored login it set aside (results/01 bug 01-1)", async () => {
+  const cli = makeCli();
+  try {
+    // A flag's half next to a full stored login.
+    cli.store.set("username", "fileuser");
+    cli.store.set("password", "file pass word");
+    assert.equal(await run(["--username", "flaguser", "find", "bevoelkerung"], cli.deps), 2);
+    assert.match(
+      untimed(cli.err.join("\n")),
+      /^ERROR \[regstat\.cli\] Provide BOTH --username and --password \(or use --token\)\. Env: REGIONALSTATISTIK_USERNAME \+ REGIONALSTATISTIK_PASSWORD, or REGIONALSTATISTIK_API_TOKEN\. Set: --username only\. A login is stored in the credentials file, but it is not read while a flag or a REGIONALSTATISTIK_\* variable gives any credential: remove --username to use it\.$/m,
+    );
+    assert.equal(cli.mt.calls.length, 0);
+    // A variable's half next to a stored login, and next to a stored token.
+    for (const env of [{ REGIONALSTATISTIK_PASSWORD: "envpass" }, { REGIONALSTATISTIK_USERNAME: "envuser" }]) {
+      cli.err.length = 0;
+      assert.equal(await run(["find", "bevoelkerung"], { ...cli.deps, env }), 2);
+      const name = Object.keys(env)[0] as string;
+      assert.match(cli.err.join("\n"), new RegExp(`Set: ${name} only\\. A login is stored in the credentials file, .*: remove ${name} to use it\\.`));
+    }
+    cli.store.unset("username");
+    cli.store.unset("password");
+    cli.store.set("token", TOKEN);
+    cli.err.length = 0;
+    assert.equal(await run(["find", "bevoelkerung"], { ...cli.deps, env: { REGIONALSTATISTIK_USERNAME: "envuser" } }), 2);
+    assert.match(cli.err.join("\n"), /Set: REGIONALSTATISTIK_USERNAME only\. A login is stored in the credentials file/);
+    // A credentials file that cannot be read is not mentioned, and does not stop the message.
+    cli.err.length = 0;
+    chmodSync(cli.store.path, 0o644);
+    assert.equal(await run(["find", "bevoelkerung"], { ...cli.deps, env: { REGIONALSTATISTIK_PASSWORD: "envpass" } }), 2);
+    assert.match(cli.err.join("\n"), /Set: REGIONALSTATISTIK_PASSWORD only\.$/m);
+    assert.doesNotMatch(cli.err.join("\n"), /credentials file/);
+    // No stored login: the source is named, the file is not mentioned.
+    chmodSync(cli.store.path, 0o600);
+    cli.store.unset("token");
+    cli.err.length = 0;
+    assert.equal(await run(["--password", "flagpass", "find", "bevoelkerung"], cli.deps), 2);
+    assert.match(cli.err.join("\n"), /Set: --password only\.$/m);
+    assert.doesNotMatch(cli.err.join("\n"), /credentials file/);
+    assert.ok(!cli.err.join("\n").includes("file pass word"));
+  } finally {
+    cli.cleanup();
+  }
+});
+
 test("a file with half a login is a usage error that names the missing half, before any request", async () => {
   const cli = makeCli();
   try {
