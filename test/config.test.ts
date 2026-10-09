@@ -457,3 +457,31 @@ test("config refuses -o: the value goes to stdout only, never silently to the te
     cli.cleanup();
   }
 });
+
+test("a secret typed in place of the name is never echoed, by any config command (C2)", async () => {
+  const cli = makeCli({ secret: TOKEN });
+  try {
+    const typed = "Hunter2SECRET!pw";
+    for (const argv of [
+      ["config", "set", typed],
+      ["config", "get", typed],
+      ["config", "get", typed, "--reveal"],
+      ["config", "unset", typed],
+      ["config", "get", "password", typed],
+      ["config", "unset", "password", typed],
+      ["config", "list", typed],
+      ["--log-format", "jsonl", "config", "set", typed],
+    ]) {
+      cli.err.length = 0;
+      assert.equal(await run(argv, cli.deps), 2, argv.join(" "));
+      const err = cli.err.join("\n");
+      assert.ok(!err.includes("SECRET"), `${argv.join(" ")}:\n${err}`);
+      assert.match(err, /ERROR.*regstat\.cli/, argv.join(" "));
+    }
+    cli.err.length = 0;
+    assert.equal(await run(["config", "get", typed], cli.deps), 2);
+    assert.match(cli.err.join("\n"), /Not a credential name this program knows: expected token, username, password\./);
+  } finally {
+    cli.cleanup();
+  }
+});
