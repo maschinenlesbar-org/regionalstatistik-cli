@@ -661,3 +661,27 @@ test("a credential a server echoes URL-encoded on a success is replaced on stdou
     cli.cleanup();
   }
 });
+
+test("a password with C1 characters that a server echoes is replaced on stdout, in the escaped form stdout prints (#6)", async () => {
+  // The credentials file refuses C1 characters (credentialValueProblem); a variable or a
+  // flag can still carry one, and the library sends it.
+  for (const password of ["pass\u0085word123", "pass\u009bword123"]) {
+    const cli = makeCli({ responder: () => jsonResponse({ ...fx.loginOk, Username: USER, Password: password }) });
+    try {
+      for (const argv of [["logincheck", "--compact"], ["logincheck"]]) {
+        cli.out.length = 0;
+        const viaEnv = { ...cli.deps, env: { REGIONALSTATISTIK_USERNAME: USER, REGIONALSTATISTIK_PASSWORD: password } };
+        assert.equal(await run(argv, viaEnv), 0, cli.err.join("\n"));
+        const out = cli.out.join("\n");
+        assert.ok(!out.includes("word123"), `${JSON.stringify(password)} ${argv.join(" ")}: ${out}`);
+        assert.match(out, /"Password": ?"\*\*\*"/);
+      }
+      // The same from the flags.
+      cli.out.length = 0;
+      assert.equal(await run(["--username", USER, "--password", password, "logincheck", "--compact"], cli.deps), 0, cli.err.join("\n"));
+      assert.ok(!cli.out.join("\n").includes("word123"), cli.out.join("\n"));
+    } finally {
+      cli.cleanup();
+    }
+  }
+});
