@@ -130,3 +130,15 @@ possible), `()` (limited informative value), `p` (provisional), `r` (revised),
 
 See [DEVELOPING.md](DEVELOPING.md) for how credentials are passed on the wire
 and why redirects are not followed.
+
+## Log records
+
+**Log record.** Every diagnostic line the CLI writes to stderr: a timestamp, a level
+(`ERROR`, `WARN`, `INFO`) and a topic `regstat.<area>`, as text (log4j style) or with
+`--log-format jsonl` as one JSON object per line. The areas: `cli` (usage errors,
+commander's messages, unexpected errors, the warning about a credential given as a flag),
+`api` (GENESIS's answers: an error status, the credentials hint, and a malformed answer —
+bad JSON, the wrong shape, an empty body, an HTML page instead of a file, a login check
+that confirms nothing), `http` (the connection, the cleartext warning), `config` (the
+credentials file) and `output` (the `-o` file, stdout failures). A record is always one
+line; control characters in it are escaped.

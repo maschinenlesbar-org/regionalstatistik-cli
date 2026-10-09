@@ -12,6 +12,7 @@ import {
   RegionalstatistikApiError,
   RegionalstatistikError,
   RegionalstatistikNetworkError,
+  RegionalstatistikParseError,
   RegionalstatistikUsageError,
   RegionalstatistikValidationError,
   credentialsIn,
@@ -273,11 +274,14 @@ export function processLogger(argv: readonly string[], env: Record<string, strin
 
 /**
  * The log area of a `RegionalstatistikError` that is neither an API error nor a usage
- * error: the connection (`http`), the `-o` file (`output`), the credentials file
- * (`config`, like its successes), else `cli`.
+ * error: the connection (`http`), a malformed answer (`api`: bad JSON, the wrong shape,
+ * an empty body, an unknown charset, an HTML page instead of a file, a login check that
+ * confirms nothing — the API's answer as much as an error status is), the `-o` file
+ * (`output`), the credentials file (`config`, like its successes), else `cli`.
  */
 function areaOf(err: RegionalstatistikError): string {
   if (err instanceof RegionalstatistikNetworkError) return "http";
+  if (err instanceof RegionalstatistikParseError) return "api";
   if (err instanceof OutputError) return "output";
   if (err instanceof CredentialsFileError) return "config";
   return "cli";

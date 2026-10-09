@@ -117,7 +117,7 @@ are. Library users get the same check as `cleartextProblem(baseUrl, secrets)`.
 **The log on stderr.** Data goes to stdout; each line on stderr is a **log record**: a
 timestamp (UTC), a level (`ERROR`, `WARN`, `INFO`) and a topic, the program and the area
 it comes from (`regstat.cli` for usage errors and credential notes, `regstat.api` for
-GENESIS's answers, `regstat.http` for the connection, `regstat.config` for the
+GENESIS's answers, a malformed one included, `regstat.http` for the connection, `regstat.config` for the
 credentials file, `regstat.output` for the `-o` file and stdout — each with its
 successes and its failures). By default it is written log4j style; `--log-format jsonl`
 writes one JSON object per line instead. A record is always one line: a line

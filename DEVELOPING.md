@@ -577,7 +577,10 @@ character, which jq rejects, stopping the whole stream) becomes U+FFFD (`toWellF
 and a message longer than `MAX_RECORD_MESSAGE` (4000 characters, exported) is cut at a
 code point and ends in `… (N more characters)`. The areas are `cli` (usage errors, commander's messages, validation errors, the
 warning about a credential on the command line, the note that an env token was set aside,
-unexpected errors), `api` (GENESIS's error answers and the credentials hints), `http` (the
+unexpected errors), `api` (GENESIS's answers: its error answers and the credentials
+hints, and a malformed answer, a `RegionalstatistikParseError`: bad JSON, the wrong
+shape, an empty body, an unknown charset, an HTML page instead of a file, a login check
+that confirms nothing), `http` (the
 connection: network errors, the cleartext warning), `config` (the credentials file:
 what `regstat config set|unset|list` did, and every failure to read, write or use the
 file — a `CredentialsFileError`, exit 1 — whether `config` or a command that needs the
