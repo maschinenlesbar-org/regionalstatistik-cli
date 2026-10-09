@@ -696,8 +696,9 @@ test("help/version exit 0; a missing command prints the help to stderr and exits
     const cli = makeCli(() => jsonResponse(fx.whoami));
     assert.equal(await run(argv, cli.deps), 2, argv.join(" "));
     assert.deepEqual(cli.out, []);
-    // commander's help after a missing command is an INFO record of regstat.cli.
-    assert.match(untimed(cli.err.join("\n")), /^INFO  \[regstat\.cli\] Usage: regstat/);
+    // An ERROR names the missing command; commander's help after it is INFO records of
+    // regstat.cli, one per line.
+    assert.match(untimed(cli.err.join("\n")), /^ERROR \[regstat\.cli\] missing command: `regstat( data)? <subcommand>`\nINFO  \[regstat\.cli\] Usage: regstat/);
   }
 });
 
