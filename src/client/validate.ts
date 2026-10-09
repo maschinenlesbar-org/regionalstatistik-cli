@@ -8,7 +8,7 @@
 //   - `assertValid` turns a reason into a `RegionalstatistikValidationError` with
 //     the message `Invalid <name>: <reason>`.
 
-import { RegionalstatistikValidationError, cutText } from "./errors.js";
+import { RegionalstatistikValidationError, cutForMessage } from "./errors.js";
 import {
   BOOLEAN_PARAM_KEYS,
   CRITERIA,
@@ -113,7 +113,7 @@ export function assertRequestParams(
     if (FORBIDDEN_KEYS.has(key)) throw new RegionalstatistikValidationError(`Invalid params: "${key}" is not a parameter.`);
     if (allowed !== undefined && !allowed.includes(key) && options.allowUnknownParams !== true) {
       throw new RegionalstatistikValidationError(
-        `Invalid params: unknown parameter "${cutText(key, 100)}" (GENESIS would ignore it and answer unfiltered). ` +
+        `Invalid params: unknown parameter "${cutForMessage(key, 100)}" (GENESIS would ignore it and answer unfiltered). ` +
           `Allowed: ${allowed.join(", ")}. Pass { allowUnknownParams: true } to send it anyway.`,
       );
     }

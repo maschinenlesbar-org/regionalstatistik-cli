@@ -73,11 +73,13 @@ export function redactSecrets(text: string, secrets: readonly string[]): string 
 export const MAX_MESSAGE_VALUE_LENGTH = 500;
 
 /**
- * `text` cut to MAX_MESSAGE_VALUE_LENGTH characters, ending in "…" when cut — never inside
- * a surrogate pair (`cutText`), so a message that holds it stays well-formed.
+ * `text` cut to `max` characters (default MAX_MESSAGE_VALUE_LENGTH), ending in "…" when
+ * cut — never inside a surrogate pair (`cutText`), so a message that holds it stays
+ * well-formed. Every value an own message quotes from a server answer (a `Status.Type`,
+ * a charset) goes through it, so a library caller's `err.message` stays bounded.
  */
-export function cutForMessage(text: string): string {
-  return text.length > MAX_MESSAGE_VALUE_LENGTH ? `${cutText(text, MAX_MESSAGE_VALUE_LENGTH)}…` : text;
+export function cutForMessage(text: string, max = MAX_MESSAGE_VALUE_LENGTH): string {
+  return text.length > max ? `${cutText(text, max)}…` : text;
 }
 
 /**
@@ -129,7 +131,7 @@ export class RegionalstatistikError extends Error {
  * At least one of the two is always present, and both are when a non-2xx reply
  * carried a GENESIS status body; `detail` holds the human-readable message
  * (`Status.Content` / `Content`, or a parsed field from an HTTP error body), cut at
- * `MAX_MESSAGE_VALUE_LENGTH` characters (the full answer is in `body`).
+ * `MAX_MESSAGE_VALUE_LENGTH` characters like `statusType` (the full answer is in `body`).
  */
 export class RegionalstatistikApiError extends RegionalstatistikError {
   readonly httpStatus: number | undefined;
@@ -166,8 +168,9 @@ export class RegionalstatistikApiError extends RegionalstatistikError {
     loginRejected?: boolean;
   }) {
     const detail = args.detail === undefined ? undefined : cutForMessage(args.detail);
+    const statusType = args.statusType === undefined ? undefined : cutForMessage(args.statusType);
     const detailPart = detail ? `: ${detail}` : "";
-    const typePart = args.statusType ? ` (${args.statusType})` : "";
+    const typePart = statusType ? ` (${statusType})` : "";
     const genesisPart =
       args.code !== undefined
         ? `GENESIS status ${args.code}${typePart}`
@@ -183,7 +186,7 @@ export class RegionalstatistikApiError extends RegionalstatistikError {
     super(`${head} for ${args.method} ${args.url}${detailPart}`);
     this.httpStatus = args.httpStatus;
     this.code = args.code;
-    this.statusType = args.statusType;
+    this.statusType = statusType;
     this.url = args.url;
     this.method = args.method;
     this.body = args.body;

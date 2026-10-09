@@ -740,3 +740,34 @@ test("a server detail cut at 500 (or a plain-text snippet at 200) characters kee
     }
   }
 });
+
+test("own messages quote a server value at most MAX_MESSAGE_VALUE_LENGTH characters long (L3)", async () => {
+  const long = "x".repeat(5000);
+  // A GENESIS Status.Type of 5000 characters: the message quotes it cut.
+  const typed = new RequestEngine({ transport: async () => ({ status: 200, headers: { "content-type": "application/json" }, body: Buffer.from(JSON.stringify({ Status: { Code: 7, Content: "c", Type: `Fehler ${long}` } })) }) });
+  await assert.rejects(typed.postJson("/find/find", {}, {}), (err: Error) => err.message.length < 1200 && /\(Fehler x+…\)/.test(err.message));
+  // An unknown charset of 5000 characters.
+  const charset = new RequestEngine({ transport: async () => ({ status: 200, headers: { "content-type": `application/json; charset=${long}` }, body: Buffer.from("{}") }) });
+  await assert.rejects(charset.postJson("/find/find", {}, {}), (err: Error) => err.message.length < 1200 && /charset "x+…"/.test(err.message));
+});
+
+test("a long Status.Type is quoted cut in every answer shape: envelope, flat 404 and logincheck (results/03 bug 03-1)", async () => {
+  const type = `Fehler ${"T".repeat(200_000)}`;
+  const answers: Array<[string, number, unknown]> = [
+    ["/metadata/table", 200, { Status: { Code: 90, Content: "kurz", Type: type } }],
+    ["/find/find", 404, { Code: 2, Content: "kurz", Type: type }],
+    ["/helloworld/logincheck", 200, { Status: { Code: 2, Content: "kurz", Type: type }, Username: "u" }],
+  ];
+  for (const [path, status, body] of answers) {
+    const e = new RequestEngine({ transport: async () => ({ status, headers: { "content-type": "application/json" }, body: Buffer.from(JSON.stringify(body)) }) });
+    const call = path === "/helloworld/logincheck" ? e.postLoginCheck(path, {}, {}) : e.postJson(path, {}, {});
+    await assert.rejects(call, (err: RegionalstatistikApiError) => {
+      assert.ok(err instanceof RegionalstatistikApiError, `${path}: ${String(err)}`);
+      assert.ok(err.message.length < 1200, `${path}: ${err.message.length} characters`);
+      assert.match(err.message, /\(Fehler T+…\)/, path);
+      assert.ok((err.statusType ?? "").length <= 501, path);
+      assert.ok(String(err.body).length > 200_000, `${path}: the body keeps the whole answer`);
+      return true;
+    });
+  }
+});
