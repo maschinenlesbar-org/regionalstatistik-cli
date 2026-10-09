@@ -6,7 +6,7 @@ import { CommanderError, type Command } from "commander";
 import { buildProgram, defaultDeps } from "./program.js";
 import { escapeControlChars } from "./shared.js";
 import { logOf, type CliDeps } from "./io.js";
-import { createLogger, logFormatFromArgv } from "./log.js";
+import { DEFAULT_LOG_FORMAT, createLogger, logFormatFromArgv, type LogFormat } from "./log.js";
 import {
   RegionalstatistikApiError,
   RegionalstatistikError,
@@ -85,6 +85,22 @@ function writeCommanderErr(command: Command, deps: CliDeps, state: { errorLogged
     log.error("cli", `missing command: \`${commandPath(command)} <subcommand>\``);
   }
   for (const line of text.split("\n")) if (line.trim() !== "") log.info("cli", line.trimEnd());
+}
+
+/**
+ * The names (long and short) of the program's own options that require a value
+ * (`--user-agent`, `-o`). Only the program's: commander takes them out of argv wherever
+ * they stand, before a subcommand sees the rest, so a subcommand's `--region-key` never
+ * swallows a `--log-format` after it.
+ */
+function valueOptionsOf(program: Command): Set<string> {
+  const names = new Set<string>();
+  for (const option of program.options) {
+    if (!option.required) continue;
+    if (option.long !== undefined) names.add(option.long);
+    if (option.short !== undefined) names.add(option.short);
+  }
+  return names;
 }
 
 /**
@@ -250,6 +266,18 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
     // are validated later, in action(), only when a command sends them.)
     const program = buildProgram(deps);
     configureTree(program, deps);
+    // For the records of a parse error: the scan of argv, now knowing which of the
+    // program's options take a value, as commander reads them.
+    const log = deps.log;
+    if (log !== undefined) log.format = logFormatFromArgv(argv, valueOptionsOf(program));
+    // One source for the format once commander has parsed argv: its value, not the scan
+    // of argv (an option's value can look like --log-format; `--` ends the scan, not
+    // commander's parse of a value). Ancestors' hooks run first, so this precedes every
+    // other preAction check.
+    program.hook("preAction", (_program, actionCommand) => {
+      const format = (actionCommand.optsWithGlobals() as { logFormat?: LogFormat }).logFormat;
+      if (log !== undefined) log.format = format ?? DEFAULT_LOG_FORMAT;
+    });
     await program.parseAsync(argv, { from: "user" });
     return 0;
   } catch (err) {

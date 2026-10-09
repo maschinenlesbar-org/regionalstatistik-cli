@@ -580,8 +580,12 @@ warning about a credential on the command line, the note that an env token was s
 unexpected errors), `api` (GENESIS's error answers and the credentials hints), `http` (the
 connection: network errors, the cleartext warning), `config` (`regstat config`) and
 `output` (`Wrote N bytes …`). Code logs through `logOf(deps)` and never writes diagnostics
-with `io.err` directly. `run()` builds the logger from argv before commander parses it, so
-commander's own usage errors are records too: its `error: …` an ERROR of `cli` (a
+with `io.err` directly. `run()` builds the logger from argv before commander parses it
+(`logFormatFromArgv`, used only for the records of a parse error: the first
+`--log-format`, the value of one of the program's own value options skipped, as
+commander does; a `preAction` hook then sets the format commander parsed, so
+`--user-agent --log-format=jsonl` logs text), so commander's own usage errors are
+records too: its `error: …` an ERROR of `cli` (a
 `(Did you mean …?)` line joined to it), the help it shows after one an INFO record per
 line, and a command group run without its subcommand (or the program without a
 command) an ERROR "missing command: `regstat catalogue <subcommand>`" before that help,
