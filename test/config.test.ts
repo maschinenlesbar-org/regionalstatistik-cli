@@ -429,3 +429,31 @@ test("an unwritable config location names the credentials file, for set and for 
     cli.cleanup();
   }
 });
+
+test("config refuses -o: the value goes to stdout only, never silently to the terminal instead of a file (C10)", async () => {
+  const cli = makeCli({ secret: TOKEN });
+  try {
+    cli.store.set("token", TOKEN);
+    for (const argv of [
+      ["-o", "token.txt", "config", "get", "token", "--reveal"],
+      ["config", "get", "token", "--reveal", "-o", "token.txt"],
+      ["--output=token.txt", "config", "get", "token"],
+      ["-o", "token.txt", "config", "list"],
+      ["-o", "token.txt", "config", "set", "token"],
+      ["-o", "token.txt", "config", "unset", "token"],
+    ]) {
+      cli.out.length = 0;
+      cli.err.length = 0;
+      assert.equal(await run(argv, cli.deps), 2, argv.join(" "));
+      assert.deepEqual(cli.out, [], argv.join(" "));
+      assert.match(cli.err.join("\n"), /ERROR \[regstat\.cli\] regstat config prints to stdout only/, argv.join(" "));
+    }
+    assert.equal(cli.store.get("token"), TOKEN, "unset did not run");
+    // `-o -` is stdout, as everywhere.
+    cli.out.length = 0;
+    assert.equal(await run(["-o", "-", "config", "get", "token", "--reveal"], cli.deps), 0);
+    assert.deepEqual(cli.out, [TOKEN]);
+  } finally {
+    cli.cleanup();
+  }
+});

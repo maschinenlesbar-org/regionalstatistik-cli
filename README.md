@@ -100,7 +100,9 @@ username, no password — so a login is never pieced together from two places; f
 file, too, a token wins over username and password, and a username without a password
 is refused (exit 2). A stored value follows the same rules as a flag (no surrounding
 whitespace, Latin-1 only; spaces inside a password are fine) and is kept out of the
-output like one from the environment.
+output like one from the environment. `regstat config` prints to stdout only: `-o` is
+refused (exit 2; redirect stdout instead), so a value never lands on the terminal when
+a file was asked for.
 
 **Base URL.** `--base-url` (default `https://www.regionalstatistik.de`) takes
 `http:` too, for a local mirror or a test server. When it points at plain `http:`
