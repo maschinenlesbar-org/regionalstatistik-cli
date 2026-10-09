@@ -123,7 +123,7 @@ What the library rejects:
 - **Secrets in library objects** (P2): the client keeps the token, username and
   password in real `#private` fields, so `console.log(client)`, `util.inspect` and
   `JSON.stringify` never show them. Every error the engine raises is scrubbed of the
-  request's credential values (raw, JSON- and URL-escaped; `redactSecrets`): the
+  request's credential values (raw, JSON-, URL- and form-escaped; `redactSecrets`): the
   `message`, `detail` and `body` of a `RegionalstatistikApiError` (a server may echo them —
   `logincheck` returns the token as `Username`), a transport's error text and the
   `cause` chain (`scrubThrown` copies an error only when its text carries one).
@@ -142,8 +142,8 @@ What the library rejects:
   later through `io.redact`) and of any token-shaped argument (`looksLikeToken`) with
   `***` (`redactSecrets`: whole occurrences only, values under 4 characters
   skipped), in the forms a server echoes them back in: raw, JSON-escaped (also with
-  DEL and C1 as stdout's JSON escapes them) and URL-encoded, as the library scrubs its
-  errors (`contextOf` in `engine.ts`). That holds for stderr. On stdout a bare secret is
+  DEL and C1 as stdout's JSON escapes them) and URL-encoded (`%20`, and `+` for a space
+  as a form echoes it), as the library scrubs its errors (`contextOf` in `engine.ts`). That holds for stderr. On stdout a bare secret is
   replaced only as a whole JSON string value (`redactWholeJsonValues`: `"Username":
   "***"`), never inside other text — a password `2023` turned the year in `"Statistik
   2023"` into `***` (destatis-genesis 03-1 of the 2026-10-09 round, which reproduces

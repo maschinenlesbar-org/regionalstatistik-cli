@@ -777,3 +777,15 @@ test("a download's Content-Type is quoted cut in the library's own messages (res
   const e = new RequestEngine({ transport: async () => ({ status: 200, headers: { "content-type": type }, body: Buffer.from("<html>login</html>") }) });
   await assert.rejects(e.postRaw("/data/tablefile", "application/zip", {}, { username: "TOK" }), (err: Error) => err.message.length < 1000 && /Content-Type text\/html; x=y+…\)/.test(err.message));
 });
+
+test("a password a server echoes form-encoded (a space as +) is scrubbed from the error like its other forms (results/04 note 2)", async () => {
+  const password = "Geheim 2026x";
+  const echo = `Anmeldung fehlgeschlagen (DEUSER0001, ${encodeURIComponent(password).replace(/%20/g, "+")}) / (${encodeURIComponent(password)})`;
+  const e = new RequestEngine({ transport: async () => ({ status: 404, headers: { "content-type": "application/json" }, body: Buffer.from(JSON.stringify({ Code: 2, Content: echo, Type: "ERROR" })) }) });
+  await assert.rejects(e.postJson("/find/find", {}, { username: "DEUSER0001", password }), (err: RegionalstatistikApiError) => {
+    for (const text of [err.message, err.detail ?? "", String(err.body)]) {
+      assert.ok(!text.includes("Geheim+2026x") && !text.includes("Geheim%202026x"), text);
+    }
+    return true;
+  });
+});

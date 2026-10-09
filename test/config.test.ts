@@ -808,3 +808,31 @@ test("on stdout a bare secret is replaced only as a whole value, never inside ot
     cli.cleanup();
   }
 });
+
+test("a password a server echoes form-encoded (a space as +) is replaced in the record too (results/04 note 2)", async () => {
+  const password = "Geheim 2026x";
+  const plus = encodeURIComponent(password).replace(/%20/g, "+");
+  // The library scrubs its own errors (engine.test.ts); here the CLI's list is checked,
+  // through a client whose error quotes the form-encoded password.
+  for (const env of [{ REGIONALSTATISTIK_USERNAME: "DEUSER0001", REGIONALSTATISTIK_PASSWORD: password }, undefined]) {
+    const cli = makeCli({ ...(env === undefined ? {} : { env }) });
+    try {
+      if (env === undefined) {
+        cli.store.set("username", "DEUSER0001");
+        cli.store.set("password", password);
+      }
+      const deps: CliDeps = {
+        ...cli.deps,
+        createClient: () => {
+          throw new RegionalstatistikError(`echoed: (DEUSER0001, ${plus})`);
+        },
+      };
+      assert.equal(await run(["--log-format", "jsonl", "find", "x"], deps), 1);
+      const err = cli.err.join("\n");
+      assert.match(err, /echoed/);
+      assert.ok(!err.includes(plus), err);
+    } finally {
+      cli.cleanup();
+    }
+  }
+});

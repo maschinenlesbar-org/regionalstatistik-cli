@@ -235,6 +235,8 @@ export function redactionFor(argv: readonly string[], env: Record<string, string
       // What a server echoes back URL-encoded (`pw=s3cret%2Bp%40ss`): the forms the
       // library scrubs from its errors, so a success answer is covered too.
       secrets.add(encodeURIComponent(form));
+      // Form-encoded, as an `application/x-www-form-urlencoded` echo writes a space: `+`.
+      secrets.add(encodeURIComponent(form).replace(/%20/g, "+"));
     }
   };
   for (const name of SECRET_ENVS) addSecret(env[name]);

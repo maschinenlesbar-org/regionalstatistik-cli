@@ -495,7 +495,7 @@ function decodeErrorBody(body: Buffer, contentType: string): string {
 interface RequestContext {
   /** See `credentialsSent`. */
   sent: boolean | undefined;
-  /** The credential values sent, in the forms an echo may take (raw, JSON- and URL-escaped). */
+  /** The credential values sent, in the forms an echo may take (raw, JSON-, URL- and form-escaped). */
   secrets: readonly string[];
 }
 
@@ -505,6 +505,8 @@ function contextOf(authHeaders: Record<string, string> | undefined): RequestCont
     secrets.add(value);
     secrets.add(JSON.stringify(value).slice(1, -1));
     secrets.add(encodeURIComponent(value));
+    // Form-encoded, as an `application/x-www-form-urlencoded` echo writes a space: `+`.
+    secrets.add(encodeURIComponent(value).replace(/%20/g, "+"));
   }
   return { sent: credentialsSent(authHeaders), secrets: [...secrets] };
 }
