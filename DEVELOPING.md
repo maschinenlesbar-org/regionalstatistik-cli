@@ -261,8 +261,9 @@ pair is a usage error naming the missing half; each value must pass the library'
 `io.redact`, so they are kept out of the output like env credentials. `config set`
 reads through `CliIO.readSecret` (`readSecretFrom`: raw mode without echo on a terminal,
 the whole input from a pipe, at most 64 KiB either way: `MAX_SECRET_BYTES`), never from
-argv (excess arguments are refused without
-being repeated); only line ends are dropped, and the value must pass
+argv (excess arguments are refused without being repeated). On a terminal it drops
+escape sequences (arrow keys, bracketed-paste markers), keeps every other character
+and refuses a paste with more after its first line break; only line ends are dropped, and the value must pass
 `credentialValueProblem` (not blank, no control character) and `credentialProblem` —
 spaces inside are allowed, since a password may hold them, and a password starting with
 `--` is fine (the `parsePassword` ambiguity exists only in argv). `config get` and

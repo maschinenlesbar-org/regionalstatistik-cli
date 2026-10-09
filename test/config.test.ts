@@ -8,6 +8,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, syml
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
+import { EventEmitter } from "node:events";
 import { run } from "../src/cli/run.js";
 import { RegionalstatistikClient } from "../src/client/client.js";
 import type { CliDeps } from "../src/cli/io.js";
@@ -499,4 +500,47 @@ test("a secret read from stdin stops at 64 KiB and is refused, an endless input 
   assert.ok(chunks < 10, `read ${chunks} chunks`);
   const exact = "a".repeat(64 * 1024);
   assert.equal(await readSecretFrom(Readable.from([exact + "\n"]), { write: () => true }, "password: "), exact);
+});
+
+/** A terminal as far as readSecretFrom needs one: raw mode, data events. */
+class FakeTty extends EventEmitter {
+  readonly isTTY = true;
+  raw = false;
+  setRawMode(on: boolean): this {
+    this.raw = on;
+    return this;
+  }
+  resume(): this {
+    return this;
+  }
+  pause(): this {
+    return this;
+  }
+}
+
+/** What the prompt returns for keystrokes arriving in `reads` (one data event each). */
+async function typed(...reads: string[]): Promise<string> {
+  const tty = new FakeTty();
+  const result = readSecretFrom(tty as unknown as NodeJS.ReadStream, { write: () => true }, "password: ");
+  for (const read of reads) tty.emit("data", Buffer.from(read));
+  return result;
+}
+
+test("the prompt drops escape sequences and keeps what was typed (C1)", async () => {
+  assert.equal(await typed("abc\u001b[A\u001b[Ddef\r"), "abcdef", "arrow keys");
+  assert.equal(await typed("\u001bOAabc\r"), "abc", "SS3");
+  assert.equal(await typed("\u001b[200~my pass word\u001b[201~\r"), "my pass word", "bracketed paste");
+  assert.equal(await typed("\u001b[1;5Cabc\r"), "abc", "a CSI with parameters");
+  assert.equal(await typed("abc\u001b", "[Adef\r"), "abcdef", "a sequence split across reads");
+  assert.equal(await typed("abcd\u007f\r"), "abc", "Backspace");
+  assert.equal(await typed("key\r\n"), "key", "CR LF is one line break");
+  // A tab is kept: a password may hold one, and the same value from a pipe is stored too.
+  assert.equal(await typed("abc\tdef\r"), "abc\tdef");
+  await assert.rejects(typed("abc\u0003"), /Interrupted; nothing was stored/);
+});
+
+test("the prompt refuses a paste with more after its first line break (C1)", async () => {
+  for (const read of ["firstline\nsecondline\n", "key\rsecondline\r", "key\r\nmore"]) {
+    await assert.rejects(typed(read), /The value holds a line break; nothing was stored\./, JSON.stringify(read));
+  }
 });
