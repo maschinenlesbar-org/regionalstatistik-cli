@@ -260,7 +260,8 @@ pair is a usage error naming the missing half; each value must pass the library'
 `credentialProblem` (named, never shown) — and the values are handed to
 `io.redact`, so they are kept out of the output like env credentials. `config set`
 reads through `CliIO.readSecret` (`readSecretFrom`: raw mode without echo on a terminal,
-the whole input from a pipe), never from argv (excess arguments are refused without
+the whole input from a pipe, at most 64 KiB either way: `MAX_SECRET_BYTES`), never from
+argv (excess arguments are refused without
 being repeated); only line ends are dropped, and the value must pass
 `credentialValueProblem` (not blank, no control character) and `credentialProblem` —
 spaces inside are allowed, since a password may hold them, and a password starting with

@@ -27,10 +27,11 @@ regstat config set password              # or: regstat config set token
 Precedence is flag > env var > the credentials file > unset. `regstat config` keeps the
 login in `$XDG_CONFIG_HOME/regionalstatistik/credentials` (else
 `~/.config/regionalstatistik/credentials`), mode 0600, written atomically; `config set
-<token|username|password>` reads the value from a prompt without echo or from stdin, never
-from the command line; `config get` shows it masked (`abcd…wxyz`; `****` for a password and for any value
-below 20 characters; `--reveal` prints it whole); `config list` and `config unset` do what they say. `regstat config`
-prints to stdout only and refuses `-o` (exit 2). The file is read
+<token|username|password>` reads the value from a prompt without echo or from stdin (at
+most 64 KiB), never from the command line; `config get` shows it masked (`abcd…wxyz`;
+`****` for a password and for any value below 20 characters; `--reveal` prints it
+whole); `config list` and `config unset` do what they say. `regstat config` prints to
+stdout only and refuses `-o` (exit 2). The file is read
 only when no flag and no env var gives any credential (so a login never mixes the two
 places), only by commands that send credentials (not `hello`), and a file that others
 can read is refused then, naming `chmod 600`. From the file, too, a token wins over
