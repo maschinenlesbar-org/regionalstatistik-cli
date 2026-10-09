@@ -490,6 +490,9 @@ regionalstatistik-specific behaviour under test: flat Code 15/Code 2 mapping on
 both 200 and 401/404 replies, `isNotFound` suppression for 404+Code 2, the 405
 on GET, and the BOM-prefixed HTML error page (`engine.test.ts`, `cli.test.ts`).
 
+`test/log.test.ts` tests the record helpers of `src/cli/log.ts` on their own
+(`escapeForRecord`, `formatLogRecord`); the CLI-level checks are P23's.
+
 `test/conformance-p*.test.ts` are the checks shared across the maschinenlesbar.org
 CLIs, copied with only their adapter block changed: P1 (credentials in CLI output),
 P2 (in library objects and errors), P4/P19 (configuration validation), P5 (the
@@ -551,7 +554,11 @@ Every diagnostic line on stderr is a log record (`src/cli/log.ts`): a timestamp,
 (`ERROR`, `WARN`, `INFO`) and a topic, `regstat.<area>`. `--log-format text` (the default)
 writes it log4j style, `<ISO 8601 UTC> <LEVEL padded to 5> [<topic>] <message>`;
 `--log-format jsonl` writes one JSON object per line with exactly `ts`, `level`, `topic`
-and `msg`. The areas are `cli` (usage errors, commander's messages, validation errors, the
+and `msg`. A record is always one line: `formatLogRecord` runs `escapeForRecord` over
+the message (text) or the whole JSON object (jsonl), which writes CR and LF as `\r`/`\n`,
+every other C0 control but TAB, DEL and C1 as `\u00XX`, and U+2028, U+2029 and the bidi
+controls as `\uXXXX`, so no text that reaches a record, by whatever path, can split it,
+forge another one or steer the terminal. The areas are `cli` (usage errors, commander's messages, validation errors, the
 warning about a credential on the command line, the note that an env token was set aside,
 unexpected errors), `api` (GENESIS's error answers and the credentials hints), `http` (the
 connection: network errors, the cleartext warning), `config` (`regstat config`) and

@@ -119,7 +119,10 @@ timestamp (UTC), a level (`ERROR`, `WARN`, `INFO`) and a topic, the program and 
 it comes from (`regstat.cli` for usage errors and credential notes, `regstat.api` for
 GENESIS's answers, `regstat.http` for the connection, `regstat.config` for `regstat
 config`, `regstat.output` for `-o`). By default it is written log4j style; `--log-format
-jsonl` writes one JSON object per line instead. A credential is kept out of both:
+jsonl` writes one JSON object per line instead. A record is always one line: a line
+break, a control character or a bidi control in a message (a server's text, a value you
+typed) is written as an escape (`\n`, `\u001b`, `\u202e`), so it can neither split a
+record nor forge another one, nor steer the terminal. A credential is kept out of both:
 
 ```text
 2026-10-09T14:03:12.481Z WARN  [regstat.http] the login is sent unencrypted to mirror.example (http:, not https:)
