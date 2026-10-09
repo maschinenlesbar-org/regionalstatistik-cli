@@ -593,8 +593,11 @@ so every failed run has an ERROR record (`writeCommanderErr`). The log is built 
 run's redaction (`withRedactedOutput`), which replaces a secret in the message only, before it is
 escaped: the frame is never touched, and a secret is kept out of the log in either
 format — a login read later from the credentials file too, because `io.redact` extends
-that same redaction. `CliDeps.now` makes the
-timestamps testable. stdout carries data only; the `config set` prompt is not a record.
-Two lines stay raw: `Output error: …` from `handleOutputErrors` and the bin shim's
-last-resort `Unexpected error: …`, both written outside `run()`. Conformance test P23
+that same redaction. `CliDeps.now` makes the timestamps testable. stdout carries data
+only; the `config set` prompt is not a record, and the only raw line on stderr. What
+happens outside `run()` is logged too, through `processLogger(argv)` (the format argv
+asks for, the run's redaction of argv and the environment): a stdout write error other
+than a closed pipe (`handleOutputErrors`) is an ERROR record of `regstat.output`,
+`Could not write to stdout: …`, and the bin shim's last-resort `Unexpected error: …`
+an ERROR of `regstat.cli`. Conformance test P23
 checks all of this, and its body is shared across the *-cli repos.
