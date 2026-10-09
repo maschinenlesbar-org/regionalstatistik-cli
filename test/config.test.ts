@@ -641,3 +641,23 @@ test("every stored value is a secret of the run the moment it is read: no record
     cli.cleanup();
   }
 });
+
+test("a credential a server echoes URL-encoded on a success is replaced on stdout too, as the library does in errors (destatis-genesis 03-2)", async () => {
+  const password = "s3cret+p@ss/w%rd";
+  const note = `login=${encodeURIComponent("DEUSER0001")}&pw=${encodeURIComponent(password)}`;
+  const cli = makeCli({ responder: () => jsonResponse({ ...fx.loginOk, Username: "DEUSER0001", Note: note }) });
+  try {
+    cli.store.set("username", "DEUSER0001");
+    cli.store.set("password", password);
+    assert.equal(await run(["logincheck", "--compact"], cli.deps), 0, cli.err.join("\n"));
+    assert.ok(!cli.out.join("\n").includes(encodeURIComponent(password)), cli.out.join("\n"));
+    assert.match(cli.out.join("\n"), /"Note":"login=\*\*\*&pw=\*\*\*"/);
+    // The same from the variables.
+    cli.out.length = 0;
+    const viaEnv = { ...cli.deps, env: { REGIONALSTATISTIK_USERNAME: "DEUSER0001", REGIONALSTATISTIK_PASSWORD: password } };
+    assert.equal(await run(["logincheck", "--compact"], viaEnv), 0, cli.err.join("\n"));
+    assert.match(cli.out.join("\n"), /"Note":"login=\*\*\*&pw=\*\*\*"/);
+  } finally {
+    cli.cleanup();
+  }
+});

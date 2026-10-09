@@ -139,8 +139,9 @@ What the library rejects:
   `REGIONALSTATISTIK_*` variables, of a login read from the credentials file (added
   later through `io.redact`) and of any token-shaped argument (`looksLikeToken`) with
   `***` (`redactSecrets`: whole occurrences only, values under 4 characters
-  skipped). `withoutStrayValues` drops the value from commander's "too many
-  arguments" and `--x=value` "unknown option" errors, and from "unknown command"
+  skipped), in the forms a server echoes them back in: raw, JSON-escaped and
+  URL-encoded, as the library scrubs its errors (`contextOf` in `engine.ts`).
+  `withoutStrayValues` drops the value from commander's "too many arguments" and `--x=value` "unknown option" errors, and from "unknown command"
   unless it reads like a command name — that is where a secret typed without its
   flag lands.
 - **Base URL** (`baseUrlProblem`, run by the engine constructor on the raw

@@ -114,7 +114,9 @@ export interface Redaction {
  *   `REGIONALSTATISTIK_API_TOKEN`, `REGIONALSTATISTIK_USERNAME` and `REGIONALSTATISTIK_PASSWORD`, and any
  *   argument shaped like a GENESIS token (`looksLikeToken`: a token typed without
  *   `--token`) become `***` — whole values, as given and trimmed, plus their
- *   JSON-escaped forms; values under 4 characters are skipped (`redactSecrets`).
+ *   JSON-escaped and URL-encoded forms (the forms a server echoes them back in, the
+ *   ones the library scrubs from its errors); values under 4 characters are skipped
+ *   (`redactSecrets`).
  *
  * Both on stdout and on stderr: GENESIS echoes the token or user name as `Username` in
  * the data. A pattern alone can't delimit a password with spaces, quotes, `#`, `?` or
@@ -141,6 +143,9 @@ export function redactionFor(argv: readonly string[], env: Record<string, string
     for (const form of [value, value.trim()]) {
       secrets.add(form);
       secrets.add(JSON.stringify(form).slice(1, -1));
+      // What a server echoes back URL-encoded (`pw=s3cret%2Bp%40ss`): the forms the
+      // library scrubs from its errors, so a success answer is covered too.
+      secrets.add(encodeURIComponent(form));
     }
   };
   for (const name of SECRET_ENVS) addSecret(env[name]);
