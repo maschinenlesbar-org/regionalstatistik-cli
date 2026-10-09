@@ -86,6 +86,24 @@ function rejectRepeatedOptions(command: Command): void {
 
 /** The options whose value is a secret on its own (no `@` to anchor a redaction on). */
 const SECRET_FLAGS = ["--token", "--username", "--password"];
+/**
+ * The options whose value is the base URL: a `user:password@host` given there without
+ * its scheme is still a credential (anywhere else a bare `a:b@c` is not).
+ */
+const BASE_URL_FLAGS = ["--base-url"];
+
+/** The values of the `flags` in `argv`, in both forms (`--flag value`, `--flag=value`). */
+function flagValues(argv: readonly string[], flags: readonly string[]): string[] {
+  const found: string[] = [];
+  argv.forEach((token, i) => {
+    const next = argv[i + 1];
+    if (flags.includes(token) && next !== undefined) found.push(next);
+    const eq = token.indexOf("=");
+    if (eq > 0 && flags.includes(token.slice(0, eq))) found.push(token.slice(eq + 1));
+  });
+  return found;
+}
+
 /** The environment variables that hold a secret on their own. */
 const SECRET_ENVS = ["REGIONALSTATISTIK_API_TOKEN", "REGIONALSTATISTIK_USERNAME", "REGIONALSTATISTIK_PASSWORD"];
 
@@ -108,8 +126,10 @@ export interface Redaction {
  * a credential back (`logincheck` returns the token as `Username`), so whatever path a
  * secret takes to the terminal it is replaced:
  *
- * - the userinfo of every URL-like argument and `--opt=value` value (as
- *   `credentialsIn` finds it, parseable or not) becomes `***@` — `--base-url`
+ * - the userinfo of every URL argument and `--opt=value` value (as `credentialsIn`
+ *   finds it, parseable or not: only a value with a scheme, since a bare `a:b@c` is a
+ *   file name, a search text or a User-Agent as often as a credential) and of the
+ *   `--base-url` value (with or without a scheme) becomes `***@` — `--base-url`
  *   rejects userinfo, but the rejection must not print it;
  * - the values of `--token`, `--username` and `--password` (both forms), of
  *   `REGIONALSTATISTIK_API_TOKEN`, `REGIONALSTATISTIK_USERNAME` and `REGIONALSTATISTIK_PASSWORD`, and any
@@ -133,7 +153,9 @@ export function redactionFor(argv: readonly string[], env: Record<string, string
     token.startsWith("-") && token.includes("=") ? token.slice(token.indexOf("=") + 1) : token,
   );
   const userinfo = new Set<string>();
-  for (const source of [...argv, ...values]) {
+  // A base URL typed without its scheme is read as if it had one.
+  const baseUrls = flagValues(argv, BASE_URL_FLAGS).map((value) => (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(value) ? value : `http://${value}`));
+  for (const source of [...values, ...baseUrls]) {
     for (const secret of credentialsIn(source)) {
       userinfo.add(secret);
       userinfo.add(JSON.stringify(secret).slice(1, -1));
@@ -154,11 +176,7 @@ export function redactionFor(argv: readonly string[], env: Record<string, string
     }
   };
   for (const name of SECRET_ENVS) addSecret(env[name]);
-  argv.forEach((token, i) => {
-    if (SECRET_FLAGS.includes(token)) addSecret(argv[i + 1]);
-    const eq = token.indexOf("=");
-    if (eq > 0 && SECRET_FLAGS.includes(token.slice(0, eq))) addSecret(token.slice(eq + 1));
-  });
+  for (const value of flagValues(argv, SECRET_FLAGS)) addSecret(value);
   for (const value of values) if (looksLikeToken(value)) addSecret(value);
   const urlList = [...userinfo];
   const redact = (text: string): string => redactSecrets(redactCredentials(text, urlList), [...secrets]);

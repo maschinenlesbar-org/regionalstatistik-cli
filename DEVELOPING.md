@@ -134,7 +134,9 @@ What the library rejects:
   raw stderr: the frame (time, level, topic) is never touched, and a secret with DEL,
   C1 or bidi characters is matched in its raw form. It replaces, on stdout and stderr,
   the userinfo of every
-  URL-like argument (`credentialsIn`, exported, parseable or not) with `***@`, and
+  URL argument (`credentialsIn`, exported, parseable or not) with `***@` — only a
+  value that starts with a scheme counts (a bare `a:b@c` is a file name, a search text
+  or a User-Agent as often as a credential), except as the `--base-url` value — and
   the whole values of `--token`/`--username`/`--password`, of the three
   `REGIONALSTATISTIK_*` variables, of a login read from the credentials file (added
   later through `io.redact`) and of any token-shaped argument (`looksLikeToken`) with

@@ -257,8 +257,9 @@ function sanitizeServerText(text: string): string {
 export function redactUrl(rawUrl: string): string {
   try {
     const u = new URL(rawUrl);
-    // `user:pw@host` without a scheme parses as a URL with the scheme "user:": no
-    // userinfo, so cut the credentials out by text.
+    // A URL without userinfo but with credentials by text (none since credentialsIn takes
+    // a value with a scheme only; `user:pw@host` without one parses as the scheme "user:"
+    // and is no URL with credentials at all): cut them out by text.
     if (!u.username && !u.password && credentialsIn(rawUrl).length > 0) {
       return redactCredentials(rawUrl, credentialsIn(rawUrl));
     }
