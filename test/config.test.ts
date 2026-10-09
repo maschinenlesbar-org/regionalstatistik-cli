@@ -401,3 +401,31 @@ test("a stored password is never partly shown: not by set, get or list (C7)", as
     }
   }
 });
+
+test("an unwritable config location names the credentials file, for set and for the last unset (C4)", async (t) => {
+  if (process.platform === "win32" || process.getuid?.() === 0) return t.skip("needs POSIX permissions and a non-root user");
+  const cli = makeCli({ secret: TOKEN });
+  try {
+    // The parent of the program's directory cannot be written: mkdir fails.
+    const parent = join(cli.dir, "regionalstatistik");
+    mkdirSync(cli.dir, { recursive: true });
+    chmodSync(cli.dir, 0o500);
+    assert.equal(await run(["config", "set", "token"], cli.deps), 1);
+    assert.match(cli.err.join("\n"), /Could not write the credentials file .*credentials: EACCES/);
+    assert.doesNotMatch(cli.err.join("\n"), /Unexpected error/);
+    chmodSync(cli.dir, 0o700);
+
+    // The last name removed from a file in a directory that cannot be written: rm fails.
+    cli.err.length = 0;
+    cli.store.set("token", TOKEN);
+    chmodSync(parent, 0o500);
+    assert.equal(await run(["config", "unset", "token"], cli.deps), 1);
+    assert.match(cli.err.join("\n"), /Could not write the credentials file .*credentials: EACCES/);
+    assert.doesNotMatch(cli.err.join("\n"), /Unexpected error/);
+    chmodSync(parent, 0o700);
+    assert.equal(cli.store.get("token"), TOKEN, "nothing was lost");
+  } finally {
+    chmodSync(cli.dir, 0o700);
+    cli.cleanup();
+  }
+});
