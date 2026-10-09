@@ -127,9 +127,13 @@ What the library rejects:
   `message`, `detail` and `body` of a `RegionalstatistikApiError` (a server may echo them —
   `logincheck` returns the token as `Username`), a transport's error text and the
   `cause` chain (`scrubThrown` copies an error only when its text carries one).
-- **Redaction on output** (`run.ts`, `withRedactedOutput`, P1): commander echoes
-  rejected values and names unknown commands and options as typed, so `run()`
-  wraps `deps.io` first and replaces, on stdout and stderr, the userinfo of every
+- **Redaction on output** (`run.ts`, `redactionFor` and `withRedactedOutput`, P1):
+  commander echoes rejected values and names unknown commands and options as typed, so
+  `run()` wraps `deps.io` and builds the log first. The log replaces the secrets in
+  each record's *message*, before the record is cut and escaped, and writes it to the
+  raw stderr: the frame (time, level, topic) is never touched, and a secret with DEL,
+  C1 or bidi characters is matched in its raw form. It replaces, on stdout and stderr,
+  the userinfo of every
   URL-like argument (`credentialsIn`, exported, parseable or not) with `***@`, and
   the whole values of `--token`/`--username`/`--password`, of the three
   `REGIONALSTATISTIK_*` variables, of a login read from the credentials file (added
@@ -570,9 +574,11 @@ unexpected errors), `api` (GENESIS's error answers and the credentials hints), `
 connection: network errors, the cleartext warning), `config` (`regstat config`) and
 `output` (`Wrote N bytes …`). Code logs through `logOf(deps)` and never writes diagnostics
 with `io.err` directly. `run()` builds the logger from argv before commander parses it, so
-commander's own usage errors are records too, and on top of the redacted `io.err`, so a
-secret is kept out of the log in either format — a login read later from the credentials
-file too, because `io.redact` extends that same redaction. `CliDeps.now` makes the
+commander's own usage errors are records too, and with the run's redaction
+(`withRedactedOutput`), which replaces a secret in the message only, before it is
+escaped: the frame is never touched, and a secret is kept out of the log in either
+format — a login read later from the credentials file too, because `io.redact` extends
+that same redaction. `CliDeps.now` makes the
 timestamps testable. stdout carries data only; the `config set` prompt is not a record.
 Two lines stay raw: `Output error: …` from `handleOutputErrors` and the bin shim's
 last-resort `Unexpected error: …`, both written outside `run()`. Conformance test P23

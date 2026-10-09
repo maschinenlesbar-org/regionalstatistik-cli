@@ -88,12 +88,24 @@ const SECRET_FLAGS = ["--token", "--username", "--password"];
 /** The environment variables that hold a secret on their own. */
 const SECRET_ENVS = ["REGIONALSTATISTIK_API_TOKEN", "REGIONALSTATISTIK_USERNAME", "REGIONALSTATISTIK_PASSWORD"];
 
+/** The secrets of a run, and the two ways they are replaced. */
+export interface Redaction {
+  /** stdout text: every secret of the run replaced (`***@`, `***`). */
+  out(text: string): string;
+  /** stderr text, a record's message: the same replacements as on stdout. */
+  err(text: string): string;
+  /**
+   * Make `value` a secret of the run from now on, like a flag or env value: for a
+   * credential the run learns after argv, one read from the credentials file.
+   */
+  addSecret(value: string): void;
+}
+
 /**
- * `deps` with an `io` that keeps the secrets of this run out of everything it prints,
- * on stdout and stderr. Commander echoes rejected values in its usage errors and
- * names unknown commands and options as typed, and the server may echo a credential
- * back (`logincheck` returns the token as `Username`), so whatever path a secret
- * takes to the terminal it is replaced:
+ * The secrets of the run in `argv` and `env`. Commander echoes rejected values in its
+ * usage errors and names unknown commands and options as typed, and the server may echo
+ * a credential back (`logincheck` returns the token as `Username`), so whatever path a
+ * secret takes to the terminal it is replaced:
  *
  * - the userinfo of every URL-like argument and `--opt=value` value (as
  *   `credentialsIn` finds it, parseable or not) becomes `***@` — `--base-url`
@@ -104,13 +116,14 @@ const SECRET_ENVS = ["REGIONALSTATISTIK_API_TOKEN", "REGIONALSTATISTIK_USERNAME"
  *   `--token`) become `***` — whole values, as given and trimmed, plus their
  *   JSON-escaped forms; values under 4 characters are skipped (`redactSecrets`).
  *
- * A pattern alone can't delimit a password with spaces, quotes, `#`, `?` or `/`; the
- * exact strings can. Without secrets the output passes through unchanged. The
- * returned `io.redact` adds secrets that become known later — the login read from the
- * credentials file (`regstat config`), which is in neither argv nor the environment.
+ * Both on stdout and on stderr: GENESIS echoes the token or user name as `Username` in
+ * the data. A pattern alone can't delimit a password with spaces, quotes, `#`, `?` or
+ * `/`; the exact strings can. Without secrets the text passes through unchanged.
+ * `addSecret` adds a secret later, for a credential that only `action()` learns — one
+ * read from the credentials file (`regstat config`), which is in neither argv nor the
+ * environment.
  */
-export function withRedactedOutput(deps: CliDeps, argv: readonly string[]): CliDeps {
-  const env = deps.env ?? process.env;
+export function redactionFor(argv: readonly string[], env: Record<string, string | undefined>): Redaction {
   // An `--option=value` token is echoed as its value alone.
   const values = argv.map((token) =>
     token.startsWith("-") && token.includes("=") ? token.slice(token.indexOf("=") + 1) : token,
@@ -138,36 +151,45 @@ export function withRedactedOutput(deps: CliDeps, argv: readonly string[]): CliD
   });
   for (const value of values) if (looksLikeToken(value)) addSecret(value);
   const urlList = [...userinfo];
-  let secretList = [...secrets];
-  const redact = (text: string): string =>
-    urlList.length === 0 && secretList.every((s) => s.trim().length < 4)
-      ? text
-      : redactSecrets(redactCredentials(text, urlList), secretList);
+  const redact = (text: string): string => redactSecrets(redactCredentials(text, urlList), [...secrets]);
+  return { out: redact, err: redact, addSecret };
+}
+
+/**
+ * `deps` that keep the secrets of this run (`redactionFor`) out of everything they
+ * print: `io.out` is redacted, and the log (`deps.log`) replaces them in each record's
+ * message before formatting it, then writes to the raw `io.err`, so the frame is never
+ * touched. `io.err` itself is redacted too, for anything that writes to stderr without
+ * the log. The returned `io.redact` adds secrets later (`Redaction.addSecret`): the
+ * login read from the credentials file.
+ */
+export function withRedactedOutput(deps: CliDeps, argv: readonly string[]): CliDeps {
+  const redaction = redactionFor(argv, deps.env ?? process.env);
+  const { out, err } = deps.io;
   return {
     ...deps,
     io: {
       ...deps.io,
-      out: (text) => deps.io.out(redact(text)),
-      err: (text) => deps.io.err(redact(text)),
+      out: (text) => out(redaction.out(text)),
+      err: (text) => err(redaction.err(text)),
       // A login read from the credentials file (`action()`) is kept out the same way.
       redact: (more) => {
-        for (const value of more) addSecret(value);
-        secretList = [...secrets];
+        for (const value of more) redaction.addSecret(value);
       },
     },
+    log: createLogger({
+      format: logFormatFromArgv(argv),
+      write: err,
+      redact: redaction.err,
+      ...(deps.now === undefined ? {} : { now: deps.now }),
+    }),
   };
 }
 
 export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<number> {
+  // The log replaces the secrets of the run in every message, in either format —
+  // including a credential that `action()` adds later through `deps.redact`.
   deps = withRedactedOutput(deps, argv);
-  // Every record goes through the redacted `io.err` (its `redact` hook included, for a
-  // login read from the credentials file later), so a secret is kept out of the log in
-  // either format.
-  const redacted = deps;
-  deps = {
-    ...deps,
-    log: createLogger({ format: logFormatFromArgv(argv), write: (line) => redacted.io.err(line), ...(deps.now === undefined ? {} : { now: deps.now }) }),
-  };
   try {
     // buildProgram is inside the try so that anything it throws is mapped to an
     // exit code rather than escaping as an uncaught rejection. (Env credentials
