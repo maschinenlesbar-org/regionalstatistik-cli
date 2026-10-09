@@ -29,15 +29,6 @@ function valueProblem(value: string): string | undefined {
   return credentialValueProblem(value) ?? credentialProblem(value);
 }
 
-/**
- * How a stored value is shown without --reveal. A token (32 characters) and a username
- * show their ends (`abcd…wxyz`); a password shows nothing of itself — it is short and
- * guessable, and eight of its characters would give most of it away.
- */
-function masked(name: string, value: string): string {
-  return name === "password" ? "****" : maskCredential(value);
-}
-
 function storeOf(deps: CliDeps): CredentialStore {
   if (deps.credentials === undefined) throw new RegionalstatistikError("This program was built without a credentials file.");
   return deps.credentials();
@@ -77,19 +68,19 @@ export function registerConfigCommands(program: Command, deps: CliDeps): void {
       if (reason !== undefined) throw new RegionalstatistikUsageError(`${reason} Nothing was stored.`);
       const store = storeOf(deps);
       store.set(name, value);
-      logOf(deps).info("config", `Stored ${name} (${masked(name, value)}) in ${store.path}.`);
+      logOf(deps).info("config", `Stored ${name} (${maskCredential(value, name)}) in ${store.path}.`);
     });
 
   config
     .command("get")
-    .description("show a stored credential, masked (abcd…wxyz; a password as ****) unless --reveal")
+    .description("show a stored credential, masked (abcd…wxyz; **** for a password and below 20 characters) unless --reveal")
     .argument("<name>", names, parseCredentialName)
     .option("--reveal", "print the whole value, for a script that passes it on — it then is on your screen or in its log")
     .action(async (name: string, options: { reveal?: boolean }) => {
       const store = storeOf(deps);
       const value = store.get(name);
       if (value === undefined) throw new RegionalstatistikError(`No ${name} is stored in ${store.path}; regstat config set ${name} stores one.`);
-      deps.io.out(options.reveal === true ? value : masked(name, value));
+      deps.io.out(options.reveal === true ? value : maskCredential(value, name));
     });
 
   config
@@ -108,7 +99,7 @@ export function registerConfigCommands(program: Command, deps: CliDeps): void {
     .action(async () => {
       const store = storeOf(deps);
       const all = store.all();
-      for (const name of Object.keys(all).sort()) deps.io.out(`${name}  ${masked(name, all[name] as string)}`);
+      for (const name of Object.keys(all).sort()) deps.io.out(`${name}  ${maskCredential(all[name] as string, name)}`);
       logOf(deps).info("config", `Credentials file: ${store.path}`);
     });
 }

@@ -265,7 +265,9 @@ being repeated); only line ends are dropped, and the value must pass
 `credentialValueProblem` (not blank, no control character) and `credentialProblem` —
 spaces inside are allowed, since a password may hold them, and a password starting with
 `--` is fine (the `parsePassword` ambiguity exists only in argv). `config get` and
-`list` mask a token or username as `abcd…wxyz` and a password always as `****`.
+`list` (and the record `set` logs) mask a value as `abcd…wxyz` only from 20 characters
+(`maskCredential(value, name)`), and as `****` below that and for a password, whatever
+its length.
 
 Answers are decoded by the charset their `Content-Type` names (`decodeBody`,
 `TextDecoder`; UTF-8 when none, a byte-order mark dropped); an unknown label is a

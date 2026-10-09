@@ -87,7 +87,7 @@ regstat config set password
 regstat config set token                     # or a token instead of the pair
 printf %s "$TOKEN" | regstat config set token  # or piped in
 regstat config get token                     # masked: 0123…cdef (--reveal prints it whole)
-regstat config list                          # what is stored, and where (a password shows as ****)
+regstat config list                          # what is stored, and where (a password, and any value below 20 characters, shows as ****)
 regstat config unset password
 ```
 

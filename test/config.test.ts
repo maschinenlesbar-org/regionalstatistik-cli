@@ -376,3 +376,28 @@ test("a secret piped in is read whole, one trailing newline dropped", async () =
   assert.equal(await readSecretFrom(Readable.from([`${TOKEN}\n`]), { write: () => true }, "token: "), TOKEN);
   assert.equal(await readSecretFrom(Readable.from(["Sommer ", "Regen\r\n"]), { write: () => true }, "password: "), "Sommer Regen");
 });
+
+test("maskCredential: a value shows its ends only from 20 characters, a password never (C7)", () => {
+  assert.equal(maskCredential("Sommer2026!x"), "****");
+  assert.equal(maskCredential("a".repeat(19)), "****");
+  assert.equal(maskCredential("abcd0123456789abwxyz"), "abcd…wxyz");
+  assert.equal(maskCredential(TOKEN, "token"), "0123…cdef");
+  assert.equal(maskCredential("a-very-long-password-of-40-characters!!!", "password"), "****");
+});
+
+test("a stored password is never partly shown: not by set, get or list (C7)", async () => {
+  for (const secret of ["Sommer2026!x", "a-very-long-password-of-40-characters!!!"]) {
+    const cli = makeCli({ secret });
+    try {
+      assert.equal(await run(["config", "set", "password"], cli.deps), 0, cli.err.join("\n"));
+      assert.match(cli.err.join("\n"), /Stored password \(\*\*\*\*\) in /);
+      assert.equal(await run(["config", "get", "password"], cli.deps), 0);
+      assert.equal(await run(["config", "list"], cli.deps), 0);
+      assert.deepEqual(cli.out, ["****", "password  ****"]);
+      const all = cli.out.join("\n") + cli.err.join("\n");
+      assert.ok(!all.includes(secret.slice(0, 4)) && !all.includes(secret.slice(-4)), all);
+    } finally {
+      cli.cleanup();
+    }
+  }
+});
