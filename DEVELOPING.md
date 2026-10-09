@@ -607,6 +607,9 @@ only; the `config set` prompt is not a record, and the only raw line on stderr. 
 happens outside `run()` is logged too, through `processLogger(argv)` (the format argv
 asks for, the run's redaction of argv and the environment): a stdout write error other
 than a closed pipe (`handleOutputErrors`) is an ERROR record of `regstat.output`,
-`Could not write to stdout: …`, and the bin shim's last-resort `Unexpected error: …`
-an ERROR of `regstat.cli`. Conformance test P23
+`Could not write to stdout: …`, the bin shim's last-resort `Unexpected error: …` an
+ERROR of `regstat.cli`, and Node's own process warnings (`NODE_TLS_REJECT_UNAUTHORIZED=0`)
+WARN records of `regstat.cli`: `installWarningLog` removes Node's default `warning`
+listener and logs `(node) <name>: <message>` (checked on Node 22, 24 and 26; a warning
+Node emits while starting up, before any code runs, stays Node's). Conformance test P23
 checks all of this, and its body is shared across the *-cli repos.

@@ -3,11 +3,13 @@
 // logic lives in run.ts (testable without spawning a subprocess).
 
 import { handleOutputErrors } from "./io.js";
+import { installWarningLog } from "./log.js";
 import { processLogger, run } from "./run.js";
 
 const argv = process.argv.slice(2);
 // What happens outside run() is logged too, in the format argv asks for.
 const log = processLogger(argv);
+installWarningLog(process, log);
 handleOutputErrors(process, undefined, log);
 
 run(argv).then(
