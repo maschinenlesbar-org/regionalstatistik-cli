@@ -58,6 +58,9 @@ password that really starts with `--` goes in `REGIONALSTATISTIK_PASSWORD`.
 No message repeats a credential: the CLI prints `***` in place of the token,
 username and password (from flags, env vars or the credentials file) and of any `user:pass@` in a URL,
 wherever they would appear — a usage error, an unknown command, the server's echo.
+In the data on stdout a credential the server echoes is replaced only as a whole value
+(`"Username": "***"`), never inside other text, so a short password such as `2023`
+cannot change a year in a table; `-o` writes the answer as the server sent it.
 
 Credentials travel in HTTP header fields, so they can hold only Latin-1
 characters (up to U+00FF). A character beyond that (`€`, an emoji) is refused

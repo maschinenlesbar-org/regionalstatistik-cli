@@ -52,7 +52,9 @@ const KEYED_ENV_SETS: Array<Record<string, string>> = [
 const echoingOkBody = (headers: Record<string, string>): unknown => ({
   Status: "Sie wurden erfolgreich an- und abgemeldet!",
   Username: headers["username"] ?? "",
-  Echo: JSON.stringify(headers),
+  // Each header as a whole value: on stdout a bare secret is replaced only as a whole JSON
+  // value, never inside other text (destatis-genesis 03-1, user decision 2026-10-09).
+  Echo: headers,
 });
 // --------------------------------------------------------------------------------------
 

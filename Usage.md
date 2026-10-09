@@ -13,7 +13,8 @@ variables** over the flags: a credential passed as a flag is visible in the
 process table and shell history, so the CLI warns to stderr when it detects one.
 Nothing the CLI prints repeats a credential: the token, username and password
 (flag, env var or credentials file) and any `user:pass@` in a URL show as `***` — in usage errors, in
-an unknown command or surplus argument, and in a server answer that echoes them.
+an unknown command or surplus argument, and in a server answer that echoes them — in
+the data on stdout only as a whole value (`"Username": "***"`), never inside other text.
 
 ```bash
 export REGIONALSTATISTIK_USERNAME="…"

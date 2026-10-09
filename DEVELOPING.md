@@ -143,8 +143,12 @@ What the library rejects:
   `***` (`redactSecrets`: whole occurrences only, values under 4 characters
   skipped), in the forms a server echoes them back in: raw, JSON-escaped (also with
   DEL and C1 as stdout's JSON escapes them) and URL-encoded, as the library scrubs its
-  errors (`contextOf` in `engine.ts`).
-  `withoutStrayValues` drops the value from commander's "too many arguments" and `--x=value` "unknown option" errors, and from "unknown command"
+  errors (`contextOf` in `engine.ts`). That holds for stderr. On stdout a bare secret is
+  replaced only as a whole JSON string value (`redactWholeJsonValues`: `"Username":
+  "***"`), never inside other text — a password `2023` turned the year in `"Statistik
+  2023"` into `***` (destatis-genesis 03-1 of the 2026-10-09 round, which reproduces
+  here; the user's decision for both GENESIS repos). The userinfo of a URL (`***@`) is
+  replaced on both. `withoutStrayValues` drops the value from commander's "too many arguments" and `--x=value` "unknown option" errors, and from "unknown command"
   unless it reads like a command name — that is where a secret typed without its
   flag lands.
 - **Base URL** (`baseUrlProblem`, run by the engine constructor on the raw

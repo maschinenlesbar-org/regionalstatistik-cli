@@ -151,15 +151,32 @@ const SECRET_ENVS = ["REGIONALSTATISTIK_API_TOKEN", "REGIONALSTATISTIK_USERNAME"
 
 /** The secrets of a run, and the two ways they are replaced. */
 export interface Redaction {
-  /** stdout text: every secret of the run replaced (`***@`, `***`). */
+  /**
+   * stdout text: the userinfo of a URL (`***@`), and a bare secret only where it is a
+   * whole JSON string value (`"Username": "***"`), never inside other text — a password
+   * `2023` turned every year 2023 in a table into `***` (destatis-genesis 03-1).
+   */
   out(text: string): string;
-  /** stderr text, a record's message: the same replacements as on stdout. */
+  /** stderr text, a record's message: the userinfo and every bare secret of the run (`***`). */
   err(text: string): string;
   /**
    * Make `value` a secret of the run from now on, like a flag or env value: for a
    * credential the run learns after argv, one read from the credentials file.
    */
   addSecret(value: string): void;
+}
+
+/**
+ * `text` with every JSON string literal whose content is one of `secrets` (in the form
+ * stdout prints it: JSON-escaped, DEL and C1 as `\u00XX`) replaced by `"***"`. Only whole
+ * values: a secret inside a longer string is data and stays (destatis-genesis 03-1). A
+ * non-JSON text has no string literals to match and passes through unchanged.
+ */
+function redactWholeJsonValues(text: string, secrets: ReadonlySet<string>): string {
+  if (secrets.size === 0) return text;
+  return text.replace(/"((?:[^"\\]|\\.)*)"/g, (literal, content: string) =>
+    content.trim().length >= 4 && secrets.has(content) ? '"***"' : literal,
+  );
 }
 
 /**
@@ -182,9 +199,12 @@ export interface Redaction {
  *   its errors); values under 4 characters are skipped
  *   (`redactSecrets`).
  *
- * Both on stdout and on stderr: GENESIS echoes the token or user name as `Username` in
- * the data. A pattern alone can't delimit a password with spaces, quotes, `#`, `?` or
- * `/`; the exact strings can. Without secrets the text passes through unchanged.
+ * The userinfo is replaced on stdout and stderr alike. A bare secret is replaced anywhere
+ * on stderr (the log, and anything else written there), but on stdout only where it is a
+ * whole JSON string value: `logincheck` returns the token or user name as `Username`,
+ * and that stays hidden, while a short password such as `2023` no longer turns the year
+ * in `"Statistik 2023"` into `***` (destatis-genesis 03-1). A pattern alone can't
+ * delimit a password with spaces, quotes, `#`, `?` or `/`; the exact strings can. Without secrets the text passes through unchanged.
  * `addSecret` adds a secret later, for a credential that only `action()` learns — one
  * read from the credentials file (`regstat config`), which is in neither argv nor the
  * environment.
@@ -221,8 +241,12 @@ export function redactionFor(argv: readonly string[], env: Record<string, string
   for (const value of flagValues(argv, SECRET_FLAGS)) addSecret(value);
   for (const value of values) if (looksLikeToken(value)) addSecret(value);
   const urlList = [...userinfo];
-  const redact = (text: string): string => redactSecrets(redactCredentials(text, urlList), [...secrets]);
-  return { out: redact, err: redact, addSecret };
+  const userinfoOnly = (text: string): string => redactCredentials(text, urlList);
+  return {
+    out: (text) => redactWholeJsonValues(userinfoOnly(text), secrets),
+    err: (text) => redactSecrets(userinfoOnly(text), [...secrets]),
+    addSecret,
+  };
 }
 
 /**
