@@ -1,8 +1,8 @@
 # Developing `regionalstatistik-cli`
 
 This repo follows the shared `*-cli` two-layer blueprint (a typed,
-dependency-free client + a commander CLI, both driven through injectable seams)
-and is a **near-clone of
+dependency-free client, `packages/client`, + a commander CLI, `apps/cli`, both driven
+through injectable seams) and is a **near-clone of
 [`destatis-genesis-cli`](https://github.com/maschinenlesbar-org/destatis-genesis-cli)** —
 the Regionaldatenbank Deutschland runs the very same GENESIS webservice software
 (GENESIS V5.0.4 as of 2026). This document records what is **specific** to the
@@ -11,9 +11,47 @@ destatis reference. Read it alongside [GLOSSARY.md](GLOSSARY.md).
 
 ## Layout
 
+The repository is an **npm workspace** with two folders: `apps/` holds the programs it
+publishes, `packages/` the libraries they are built from.
+
 ```
-src/
-  client/        # typed API client, usable as a library independent of the CLI
+package.json         # private workspace manifest: no version, never packed
+apps/cli/            # @maschinenlesbar.org/regionalstatistik-cli — the published package
+  package.json       # its version, bin, files, bundleDependencies
+  src/index.ts       # library entry: re-exports @maschinenlesbar.org/regionalstatistik-client
+  src/cli/           # the CLI (below)
+  test/              # CLI tests and every conformance-*.test.ts
+packages/client/     # @maschinenlesbar.org/regionalstatistik-client — private, bundled into the CLI
+  src/               # the API client (below)
+  test/              # tests that only touch the client, + the transport helpers and fixtures
+tools/pack/          # prepack/postpack: bundle the client and commander into the tarball
+tools/bump.mjs       # version bump + commit + tag (npm run bump)
+tsconfig.docs.json   # TypeDoc only: the package entry, with the client read from its sources
+```
+
+- **The client is its own package** so a later MCP app can share it with the CLI. It is
+  never published on its own: `apps/cli`'s `prepack` copies it (and commander) into the
+  app's `node_modules`, and `bundleDependencies` ships it inside the tarball. The library
+  entry re-exports the client's `"."`, so `import { RegionalstatistikClient } from
+  "@maschinenlesbar.org/regionalstatistik-cli"` is unchanged.
+- **The client's exports:** `"."` is the public library surface (`src/index.ts`);
+  `"./internal/*"` maps to any module (`…/regionalstatistik-client/internal/engine`) for
+  what the CLI needs beyond that; `"./test/*"` reaches the client's test helpers and
+  fixtures from the CLI's tests (not bundled). Only `"."` is part of the library.
+- **Dependencies point one way:** the app depends on the client, the client on nothing
+  in the workspace. The login rules (token or username/password, guest access) are the
+  client's; the `config` command and the credentials file are the CLI's.
+- **The version lives in `apps/cli/package.json`.** The root has none; a plain
+  `npm version` at the root is refused. Release with `npm run bump -- <patch|minor|major>`,
+  which bumps the app, commits (the bare version as the message) and tags `vX.Y.Z`.
+- **TypeScript:** `tsconfig.base.json` holds the compiler options; every workspace has a
+  `tsconfig.json` (`src/`) and a `tsconfig.test.json` (`test/`), and the root
+  `tsconfig.json`/`tsconfig.test.json` reference them, built with `tsc -b`.
+
+The client (`packages/client/src/`) and the CLI (`apps/cli/src/`):
+
+```
+packages/client/src/
     types.ts     # GENESIS envelope + catalogue/find list items (opaque data/metadata Objects)
     params.ts    # per-endpoint parameter interfaces (regionalvariable/regionalkey!)
     validate.ts  # input rules (…Problem functions) + assertValid
@@ -22,8 +60,8 @@ src/
     engine.ts    # URL building, retry, Status.Code logical-error mapping, URL redaction
     errors.ts    # Regionalstatistik{Error,ApiError,NetworkError,UsageError,ValidationError,ParseError}
     client.ts    # RegionalstatistikClient — helloworld/find + catalogue/metadata/data groups
-    index.ts
-  cli/
+    index.ts     # the client's public surface (the library entry re-exports it)
+apps/cli/src/cli/
     io.ts        # injectable I/O + env seam (CliDeps / CliIO), the logger and the clock
     log.ts       # the stderr log: records with ts, level, topic; --log-format text|jsonl
     shared.ts    # option parsers, credential resolution, option->client mapping, render
@@ -31,7 +69,6 @@ src/
     program.ts   # assembles the commander program; seeds credential flags from env
     run.ts       # argv -> exit code (no process.exit; testable)
     index.ts     # #! bin shim
-  index.ts       # library entry
 ```
 
 Two seams keep everything testable in-process: **`Transport`** (the only HTTP
@@ -40,17 +77,26 @@ seam; tests inject a mock) and **`CliDeps`** (client factory + I/O + `env`).
 
 ```bash
 npm install
-npm run build       # tsc -> dist/
-npm run typecheck
-npm test            # pretest builds, then node --test --test-timeout=5000 dist/test/*.test.js
-npm start -- --help # run the built CLI
+npm run build       # compiles every workspace (tsc -b) to its dist/
+npm run typecheck   # tsc -b over every workspace, as build
+npm test            # pretest builds, then `node --test` over each workspace's dist/test
+npm run coverage    # the same tests in one run, with a coverage report
+npm start -- --help # run the CLI from the build (node apps/cli/dist/src/cli/index.js)
+npm run bump -- <patch|minor|major>  # bump apps/cli, commit, tag vX.Y.Z
+node --test apps/cli/dist/test/cli.test.js   # one file, after a build
 ```
+
+CI (`ci.yml`) type-checks, builds and tests on Node 22/24, then packs the real tarball,
+checks the pack left nothing behind, installs it globally with the registry out of reach and
+runs the bin. `release.yml` (on a `v*` tag, made by `npm run bump`) verifies the tag against
+`apps/cli/package.json`, writes the SBOMs (scoped to the `apps/cli` workspace) and runs
+`npm pack --workspace apps/cli`; `publish.yml` runs `npm publish --workspace apps/cli`.
 
 ## Library input validation
 
 The library owns every rule about what a request may contain; the CLI only turns
 argv strings into typed values and calls the same rules. The rules are pure,
-exported `…Problem(value)` functions in `src/client/validate.ts` (they return the
+exported `…Problem(value)` functions in `packages/client/src/validate.ts` (they return the
 reason a value is invalid, or `undefined`). The client enforces them before any
 request through `assertValid(name, value, problem)`, which throws
 **`RegionalstatistikValidationError`** (`Invalid <name>: <reason>`); a client
@@ -58,7 +104,7 @@ method rejects its promise, a constructor throws. `RegionalstatistikValidationEr
 extends `RegionalstatistikUsageError`, so `run.ts` maps it to exit 2 and logs it as
 an `ERROR` record of `regstat.cli`. The CLI's commander parsers call the same `…Problem`
 functions and turn a reason into commander's `InvalidArgumentError` (exit 2 too).
-Parity tests (`test/parity.test.ts`, the `parity()` helper in `test/helpers.ts`)
+Parity tests (`apps/cli/test/parity.test.ts`, the `parity()` helper in `apps/cli/test/helpers.ts`)
 drive one input through `run()` and through the library on one recording mock
 transport and assert the same outcome.
 
@@ -261,9 +307,9 @@ argv is where the ambiguity is, the library and the env var take any password). 
 credential is ever bundled.
 
 The third source is the **credentials file**, the CLI's, not the library's:
-`src/cli/credentials.ts` (`CredentialStore`, the same mechanism as openka-cli's `ka
+`apps/cli/src/cli/credentials.ts` (`CredentialStore`, the same mechanism as openka-cli's `ka
 config` and dip-bundestag-cli's `dip config`) and `regstat config set|get|unset|list`
-(`src/cli/commands/config.ts`, names `token`, `username`, `password`). The file is
+(`apps/cli/src/cli/commands/config.ts`, names `token`, `username`, `password`). The file is
 `$XDG_CONFIG_HOME/regionalstatistik/credentials` (else
 `$HOME/.config/regionalstatistik/credentials`): JSON, mode 0600 in a 0700 directory,
 replaced atomically (temp file + rename) by one writer at a time (`set`/`unset` hold
@@ -306,7 +352,7 @@ custom transports too (P3): `fetch` follows redirects by default and strips only
 every `HttpRequest` carries `redirect: "manual"` (a fetch transport passes it on),
 and a response whose reported final URL (`HttpResponse.url`, fetch's `r.url`) is
 on another origin is rejected as a `RegionalstatistikNetworkError` instead of
-being returned as data. `test/redirect-credentials.test.ts` runs a pair of local
+being returned as data. `packages/client/test/redirect-credentials.test.ts` runs a pair of local
 servers, one redirecting to the other, and checks that the second receives
 nothing.
 `engine.ts:redactUrl` additionally scrubs any `username`/`password` that a
@@ -393,7 +439,7 @@ over a success word, so a future notice appended to the success text that
 contains one ("nicht", "Fehler") would turn a good login into exit 1 — loudly,
 not silently. That word-based verdict is the documented limitation, kept by
 decision of 2026-10-06 (Usage.md says so too). Shared with destatis-genesis-cli:
-`test/conformance-p18-genesis-access-check.test.ts`.
+`apps/cli/test/conformance-p18-genesis-access-check.test.ts`.
 
 ### 4. `data/*` payloads are opaque — and regional
 
@@ -467,7 +513,8 @@ for every transport (P5):
   parameters redacted) `}`) is called once per retry right before the sleep, never when there is
   none, and a throw in it is swallowed. The CLI's `action()` sets it to log one `WARN` record of
   `regstat.http`, `HTTP 503 from <host>: retry 1 of 3 in 2 s` (`retryMessage`; host only,
-  whole seconds, ms under 1 s). Tests: `test/engine.test.ts`, `test/retry-log.test.ts`.
+  whole seconds, ms under 1 s). Tests: `packages/client/test/engine.test.ts`,
+  `apps/cli/test/retry-log.test.ts`.
 - **`--base-url`** accepts only `http:`/`https:` and refuses embedded userinfo,
   a query, a fragment, and whitespace or control characters (paths are appended
   as a string; the engine applies the same `baseUrlProblem` for library users).
@@ -511,16 +558,20 @@ for every transport (P5):
 
 `node --test` on the compiled output; no jest/vitest. Node 22.12 or later
 (`engines`); CI (`ci.yml`) type-checks, builds and tests on Node 22/24. Tests inject a mock
-`Transport` and a mocked `CliDeps` (`test/helpers.ts`, `test/fixtures.ts`); no
-real network in the suite. Beyond the cloned destatis coverage, the
+`Transport` and a mocked `CliDeps`; no real network in the suite. The client's tests are
+in `packages/client/test/` (`query`, `http`, `engine`, `client`, `redirect-credentials`),
+with the transport helpers and the fixtures (`helpers.ts`, `fixtures.ts`); everything that
+drives the CLI, the credentials file (`config.test.ts`, temporary directories, never the
+real home) included, is in `apps/cli/test/`, and `apps/cli/test/helpers.ts` re-exports the
+client's helpers next to the CLI's own (`untimed`, `parity`). Beyond the cloned destatis coverage, the
 regionalstatistik-specific behaviour under test: flat Code 15/Code 2 mapping on
 both 200 and 401/404 replies, `isNotFound` suppression for 404+Code 2, the 405
 on GET, and the BOM-prefixed HTML error page (`engine.test.ts`, `cli.test.ts`).
 
-`test/log.test.ts` tests the record helpers of `src/cli/log.ts` on their own
+`apps/cli/test/log.test.ts` tests the record helpers of `apps/cli/src/cli/log.ts` on their own
 (`escapeForRecord`, `formatLogRecord`); the CLI-level checks are P23's.
 
-`test/conformance-p*.test.ts` are the checks shared across the maschinenlesbar.org
+`apps/cli/test/conformance-p*.test.ts` are the checks shared across the maschinenlesbar.org
 CLIs, copied with only their adapter block changed: P1 (credentials in CLI output),
 P2 (in library objects and errors), P4/P19 (configuration validation), P5 (the
 transport contract), P6 (retry policy), P7 (pipes and exit codes; runs the built
@@ -565,7 +616,9 @@ TypeDoc API reference under `/api/`. Its content comes from this repository: the
 and quick start, the command tree of the built CLI (`site/scripts/cli-reference.mjs`),
 `Usage.md`, `GLOSSARY.md` and its German version `GLOSSARY.de.md`, the skills, and the skill
 examples in `EXAMPLE.md` and `EXAMPLE.de.md`. The only repo-specific files are
-`site/_config.yml` and `site/_data/project.yml` (the German intro and the access requirements);
+`site/_config.yml` (which also says where the published manifest and the built program
+are: `manifest: apps/cli/package.json`, `program: apps/cli/dist/src/cli/program.js`) and
+`site/_data/project.yml` (the German intro and the access requirements);
 the rest of `site/` is identical in every maschinenlesbar.org CLI, so change it in all of them
 together. When the README intro changes, update the German intro in `site/_data/project.yml`.
 
@@ -577,7 +630,7 @@ npm run serve                        # http://127.0.0.1:4000/regionalstatistik-c
 
 ## The log on stderr
 
-Every diagnostic line on stderr is a log record (`src/cli/log.ts`): a timestamp, a level
+Every diagnostic line on stderr is a log record (`apps/cli/src/cli/log.ts`): a timestamp, a level
 (`ERROR`, `WARN`, `INFO`) and a topic, `regstat.<area>`. `--log-format text` (the default)
 writes it log4j style, `<ISO 8601 UTC> <LEVEL padded to 5> [<topic>] <message>`;
 `--log-format jsonl` writes one JSON object per line with exactly `ts`, `level`, `topic`
