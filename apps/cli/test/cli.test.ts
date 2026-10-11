@@ -1,0 +1,928 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { run } from "../src/cli/run.js";
+import { RegionalstatistikClient } from "@maschinenlesbar.org/regionalstatistik-client/internal/client";
+import type { CliDeps } from "../src/cli/io.js";
+import type { HttpRequest, HttpResponse } from "@maschinenlesbar.org/regionalstatistik-client/internal/http";
+import { makeMockTransport, jsonResponse, rawResponse, bodyOf, untimed } from "./helpers.js";
+import * as fx from "@maschinenlesbar.org/regionalstatistik-client/test/fixtures";
+import { credentialsIn } from "@maschinenlesbar.org/regionalstatistik-client/internal/errors";
+
+function makeCli(
+  responder: (req: HttpRequest) => HttpResponse,
+  env: Record<string, string | undefined> = {},
+) {
+  const out: string[] = [];
+  const err: string[] = [];
+  const files = new Map<string, Buffer>();
+  const mt = makeMockTransport(responder);
+
+  const deps: CliDeps = {
+    io: {
+      out: (s) => out.push(s),
+      err: (s) => err.push(s),
+      writeFile: (p, d) => files.set(p, d),
+      fileExists: (p) => files.has(p),
+      outBinary: (d) => out.push(d.toString("utf8")),
+    },
+    createClient: (opts) => new RegionalstatistikClient({ ...opts, transport: mt.transport }),
+    env,
+  };
+  return { deps, out, err, files, mt };
+}
+
+const TOKEN = ["--token", "0123456789abcdef0123456789abcdef"];
+
+test("hello works without credentials and hits whoami", async () => {
+  const cli = makeCli(() => jsonResponse(fx.whoami));
+  const code = await run(["hello"], cli.deps);
+  assert.equal(code, 0);
+  assert.equal(new URL(cli.mt.last().url).pathname, "/genesisws/rest/2020/helloworld/whoami");
+  assert.deepEqual(JSON.parse(cli.out.join("\n")), fx.whoami);
+});
+
+test("hello ignores a half-configured env login (it sends no credentials)", async () => {
+  for (const env of [{ REGIONALSTATISTIK_USERNAME: "onlyuser" }, { REGIONALSTATISTIK_PASSWORD: "onlypass" }]) {
+    const cli = makeCli(() => jsonResponse(fx.whoami), env);
+    assert.equal(await run(["hello"], cli.deps), 0);
+    assert.equal(cli.mt.last().headers?.["username"], undefined);
+    assert.equal(cli.mt.last().headers?.["password"], undefined);
+    assert.deepEqual(cli.err, []);
+  }
+});
+
+test("a credential-required command with no credentials exits 2 and issues no request", async () => {
+  const cli = makeCli(() => jsonResponse(fx.tablesList));
+  const code = await run(["catalogue", "tables", "12411"], cli.deps);
+  assert.equal(code, 2);
+  assert.equal(cli.mt.calls.length, 0);
+  assert.match(cli.err.join("\n"), /needs credentials/);
+});
+
+test("only one of --username/--password exits 2 before any request", async () => {
+  const cli = makeCli(() => jsonResponse(fx.tablesList));
+  const code = await run(["catalogue", "tables", "--username", "USER123456"], cli.deps);
+  assert.equal(code, 2);
+  assert.equal(cli.mt.calls.length, 0);
+  assert.match(cli.err.join("\n"), /BOTH --username and --password/);
+});
+
+test("--token sends the token in the username header", async () => {
+  const cli = makeCli(() => jsonResponse(fx.tablesList));
+  const code = await run([...TOKEN, "catalogue", "tables", "12411*"], cli.deps);
+  assert.equal(code, 0);
+  const req = cli.mt.last();
+  assert.equal(req.headers?.["username"], "0123456789abcdef0123456789abcdef");
+  assert.equal(req.headers?.["password"], undefined);
+  assert.equal(bodyOf(req).get("selection"), "12411*");
+});
+
+test("a credential passed via --token warns to stderr, recommending the env var", async () => {
+  const cli = makeCli(() => jsonResponse(fx.tablesList));
+  const code = await run([...TOKEN, "catalogue", "tables", "12411*"], cli.deps);
+  assert.equal(code, 0);
+  const errText = cli.err.join("\n");
+  assert.match(untimed(errText), /^WARN  \[regstat\.cli\] credential\(s\) passed on the command line are visible in the process list/m);
+  assert.match(errText, /REGIONALSTATISTIK_API_TOKEN/);
+  // The credential value itself is never printed.
+  assert.doesNotMatch(errText, /0123456789abcdef/);
+});
+
+test("a credential from the environment does NOT trigger the argv warning", async () => {
+  const cli = makeCli(() => jsonResponse(fx.findResult), {
+    REGIONALSTATISTIK_API_TOKEN: "envtoken0000000000000000000000ab",
+  });
+  const code = await run(["find", "Bevölkerung"], cli.deps);
+  assert.equal(code, 0);
+  assert.doesNotMatch(cli.err.join("\n"), /visible in the process list/);
+});
+
+test("REGIONALSTATISTIK_USERNAME/PASSWORD from the environment seed the credentials", async () => {
+  const cli = makeCli(() => jsonResponse(fx.findResult), {
+    REGIONALSTATISTIK_USERNAME: "ENVUSER123",
+    REGIONALSTATISTIK_PASSWORD: "ENVPASS456",
+  });
+  const code = await run(["find", "Bevölkerung Kreise"], cli.deps);
+  assert.equal(code, 0);
+  const req = cli.mt.last();
+  assert.equal(req.headers?.["username"], "ENVUSER123");
+  assert.equal(req.headers?.["password"], "ENVPASS456");
+  assert.equal(bodyOf(req).get("term"), "Bevölkerung Kreise");
+  assert.equal(new URL(req.url).pathname, "/genesisws/rest/2020/find/find");
+});
+
+test("an explicit --token overrides REGIONALSTATISTIK_API_TOKEN from the environment", async () => {
+  const cli = makeCli(() => jsonResponse(fx.findResult), { REGIONALSTATISTIK_API_TOKEN: "envtoken" });
+  await run([...TOKEN, "find", "x"], cli.deps);
+  assert.equal(cli.mt.last().headers?.["username"], "0123456789abcdef0123456789abcdef");
+});
+
+test("--username/--password flags beat a REGIONALSTATISTIK_API_TOKEN from the environment", async () => {
+  const cli = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_API_TOKEN: "envtok" });
+  const code = await run(["--username", "flaguser", "--password", "flagpass", "logincheck"], cli.deps);
+  assert.equal(code, 0);
+  assert.equal(cli.mt.last().headers?.["username"], "flaguser");
+  assert.equal(cli.mt.last().headers?.["password"], "flagpass");
+});
+
+test("a --password flag combines with REGIONALSTATISTIK_USERNAME and beats the env token", async () => {
+  const cli = makeCli(() => jsonResponse(fx.loginOk), {
+    REGIONALSTATISTIK_API_TOKEN: "envtok",
+    REGIONALSTATISTIK_USERNAME: "envuser",
+  });
+  const code = await run(["--password", "flagpass", "logincheck"], cli.deps);
+  assert.equal(code, 0);
+  assert.equal(cli.mt.last().headers?.["username"], "envuser");
+  assert.equal(cli.mt.last().headers?.["password"], "flagpass");
+});
+
+test("a lone --username flag with an env token is a usage error, not a silent token login", async () => {
+  const cli = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_API_TOKEN: "envtok" });
+  const code = await run(["--username", "flaguser", "logincheck"], cli.deps);
+  assert.equal(code, 2);
+  assert.equal(cli.mt.calls.length, 0);
+  assert.match(cli.err.join("\n"), /BOTH --username and --password/);
+  // ...and says that the env token was set aside, before the pair error.
+  assert.equal(
+    untimed(cli.err[0] ?? ""),
+    "INFO  [regstat.cli] the token from REGIONALSTATISTIK_API_TOKEN is not used: --username on the command line " +
+      "selects a username and password login (the other half may come from its environment variable).",
+  );
+});
+
+test("a --username flag combines with REGIONALSTATISTIK_PASSWORD (flag wins per field)", async () => {
+  const cli = makeCli(() => jsonResponse(fx.loginOk), {
+    REGIONALSTATISTIK_USERNAME: "envuser",
+    REGIONALSTATISTIK_PASSWORD: "envpass",
+  });
+  assert.equal(await run(["--username", "flaguser", "logincheck"], cli.deps), 0);
+  assert.equal(cli.mt.last().headers?.["username"], "flaguser");
+  assert.equal(cli.mt.last().headers?.["password"], "envpass");
+  // No env token, so nothing was set aside and there is no note.
+  assert.ok(!cli.err.map(untimed).some((l) => l.startsWith("INFO  [regstat.cli] ")), cli.err.join("\n"));
+});
+
+test("the set-aside note names each flag, never a value, and is absent without an env token or with --token", async () => {
+  const both = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_API_TOKEN: "envtok0000000000" });
+  assert.equal(await run(["--username", "flaguser", "--password", "flagpass", "logincheck"], both.deps), 0);
+  const notes = both.err.map(untimed).filter((l) => l.startsWith("INFO  [regstat.cli] "));
+  assert.equal(notes.length, 1);
+  assert.match(notes[0]!, /--username and --password on the command line/);
+  assert.ok(!both.err.join("\n").includes("envtok0000000000"));
+
+  const flagToken = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_API_TOKEN: "envtok" });
+  assert.equal(await run([...TOKEN, "--username", "u1", "--password", "p1", "logincheck"], flagToken.deps), 0);
+  assert.ok(!flagToken.err.map(untimed).some((l) => l.startsWith("INFO  [regstat.cli] ")));
+
+  const envOnly = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_API_TOKEN: "envtok" });
+  assert.equal(await run(["logincheck"], envOnly.deps), 0);
+  assert.deepEqual(envOnly.err, []);
+
+  // hello takes no credentials: nothing is resolved, nothing is set aside.
+  const hello = makeCli(() => jsonResponse(fx.whoami), { REGIONALSTATISTIK_API_TOKEN: "envtok" });
+  assert.equal(await run(["--username", "flaguser", "hello"], hello.deps), 0);
+  assert.ok(!hello.err.map(untimed).some((l) => l.startsWith("INFO  [regstat.cli] ")));
+});
+
+test("an explicit --token flag still beats --username/--password flags", async () => {
+  const cli = makeCli(() => jsonResponse(fx.loginOk));
+  await run([...TOKEN, "--username", "u", "--password", "p", "logincheck"], cli.deps);
+  assert.equal(cli.mt.last().headers?.["username"], "0123456789abcdef0123456789abcdef");
+  assert.equal(cli.mt.last().headers?.["password"], undefined);
+});
+
+test("with env credentials only, REGIONALSTATISTIK_API_TOKEN still beats USERNAME/PASSWORD", async () => {
+  const cli = makeCli(() => jsonResponse(fx.loginOk), {
+    REGIONALSTATISTIK_API_TOKEN: "envtok",
+    REGIONALSTATISTIK_USERNAME: "envuser",
+    REGIONALSTATISTIK_PASSWORD: "envpass",
+  });
+  await run(["logincheck"], cli.deps);
+  assert.equal(cli.mt.last().headers?.["username"], "envtok");
+  assert.equal(cli.mt.last().headers?.["password"], undefined);
+});
+
+test("a control character in --user-agent is rejected before any request", async () => {
+  const cli = makeCli(() => jsonResponse(fx.whoami));
+  const code = await run(["hello", "--user-agent", "bad\r\nX-Injected: 1"], cli.deps);
+  assert.notEqual(code, 0);
+  assert.equal(cli.mt.calls.length, 0);
+  assert.match(cli.err.join("\n"), /control character/i);
+});
+
+test("a control character in a credential (--token) is rejected before any request", async () => {
+  const cli = makeCli(() => jsonResponse(fx.tablesList));
+  const code = await run(["--token", "tok\r\nX-Injected: 1", "catalogue", "tables"], cli.deps);
+  assert.notEqual(code, 0);
+  assert.equal(cli.mt.calls.length, 0);
+});
+
+test("a control character in an env credential is rejected before any request", async () => {
+  const cli = makeCli(() => jsonResponse(fx.tablesList), {
+    REGIONALSTATISTIK_API_TOKEN: `tok${String.fromCharCode(0x0d)}${String.fromCharCode(0x0a)}X-Injected: 1`,
+  });
+  const code = await run(["catalogue", "tables", "12411"], cli.deps);
+  assert.equal(code, 2);
+  assert.equal(cli.mt.calls.length, 0);
+  assert.match(cli.err.join("\n"), /REGIONALSTATISTIK_API_TOKEN contains control characters/);
+});
+
+test("a credential or User-Agent above U+00FF is a usage error, not Unexpected error", async () => {
+  for (const [argv, env] of [
+    [["--username", "u", "--password", "p\u20acw", "logincheck"], {}],
+    [["--token", "tok\u{1F600}", "logincheck"], {}],
+    [["--user-agent", "ua\u20ac", "hello"], {}],
+    [["logincheck"], { REGIONALSTATISTIK_USERNAME: "u", REGIONALSTATISTIK_PASSWORD: "pw\u20ac123" }],
+  ] as const) {
+    const cli = makeCli(() => jsonResponse(fx.loginOk), env);
+    const code = await run([...argv], cli.deps);
+    assert.equal(code, 2, argv.join(" "));
+    assert.equal(cli.mt.calls.length, 0);
+    const errText = cli.err.join("\n");
+    assert.match(errText, /outside Latin-1 \(above U\+00FF\)/);
+    assert.doesNotMatch(errText, /Unexpected error|pw\u20ac123/);
+  }
+  const env = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_USERNAME: "u", REGIONALSTATISTIK_PASSWORD: "pw\u20ac123" });
+  await run(["logincheck"], env.deps);
+  assert.match(env.err.join("\n"), /Environment variable REGIONALSTATISTIK_PASSWORD contains characters outside Latin-1/);
+});
+
+test("a Latin-1 credential (umlaut) is accepted and sent", async () => {
+  const cli = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_USERNAME: "u", REGIONALSTATISTIK_PASSWORD: "P\u00e4ssw\u00f6rt" });
+  assert.equal(await run(["logincheck"], cli.deps), 0);
+  assert.equal(cli.mt.last().headers?.["password"], "P\u00e4ssw\u00f6rt");
+});
+
+test("a blank --token/--username/--password/--user-agent is a usage error, not a silent unset", async () => {
+  for (const argv of [
+    ["--token", "", "find", "x"],
+    ["--token", " ", "find", "x"],
+    ["--username", "", "--password", "p", "logincheck"],
+    ["--user-agent", "", "hello"],
+  ]) {
+    const cli = makeCli(() => jsonResponse(fx.findResult), {
+      REGIONALSTATISTIK_USERNAME: "u",
+      REGIONALSTATISTIK_PASSWORD: "p",
+    });
+    const code = await run(argv, cli.deps);
+    assert.equal(code, 2, argv.join(" "));
+    assert.equal(cli.mt.calls.length, 0);
+    assert.match(cli.err.join("\n"), /Expected a non-empty value/);
+  }
+});
+
+test("a credential with surrounding whitespace is rejected, not silently trimmed", async () => {
+  const flag = makeCli(() => jsonResponse(fx.loginOk));
+  assert.equal(await run(["--username", " spaced user ", "--password", "p", "logincheck"], flag.deps), 2);
+  assert.equal(flag.mt.calls.length, 0);
+  assert.match(flag.err.join("\n"), /--username <user>' is invalid: Value has leading or trailing whitespace/);
+  assert.doesNotMatch(flag.err.join("\n"), /spaced user/);
+
+  const env = makeCli(() => jsonResponse(fx.loginOk), {
+    REGIONALSTATISTIK_USERNAME: "testuser",
+    REGIONALSTATISTIK_PASSWORD: "  pass with trailing space  ",
+  });
+  assert.equal(await run(["logincheck"], env.deps), 2);
+  assert.equal(env.mt.calls.length, 0);
+  assert.match(
+    env.err.join("\n"),
+    /Environment variable REGIONALSTATISTIK_PASSWORD has leading or trailing whitespace/,
+  );
+  assert.doesNotMatch(env.err.join("\n"), /pass with trailing space/);
+});
+
+test("inner spaces in a credential are sent as given", async () => {
+  const cli = makeCli(() => jsonResponse(fx.loginOk), {
+    REGIONALSTATISTIK_USERNAME: "u",
+    REGIONALSTATISTIK_PASSWORD: "pass with spaces",
+  });
+  assert.equal(await run(["logincheck"], cli.deps), 0);
+  assert.equal(cli.mt.last().headers?.["password"], "pass with spaces");
+});
+
+test("a malformed env credential does not break --help, --version, hello or an overriding flag", async () => {
+  const bad = `a${String.fromCharCode(0x01)}b`;
+  for (const argv of [["--help"], ["--version"], ["hello"], ["data", "--help"]]) {
+    const cli = makeCli(() => jsonResponse(fx.whoami), {
+      REGIONALSTATISTIK_USERNAME: "u",
+      REGIONALSTATISTIK_PASSWORD: bad,
+    });
+    assert.equal(await run(argv, cli.deps), 0, argv.join(" "));
+    assert.doesNotMatch(cli.err.join("\n"), /Environment variable/);
+  }
+  const flag = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_PASSWORD: bad });
+  assert.equal(await run(["--username", "u", "--password", "good", "logincheck"], flag.deps), 0);
+  assert.equal(flag.mt.last().headers?.["password"], "good");
+
+  const token = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_API_TOKEN: bad });
+  assert.equal(await run(["--username", "u", "--password", "p", "logincheck"], token.deps), 0);
+  assert.equal(token.mt.last().headers?.["username"], "u");
+});
+
+test("a malformed env credential still fails the command that would send it", async () => {
+  const cli = makeCli(() => jsonResponse(fx.loginOk), {
+    REGIONALSTATISTIK_USERNAME: "u",
+    REGIONALSTATISTIK_PASSWORD: `a${String.fromCharCode(0x01)}b`,
+  });
+  assert.equal(await run(["logincheck"], cli.deps), 2);
+  assert.equal(cli.mt.calls.length, 0);
+  assert.equal(untimed(cli.err.join("\n")), "ERROR [regstat.cli] Environment variable REGIONALSTATISTIK_PASSWORD contains control characters.");
+});
+
+test("a blank <term> on find is rejected before any request", async () => {
+  const cli = makeCli(() => jsonResponse(fx.findResult));
+  const code = await run([...TOKEN, "find", "   "], cli.deps);
+  assert.notEqual(code, 0);
+  assert.equal(cli.mt.calls.length, 0);
+});
+
+// A blank filter/selection/code (often an unset shell variable) is never
+// meaningful: it must be a usage error before any request, not an empty
+// `area=` / `selection=` sent in the POST body.
+const BLANK_CASES: { label: string; argv: string[] }[] = [
+  { label: "catalogue [selection]", argv: ["catalogue", "tables", ""] },
+  { label: "catalogue [selection] (whitespace)", argv: ["catalogue", "cubes", "   "] },
+  { label: "catalogue --area", argv: ["catalogue", "tables", "12411*", "--area", ""] },
+  { label: "catalogue --type", argv: ["catalogue", "values", "--type", ""] },
+  { label: "metadata --area", argv: ["metadata", "table", "12411-01-01-4", "--area", ""] },
+  { label: "data --area", argv: ["data", "table", "12411-01-01-4", "--area", ""] },
+  { label: "data --start-year", argv: ["data", "table", "12411-01-01-4", "--start-year", ""] },
+  { label: "data --end-year (whitespace)", argv: ["data", "cube", "X", "--end-year", "  "] },
+  { label: "data --region-var", argv: ["data", "table", "X", "--region-var", ""] },
+  { label: "data --region-key", argv: ["data", "tablefile", "X", "--region-key", ""] },
+  { label: "data --contents", argv: ["data", "timeseries", "X", "--contents", ""] },
+  { label: "data --stand", argv: ["data", "result", "X", "--stand", ""] },
+  ...[1, 2, 3, 4, 5].flatMap((i) => [
+    { label: `data --class-var${i}`, argv: ["data", "table", "X", `--class-var${i}`, ""] },
+    { label: `data --class-key${i}`, argv: ["data", "cubefile", "X", `--class-key${i}`, ""] },
+  ]),
+];
+
+for (const { label, argv } of BLANK_CASES) {
+  test(`a blank value for ${label} is rejected before any request`, async () => {
+    const cli = makeCli(() => jsonResponse(fx.tablesList));
+    const code = await run([...TOKEN, ...argv], cli.deps);
+    assert.notEqual(code, 0);
+    assert.equal(cli.mt.calls.length, 0);
+  });
+}
+
+test("--pagelength above the server cap (25000) is rejected client-side", async () => {
+  const cli = makeCli(() => jsonResponse(fx.tablesList));
+  const code = await run([...TOKEN, "--pagelength", "25001", "catalogue", "tables"], cli.deps);
+  assert.notEqual(code, 0);
+  assert.equal(cli.mt.calls.length, 0);
+});
+
+test("--max-retries above the sane maximum is rejected client-side", async () => {
+  const cli = makeCli(() => jsonResponse(fx.tablesList));
+  const code = await run([...TOKEN, "--max-retries", "1000000", "catalogue", "tables"], cli.deps);
+  assert.notEqual(code, 0);
+  assert.equal(cli.mt.calls.length, 0);
+});
+
+test("data table sends the object name and regional filters to data/table", async () => {
+  const cli = makeCli(() => jsonResponse(fx.dataTable));
+  const code = await run(
+    [...TOKEN, "data", "table", "12411-01-01-4", "--start-year", "2020", "--region-var", "KREISE", "--region-key", "08*"],
+    cli.deps,
+  );
+  assert.equal(code, 0);
+  assert.equal(new URL(cli.mt.last().url).pathname, "/genesisws/rest/2020/data/table");
+  const body = bodyOf(cli.mt.last());
+  assert.equal(body.get("name"), "12411-01-01-4");
+  assert.equal(body.get("startyear"), "2020");
+  assert.equal(body.get("regionalvariable"), "KREISE");
+  assert.equal(body.get("regionalkey"), "08*");
+});
+
+test("a GENESIS logical error (HTTP 200 + Status Fehler) exits 1", async () => {
+  const cli = makeCli(() => jsonResponse(fx.genericError));
+  const code = await run([...TOKEN, "data", "table", "12411-01-01-4"], cli.deps);
+  assert.equal(code, 1);
+  assert.match(cli.err.join("\n"), /GENESIS status -1/);
+});
+
+test("a flat Code 15 auth error exits 1 with a credentials hint, not a stack trace", async () => {
+  const cli = makeCli(() => jsonResponse(fx.flatNotAuthorized));
+  const code = await run([...TOKEN, "catalogue", "tables", "12411*"], cli.deps);
+  assert.equal(code, 1);
+  const errText = cli.err.join("\n");
+  assert.match(errText, /GENESIS status 15/);
+  assert.match(errText, /nicht berechtigt/);
+  assert.match(untimed(errText), /^INFO  \[regstat\.api\] check your credentials/m);
+  assert.doesNotMatch(errText, /Unexpected error/);
+});
+
+test("the live 401 + flat Code 15 reply exits 1 with a credentials hint", async () => {
+  const cli = makeCli(() => jsonResponse(fx.flatNotAuthorized, 401));
+  const code = await run([...TOKEN, "catalogue", "tables", "12411*"], cli.deps);
+  assert.equal(code, 1);
+  const errText = cli.err.join("\n");
+  assert.match(errText, /GENESIS status 15/);
+  assert.match(untimed(errText), /^INFO  \[regstat\.api\] check your credentials/m);
+});
+
+test("the live 404 + flat Code 2 reply (bad credentials) exits 1, not 4", async () => {
+  const cli = makeCli(() => jsonResponse(fx.flatBadCredentials, 404));
+  const code = await run([...TOKEN, "catalogue", "tables", "12411*"], cli.deps);
+  assert.equal(code, 1);
+  const errText = cli.err.join("\n");
+  assert.match(errText, /GENESIS status 2/);
+  assert.match(errText, /Nutzernamen/);
+  assert.match(untimed(errText), /^INFO  \[regstat\.api\] check your credentials \(--token or --username\/--password, or the ones stored with `regstat config`\)\./m);
+  assert.doesNotMatch(errText, /Unexpected error/);
+});
+
+test("a wrong-credentials reply on a data download gets the credentials hint too", async () => {
+  const cli = makeCli(() => jsonResponse(fx.flatBadCredentials, 404), {
+    REGIONALSTATISTIK_USERNAME: "u",
+    REGIONALSTATISTIK_PASSWORD: "p",
+  });
+  const code = await run(["data", "tablefile", "12411-01-01-4", "-o", "t.zip"], cli.deps);
+  assert.equal(code, 1);
+  assert.match(untimed(cli.err.join("\n")), /^INFO  \[regstat\.api\] check your credentials/m);
+  assert.equal(cli.files.size, 0);
+});
+
+test("hello (no credentials sent) gets no credentials hint on a 401/403", async () => {
+  for (const status of [401, 403]) {
+    const cli = makeCli(() => rawResponse("", "text/html", status));
+    const code = await run(["hello"], cli.deps);
+    assert.equal(code, 1);
+    assert.match(cli.err.join("\n"), new RegExp(`HTTP ${status} for GET`));
+    assert.doesNotMatch(untimed(cli.err.join("\n")), /^INFO /m);
+  }
+});
+
+test("a bare HTTP 404 still exits 4, without a hint", async () => {
+  const cli = makeCli(() => jsonResponse({ detail: "nope" }, 404));
+  const code = await run([...TOKEN, "metadata", "table", "12411-01-01-4"], cli.deps);
+  assert.equal(code, 4);
+  assert.doesNotMatch(untimed(cli.err.join("\n")), /^INFO /m);
+});
+
+test("a not-found (Status.Code 90) exits 4", async () => {
+  const cli = makeCli(() => jsonResponse(fx.notFound));
+  const code = await run([...TOKEN, "metadata", "table", "99999-99-99-4"], cli.deps);
+  assert.equal(code, 4);
+});
+
+test("data tablefile with a Status.Code 104 reply (unknown code) exits 4 and writes no file", async () => {
+  const cli = makeCli(() => jsonResponse(fx.emptyResult));
+  const code = await run([...TOKEN, "data", "tablefile", "99999-99", "-o", "t.zip"], cli.deps);
+  assert.equal(code, 4);
+  assert.equal(cli.files.size, 0);
+  assert.match(cli.err.join("\n"), /GENESIS status 104/);
+  assert.doesNotMatch(cli.err.join("\n"), /Wrote/);
+});
+
+test("data tablefile with an error reply labelled text/plain exits non-zero and writes no file", async () => {
+  const cli = makeCli(() => rawResponse(JSON.stringify(fx.genericError), "text/plain;charset=UTF-8"));
+  const code = await run([...TOKEN, "data", "tablefile", "12411-01-01-4", "-o", "t.zip"], cli.deps);
+  assert.equal(code, 1);
+  assert.equal(cli.files.size, 0);
+  assert.match(cli.err.join("\n"), /GENESIS status -1 \(Fehler\)/);
+});
+
+test("data cubefile with a 200 HTML page instead of the file exits 1 and writes no file (03#2)", async () => {
+  const page = "<!DOCTYPE html><html><body>Wartungsarbeiten</body></html>";
+  for (const [body, type] of [[page, "text/html"], [page, "application/octet-stream"], [`\uFEFF  <html>${page}`, ""]] as const) {
+    const cli = makeCli(() => rawResponse(body, type), { REGIONALSTATISTIK_API_TOKEN: "TOK" });
+    const code = await run(["data", "cubefile", "12411BJ001", "-o", "data.zip"], cli.deps);
+    assert.equal(code, 1, `${type}: ${cli.err.join("\n")}`);
+    assert.equal(cli.files.size, 0);
+    assert.match(cli.err.join("\n"), /got an HTML page/);
+  }
+});
+
+test("data tablefile writes a ZIP whatever its Content-Type, and HTML when --format html asked for it", async () => {
+  const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00]);
+  const asZip = makeCli(() => rawResponse(zip, "text/html"), { REGIONALSTATISTIK_API_TOKEN: "TOK" });
+  assert.equal(await run(["data", "tablefile", "12411-0001", "-o", "t.zip"], asZip.deps), 0, asZip.err.join("\n"));
+  assert.equal(asZip.files.size, 1);
+  const html = makeCli(() => rawResponse("<html>table</html>", "text/html"), { REGIONALSTATISTIK_API_TOKEN: "TOK" });
+  assert.equal(await run(["data", "tablefile", "12411-0001", "--format", "html", "-o", "t.html"], html.deps), 0, html.err.join("\n"));
+});
+
+test("data tablefile with an empty body exits 1 and writes no file", async () => {
+  const cli = makeCli(() => rawResponse("", "application/zip"));
+  const code = await run([...TOKEN, "data", "tablefile", "12411-01-01-4", "-o", "t.zip"], cli.deps);
+  assert.equal(code, 1);
+  assert.equal(cli.files.size, 0);
+  assert.match(cli.err.join("\n"), /Empty response body/);
+});
+
+test("--output writes JSON to a file and keeps stdout clean", async () => {
+  const cli = makeCli(() => jsonResponse(fx.tablesList));
+  const code = await run([...TOKEN, "--output", "/tmp/out.json", "catalogue", "tables"], cli.deps);
+  assert.equal(code, 0);
+  assert.match(cli.files.get("/tmp/out.json")?.toString("utf8") ?? "", /12411-01-01-4/);
+  assert.equal(cli.out.length, 0);
+  assert.match(untimed(cli.err.join("\n")), /^INFO  \[regstat\.output\] Wrote \d+ bytes to \/tmp\/out\.json/m);
+});
+
+test("--output refuses to overwrite an existing file without --force", async () => {
+  const cli = makeCli(() => jsonResponse(fx.tablesList));
+  cli.files.set("/tmp/out.json", Buffer.from("existing"));
+  const code = await run([...TOKEN, "--output", "/tmp/out.json", "catalogue", "tables"], cli.deps);
+  assert.equal(code, 2);
+  // The pre-existing file is untouched, and nothing was written to stdout.
+  assert.equal(cli.files.get("/tmp/out.json")?.toString("utf8"), "existing");
+  assert.equal(cli.out.length, 0);
+  assert.match(cli.err.join("\n"), /Refusing to overwrite/);
+});
+
+test("an existing -o file is refused before any request is sent", async () => {
+  for (const argv of [
+    ["data", "tablefile", "12411-01-01-4"],
+    ["data", "table", "12411-01-01-4"],
+    ["catalogue", "tables"],
+    ["find", "x"],
+    ["hello"],
+  ]) {
+    const cli = makeCli(() => jsonResponse(fx.tablesList));
+    cli.files.set("exists.zip", Buffer.from("old"));
+    const code = await run([...TOKEN, "-o", "exists.zip", ...argv], cli.deps);
+    assert.equal(code, 2, argv.join(" "));
+    assert.equal(cli.mt.calls.length, 0, argv.join(" "));
+    assert.match(cli.err.join("\n"), /Refusing to overwrite existing file "exists.zip"/);
+    assert.equal(cli.files.get("exists.zip")?.toString("utf8"), "old");
+  }
+});
+
+test("a file that appears between the check and the write (EEXIST) is refused like an existing one", async () => {
+  const cli = makeCli(() => jsonResponse(fx.tablesList));
+  let overwriteFlag: boolean | undefined;
+  cli.deps.io.writeFile = (_p, _d, overwrite) => {
+    overwriteFlag = overwrite;
+    throw Object.assign(new Error("EEXIST: file already exists"), { code: "EEXIST" });
+  };
+  const code = await run([...TOKEN, "-o", "race.json", "catalogue", "tables"], cli.deps);
+  assert.equal(code, 2);
+  assert.equal(overwriteFlag, false);
+  assert.match(cli.err.join("\n"), /Refusing to overwrite existing file "race.json"/);
+});
+
+test("--force writes with overwrite allowed", async () => {
+  const cli = makeCli(() => jsonResponse(fx.tablesList));
+  let overwriteFlag: boolean | undefined;
+  cli.deps.io.writeFile = (_p, _d, overwrite) => {
+    overwriteFlag = overwrite;
+  };
+  assert.equal(await run([...TOKEN, "--force", "-o", "x.json", "catalogue", "tables"], cli.deps), 0);
+  assert.equal(overwriteFlag, true);
+});
+
+test("--force allows overwriting an existing --output file", async () => {
+  const cli = makeCli(() => jsonResponse(fx.tablesList));
+  cli.files.set("/tmp/out.json", Buffer.from("existing"));
+  const code = await run([...TOKEN, "--force", "--output", "/tmp/out.json", "catalogue", "tables"], cli.deps);
+  assert.equal(code, 0);
+  assert.match(cli.files.get("/tmp/out.json")?.toString("utf8") ?? "", /12411-01-01-4/);
+});
+
+test("a filesystem write error after the request is a runtime error (exit 1), not usage or Unexpected", async () => {
+  const cli = makeCli(() => jsonResponse(fx.tablesList));
+  cli.deps.io.writeFile = () => {
+    throw new Error("EACCES: permission denied, open '/root/out.json'");
+  };
+  const code = await run([...TOKEN, "--output", "/root/out.json", "catalogue", "tables"], cli.deps);
+  assert.equal(code, 1);
+  assert.equal(cli.mt.calls.length, 1);
+  assert.match(cli.err.join("\n"), /Could not write to .*EACCES/);
+  assert.doesNotMatch(cli.err.join("\n"), /Unexpected error/);
+});
+
+test("an empty --output is rejected instead of silently writing to stdout", async () => {
+  const cli = makeCli(() => jsonResponse(fx.whoami));
+  const code = await run(["hello", "--output", ""], cli.deps);
+  assert.notEqual(code, 0);
+  assert.equal(cli.mt.calls.length, 0);
+  assert.equal(cli.out.length, 0);
+});
+
+test("DEL and C1 control characters in server data are escaped in the JSON output", async () => {
+  const controls = String.fromCharCode(0x7f, 0x85, 0x9b) + "2J";
+  const served = { "User-Agent": `regstat${controls}`, "User-IP": String.fromCharCode(0x1b) + "[31m" };
+  for (const format of [[], ["--compact"]]) {
+    const cli = makeCli(() => jsonResponse(served));
+    assert.equal(await run([...format, "hello"], cli.deps), 0);
+    const text = cli.out.join("\n");
+    const raw = [...text].filter((c) =>
+      c.charCodeAt(0) < 0x20 ? c !== "\n" : c.charCodeAt(0) >= 0x7f && c.charCodeAt(0) <= 0x9f,
+    );
+    assert.deepEqual(raw, [], format.join(" "));
+    assert.match(text, /regstat\\u007f\\u0085\\u009b2J/);
+    assert.deepEqual(JSON.parse(text), served);
+  }
+});
+
+test("an empty 200 reply exits 1 instead of printing null", async () => {
+  const cli = makeCli(() => rawResponse("", "application/json"));
+  const code = await run([...TOKEN, "find", "x"], cli.deps);
+  assert.equal(code, 1);
+  assert.deepEqual(cli.out, []);
+  assert.match(cli.err.join("\n"), /Empty response body from \/genesisws\/rest\/2020\/find\/find/);
+});
+
+test("a deeply nested response fails pretty-printing cleanly and still prints with --compact", async () => {
+  const depth = 200_000;
+  // A valid find envelope whose `Tables` list nests very deeply.
+  const text = '{"Status":{"Code":0,"Content":"ok","Type":"Information"},"Tables":' + "[".repeat(depth) + "]".repeat(depth) + "}";
+  const deep = () => rawResponse(text, "application/json");
+  const pretty = makeCli(deep);
+  assert.equal(await run([...TOKEN, "find", "x"], pretty.deps), 1);
+  assert.deepEqual(pretty.out, []);
+  assert.match(untimed(pretty.err.join("\n")), /^ERROR \[regstat\.cli\] The response is nested too deeply to pretty-print; try --compact\./m);
+
+  // Compact serialisation goes much deeper (it prints this one on current Node);
+  // should a runtime's stack still be too small, it must fail just as cleanly.
+  const compact = makeCli(deep);
+  const code = await run([...TOKEN, "--compact", "find", "x"], compact.deps);
+  if (code === 0) assert.equal(compact.out.join("").length, text.length);
+  else assert.match(untimed(compact.err.join("\n")), /^ERROR \[regstat\.cli\] The response is nested too deeply to print\./m);
+});
+
+test("BOM-prefixed JSON replies are read like plain ones", async () => {
+  const bom = (body: unknown, status = 200) => rawResponse("\uFEFF" + JSON.stringify(body), "application/json", status);
+
+  const ok = makeCli(() => bom(fx.findResult));
+  assert.equal(await run([...TOKEN, "find", "x"], ok.deps), 0);
+  assert.deepEqual(JSON.parse(ok.out.join("\n")), fx.findResult);
+
+  const notFound = makeCli(() => bom(fx.notFound));
+  assert.equal(await run([...TOKEN, "metadata", "table", "x"], notFound.deps), 4);
+  assert.match(notFound.err.join("\n"), /GENESIS status 90/);
+
+  // Wrong credentials (404 + flat Code 2) must not turn into "not found" (exit 4).
+  const badCreds = makeCli(() => bom(fx.flatBadCredentials, 404));
+  assert.equal(await run([...TOKEN, "find", "x"], badCreds.deps), 1);
+  assert.match(badCreds.err.join("\n"), /GENESIS status 2 \(ERROR\) \/ HTTP 404/);
+  assert.match(untimed(badCreds.err.join("\n")), /^INFO  \[regstat\.api\] check your credentials/m);
+});
+
+test("--compact prints single-line JSON", async () => {
+  const cli = makeCli(() => jsonResponse(fx.tablesList));
+  await run([...TOKEN, "--compact", "catalogue", "tables"], cli.deps);
+  assert.equal(cli.out.length, 1);
+  assert.equal(cli.out[0], JSON.stringify(fx.tablesList));
+});
+
+test("logincheck without credentials sends none and prints the guest reply", async () => {
+  // The short text, and the live guest answer with its notice (2026-10-05): both confirm (P18).
+  for (const Status of ["Sie wurden erfolgreich an- und abgemeldet!", fx.loginOk.Status]) {
+    const guest = { Status, Username: "GAST" };
+    const cli = makeCli(() => jsonResponse(guest));
+    const code = await run(["logincheck"], cli.deps);
+    assert.equal(code, 0, cli.err.join("\n"));
+    assert.equal(cli.mt.calls.length, 1);
+    assert.equal(cli.mt.last().headers?.["username"], undefined);
+    assert.deepEqual(JSON.parse(cli.out.join("\n")), guest);
+  }
+});
+
+test("--help exits 0", async () => {
+  const cli = makeCli(() => jsonResponse({}));
+  assert.equal(await run(["--help"], cli.deps), 0);
+});
+
+test("help/version exit 0; a missing command prints the help to stderr and exits 2", async () => {
+  for (const argv of [["--help"], ["help"], ["find", "--help"], ["--version"]]) {
+    const cli = makeCli(() => jsonResponse(fx.whoami));
+    assert.equal(await run(argv, cli.deps), 0, argv.join(" "));
+  }
+  for (const argv of [[], ["data"]]) {
+    const cli = makeCli(() => jsonResponse(fx.whoami));
+    assert.equal(await run(argv, cli.deps), 2, argv.join(" "));
+    assert.deepEqual(cli.out, []);
+    // An ERROR names the missing command; commander's help after it is INFO records of
+    // regstat.cli, one per line.
+    assert.match(untimed(cli.err.join("\n")), /^ERROR \[regstat\.cli\] missing command: `regstat( data)? <subcommand>`\nINFO  \[regstat\.cli\] Usage: regstat/);
+  }
+});
+
+test("a commander usage error (bad option value) exits 2, not 1", async () => {
+  const cli = makeCli(() => jsonResponse(fx.tablesList));
+  const code = await run([...TOKEN, "--pagelength", "0", "catalogue", "tables"], cli.deps);
+  assert.equal(code, 2);
+  assert.equal(cli.mt.calls.length, 0);
+});
+
+test("--timeout accepts up to the largest timer Node supports", async () => {
+  const cli = makeCli(() => jsonResponse(fx.whoami));
+  assert.equal(await run(["--timeout", "2147483647", "hello"], cli.deps), 0);
+  assert.equal(cli.mt.last().timeoutMs, 2_147_483_647);
+
+  const over = makeCli(() => jsonResponse(fx.whoami));
+  assert.equal(await run(["--timeout", "2147483648", "hello"], over.deps), 2);
+  assert.equal(over.mt.calls.length, 0);
+  assert.match(over.err.join("\n"), /Must be <= 2147483647/);
+});
+
+test("a missing required argument exits 2", async () => {
+  const cli = makeCli(() => jsonResponse(fx.findResult));
+  assert.equal(await run([...TOKEN, "find"], cli.deps), 2);
+});
+
+test("an unknown command exits 2", async () => {
+  const cli = makeCli(() => jsonResponse({}));
+  assert.equal(await run(["boguscmd"], cli.deps), 2);
+});
+
+test("a non-http(s) --base-url is rejected at parse time with exit 2", async () => {
+  const cli = makeCli(() => jsonResponse(fx.whoami));
+  const code = await run(["--base-url", "file:///etc/passwd", "hello"], cli.deps);
+  assert.equal(code, 2);
+  assert.equal(cli.mt.calls.length, 0);
+});
+
+test("a --base-url with a query, fragment or surrounding whitespace is a usage error", async () => {
+  for (const [url, pattern] of [
+    ["http://127.0.0.1:18130/ok?username=leak", /query \(\?\) or fragment \(#\)/],
+    ["http://127.0.0.1:18130/ok#frag", /query \(\?\) or fragment \(#\)/],
+    [" https://www.regionalstatistik.de", /surrounding whitespace/],
+  ] as const) {
+    const cli = makeCli(() => jsonResponse(fx.findResult));
+    const code = await run([...TOKEN, "--base-url", url, "find", "x"], cli.deps);
+    assert.equal(code, 2, url);
+    assert.equal(cli.mt.calls.length, 0);
+    assert.match(cli.err.join("\n"), pattern);
+  }
+});
+
+test("a --base-url with a path prefix still works", async () => {
+  const cli = makeCli(() => jsonResponse(fx.findResult));
+  assert.equal(await run([...TOKEN, "--base-url", "http://mirror.test/regio/", "find", "x"], cli.deps), 0);
+  assert.equal(cli.mt.last().url, "http://mirror.test/regio/genesisws/rest/2020/find/find");
+});
+
+test("a --base-url with embedded userinfo is rejected at parse time", async () => {
+  const cli = makeCli(() => jsonResponse(fx.whoami));
+  const code = await run(["--base-url", "https://USER:PASS@www.regionalstatistik.de", "hello"], cli.deps);
+  // Rejected before any request is issued, with the conventional usage exit code.
+  // Commander echoes the rejected value in its usage error; run() redacts the
+  // userinfo from every line it prints (P1), so the password never shows.
+  assert.equal(code, 2);
+  assert.equal(cli.mt.calls.length, 0);
+  assert.match(cli.err.join("\n"), /Must not embed credentials/);
+  assert.doesNotMatch(cli.err.join("\n"), /USER:PASS/);
+});
+
+test("-o - writes to stdout and creates no file named '-' (P12)", async () => {
+  const json = makeCli(() => jsonResponse(fx.tablesList));
+  json.files.set("-", Buffer.from("old")); // a file named "-" is neither refused nor written
+  assert.equal(await run([...TOKEN, "-o", "-", "--compact", "catalogue", "tables", "x"], json.deps), 0, json.err.join("\n"));
+  assert.deepEqual([...json.files.keys()], ["-"]);
+  assert.equal(json.files.get("-")?.toString(), "old");
+  assert.deepEqual(JSON.parse(json.out.join("")), fx.tablesList);
+  const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00]);
+  const raw = makeCli(() => rawResponse(zip, "application/zip"));
+  assert.equal(await run([...TOKEN, "data", "tablefile", "12411-01-01-4", "-o", "-"], raw.deps), 0, raw.err.join("\n"));
+  assert.equal(raw.files.size, 0);
+  assert.match(untimed(raw.err.join("\n")), /^INFO  \[regstat\.output\] Wrote 6 bytes to stdout/m);
+});
+
+test("P20: an http base URL names what travels with the requests: the login, the token, or nothing", async () => {
+  const warningOf = (err: string[]) => err.map(untimed).filter((l) => l.startsWith("WARN  [regstat.http] "));
+  const login = makeCli(() => jsonResponse(fx.loginOk), {
+    REGIONALSTATISTIK_USERNAME: "USER123456",
+    REGIONALSTATISTIK_PASSWORD: "pw-s3cret-value",
+  });
+  assert.equal(await run(["--base-url", "http://mirror.example:8080", "logincheck"], login.deps), 0);
+  assert.deepEqual(warningOf(login.err), [
+    "WARN  [regstat.http] the login is sent unencrypted to mirror.example:8080 (http:, not https:)",
+  ]);
+  assert.ok(!login.err.join("\n").includes("pw-s3cret-value"));
+
+  const token = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_API_TOKEN: "0123456789abcdef0123456789abcdef" });
+  assert.equal(await run(["--base-url", "http://mirror.example", "logincheck"], token.deps), 0);
+  assert.deepEqual(warningOf(token.err), ["WARN  [regstat.http] the token is sent unencrypted to mirror.example (http:, not https:)"]);
+
+  // hello sends no credentials, even with a login in the environment.
+  const hello = makeCli(() => jsonResponse(fx.whoami), { REGIONALSTATISTIK_API_TOKEN: "0123456789abcdef0123456789abcdef" });
+  assert.equal(await run(["--base-url", "http://mirror.example", "hello"], hello.deps), 0);
+  assert.deepEqual(warningOf(hello.err), ["WARN  [regstat.http] requests to mirror.example are sent unencrypted (http:, not https:)"]);
+
+  // A usage error found before the first request (half a login) does not warn.
+  const half = makeCli(() => jsonResponse(fx.loginOk), { REGIONALSTATISTIK_USERNAME: "USER123456" });
+  assert.equal(await run(["--base-url", "http://mirror.example", "logincheck"], half.deps), 2);
+  assert.deepEqual(warningOf(half.err), []);
+});
+
+test("--password whose value starts with -- is a usage error pointing to the env var; no request", async () => {
+  for (const argv of [
+    ["--username", "testuser", "--password", "--compact", "logincheck"],
+    ["--username", "testuser", "--password=--s3cret-pw", "logincheck"],
+  ]) {
+    const cli = makeCli(() => jsonResponse(fx.loginOk));
+    assert.equal(await run(argv, cli.deps), 2, argv.join(" "));
+    assert.equal(cli.mt.calls.length, 0);
+    const err = cli.err.join("\n");
+    assert.match(err, /option '--password <pass>' is invalid: the value starts with "--"/);
+    assert.match(err, /REGIONALSTATISTIK_PASSWORD/);
+    assert.ok(!err.includes("s3cret-pw"), err);
+  }
+});
+
+test("a password that starts with -- still works from REGIONALSTATISTIK_PASSWORD, and a lone - is fine as a flag", async () => {
+  const env = makeCli(() => jsonResponse(fx.loginOk), {
+    REGIONALSTATISTIK_USERNAME: "testuser",
+    REGIONALSTATISTIK_PASSWORD: "--s3cret-pw",
+  });
+  assert.equal(await run(["logincheck"], env.deps), 0);
+  assert.equal(env.mt.last().headers?.["password"], "--s3cret-pw");
+
+  const dash = makeCli(() => jsonResponse(fx.loginOk));
+  assert.equal(await run(["--username", "testuser", "--password", "-s3cret-pw", "logincheck"], dash.deps), 0);
+  assert.equal(dash.mt.last().headers?.["password"], "-s3cret-pw");
+});
+
+test("a download whose -o write fails exits 1; an existing -o file is still a usage error (exit 2) before the request", async () => {
+  const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00]);
+  const failing = makeCli(() => rawResponse(zip, "application/zip"));
+  failing.deps.io.writeFile = () => {
+    throw new Error("ENOENT: no such file or directory, open 'missing-dir/t.zip'");
+  };
+  assert.equal(await run([...TOKEN, "data", "tablefile", "12411-01-01-4", "-o", "missing-dir/t.zip"], failing.deps), 1);
+  assert.equal(failing.mt.calls.length, 1);
+  assert.match(untimed(failing.err.join("\n")), /^ERROR \[regstat\.output\] Could not write to "missing-dir\/t\.zip": ENOENT/m);
+
+  const existing = makeCli(() => rawResponse(zip, "application/zip"));
+  existing.files.set("t.zip", Buffer.from("old"));
+  assert.equal(await run([...TOKEN, "data", "tablefile", "12411-01-01-4", "-o", "t.zip"], existing.deps), 2);
+  assert.equal(existing.mt.calls.length, 0);
+});
+
+test("an HTML 404 page (wrong path) exits 4 without printing the page", async () => {
+  const page = '﻿<!DOCTYPE html>\n<html lang="de"><body>Seite nicht gefunden</body></html>';
+  const cli = makeCli(() => rawResponse(page, "text/html", 404));
+  assert.equal(await run([...TOKEN, "--base-url", "https://www.regionalstatistik.de/wrong", "find", "x"], cli.deps), 4);
+  assert.doesNotMatch(cli.err.join("\n"), /<html|Seite nicht gefunden/);
+  assert.deepEqual(cli.out, []);
+});
+
+test("an a:b@c argument (here a User-Agent) is neither a credential in the log nor rewritten in the JSON on stdout (L14)", async () => {
+  const env = { REGIONALSTATISTIK_API_TOKEN: "0123456789abcdef0123456789abcdef" };
+  const cli = makeCli(() => jsonResponse({ ...fx.findResult, Copyright: "run:2026-10-09@x" }), env);
+  assert.equal(await run(["--user-agent", "run:2026-10-09@x", "find", "x"], cli.deps), 0, cli.err.join("\n"));
+  assert.match(cli.out.join("\n"), /"Copyright": "run:2026-10-09@x"/);
+  const written = makeCli(() => jsonResponse(fx.findResult), env);
+  assert.equal(await run(["-o", "run:2026-10-09@x.json", "find", "x"], written.deps), 0);
+  assert.match(untimed(written.err.join("\n")), /Wrote \d+ bytes to run:2026-10-09@x\.json/);
+  assert.deepEqual(credentialsIn("run:2026-10-09@x"), []);
+  assert.deepEqual(credentialsIn("https://alice:pw@host"), ["alice:pw"]);
+});
+
+test("a parse error is logged in the format commander would have parsed: the first --log-format, an option's value skipped (L6)", async () => {
+  // --user-agent takes "--log-format" as its value; "jsonl" is then an unknown command, logged in text.
+  const ua = makeCli(() => jsonResponse(fx.findResult));
+  assert.equal(await run(["--user-agent", "--log-format", "jsonl", "find", "x"], ua.deps), 2);
+  assert.match(ua.err[0] ?? "", /^\S+ ERROR \[regstat\.cli\] unknown command 'jsonl'/);
+  // A repeated --log-format is refused; the refusal is in the first one's format.
+  const twice = makeCli(() => jsonResponse(fx.findResult));
+  assert.equal(await run(["--log-format", "jsonl", "--log-format", "text", "find", "x"], twice.deps), 2);
+  const record = JSON.parse(twice.err[0] ?? "") as Record<string, unknown>;
+  assert.equal(record["topic"], "regstat.cli");
+  assert.match(record["msg"] as string, /--log-format <format>' was given more than once/);
+  // A subcommand's value option does not take it: commander takes the program's
+  // --log-format out first, so --region-key misses its value, and that is logged in jsonl.
+  const sub = makeCli(() => jsonResponse(fx.findResult));
+  assert.equal(await run(["data", "table", "12411-01-01-4", "--region-key", "--log-format", "jsonl"], sub.deps), 2);
+  assert.match((JSON.parse(sub.err[0] ?? "") as Record<string, unknown>)["msg"] as string, /--region-key <key>' argument missing/);
+});
+
+test("every -o failure is an ERROR record of regstat.output, with its exit code as before (L8)", async () => {
+  const failures: Array<(cli: ReturnType<typeof makeCli>) => void> = [
+    (cli) => cli.files.set("out.json", Buffer.from("existing")), // an existing file, no --force
+    (cli) => {
+      cli.deps.io.writeFile = () => {
+        throw new Error("EACCES: permission denied, open 'out.json'");
+      };
+    },
+    (cli) => {
+      cli.deps.io.writeFile = () => {
+        throw Object.assign(new Error("EISDIR: illegal operation on a directory, open 'out.json'"), { code: "EISDIR" });
+      };
+    },
+  ];
+  // An existing file is refused before the request (a usage error, 2); a write that
+  // fails once the answer is in is a runtime failure (1).
+  for (const [fail, exit] of failures.map((f, i) => [f, i === 0 ? 2 : 1] as const)) {
+    const cli = makeCli(() => jsonResponse(fx.tablesList));
+    fail(cli);
+    assert.equal(await run([...TOKEN, "-o", "out.json", "catalogue", "tables"], cli.deps), exit);
+    assert.match(untimed(cli.err.join("\n")), /^ERROR \[regstat\.output\] (Refusing to overwrite|Could not write to)/m);
+    assert.doesNotMatch(cli.err.join("\n"), /Unexpected error|ERROR \[regstat\.cli\]/);
+  }
+});
+
+test("the Content-Type a download is logged with is quoted cut, its control characters gone (results/03 bug 03-2)", async () => {
+  const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00]);
+  const type = `application/zip; x=${"y".repeat(10_000)}\u009b31m`;
+  const cli = makeCli(() => rawResponse(zip, type), { REGIONALSTATISTIK_API_TOKEN: "0123456789abcdef0123456789abcdef" });
+  assert.equal(await run(["data", "tablefile", "12411-01-01-4", "-o", "t.zip"], cli.deps), 0, cli.err.join("\n"));
+  const record = cli.err.find((line) => line.includes("Wrote ")) ?? "";
+  assert.match(record, /Wrote 8 bytes to t\.zip \(Content-Type: application\/zip; x=y+…\)$/);
+  assert.ok(record.length < 700, `${record.length}`);
+});
