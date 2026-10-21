@@ -619,6 +619,27 @@ test("DEL and C1 control characters in server data are escaped in the JSON outpu
   }
 });
 
+test("K10: bidi controls in server data are escaped in the JSON output, on stdout and in the -o file", async () => {
+  // JSON.stringify leaves U+061C, U+200E/F, U+202A–U+202E and U+2066–U+2069 raw; a terminal
+  // applies them to the text that follows (U+202E reverses it).
+  const bidi = [0x061c, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069];
+  const served = { "User-Agent": `regstat${String.fromCharCode(0x202e)}gnp.exe`, all: String.fromCharCode(...bidi) };
+  for (const format of [[], ["--compact"]]) {
+    const cli = makeCli(() => jsonResponse(served));
+    assert.equal(await run([...format, "hello"], cli.deps), 0);
+    const text = cli.out.join("\n");
+    assert.deepEqual([...text].filter((c) => bidi.includes(c.charCodeAt(0))), [], format.join(" "));
+    assert.match(text, /regstat\\u202egnp\.exe/);
+    assert.match(text, /\\u061c\\u200e\\u200f\\u202a\\u202b\\u202c\\u202d\\u202e\\u2066\\u2067\\u2068\\u2069/);
+    assert.deepEqual(JSON.parse(text), served);
+  }
+  const file = makeCli(() => jsonResponse(served));
+  assert.equal(await run(["-o", "out.json", "hello"], file.deps), 0);
+  const written = file.files.get("out.json")?.toString("utf8") ?? "";
+  assert.match(written, /regstat\\u202egnp\.exe/);
+  assert.deepEqual(JSON.parse(written), served);
+});
+
 test("an empty 200 reply exits 1 instead of printing null", async () => {
   const cli = makeCli(() => rawResponse("", "application/json"));
   const code = await run([...TOKEN, "find", "x"], cli.deps);

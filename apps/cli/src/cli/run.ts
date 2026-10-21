@@ -229,8 +229,8 @@ export function redactionFor(argv: readonly string[], env: Record<string, string
     for (const form of [value, value.trim()]) {
       secrets.add(form);
       secrets.add(JSON.stringify(form).slice(1, -1));
-      // stdout's JSON escapes DEL and C1 after JSON.stringify (`escapeControlChars`):
-      // a password with U+0085 is printed as `pass\u0085word` there.
+      // stdout's JSON escapes DEL, C1 and the bidi controls after JSON.stringify
+      // (`escapeControlChars`): a password with U+0085 is printed as `pass\u0085word` there.
       secrets.add(escapeControlChars(JSON.stringify(form).slice(1, -1)));
       // What a server echoes back URL-encoded (`pw=s3cret%2Bp%40ss`): the forms the
       // library scrubs from its errors, so a success answer is covered too.

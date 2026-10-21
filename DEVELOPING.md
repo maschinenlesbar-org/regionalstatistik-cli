@@ -191,7 +191,7 @@ What the library rejects:
   later through `io.redact`) and of any token-shaped argument (`looksLikeToken`) with
   `***` (`redactSecrets`: whole occurrences only, values under 4 characters
   skipped), in the forms a server echoes them back in: raw, JSON-escaped (also with
-  DEL and C1 as stdout's JSON escapes them) and URL-encoded (`%20`, and `+` for a space
+  DEL, C1 and the bidi controls as stdout's JSON escapes them) and URL-encoded (`%20`, and `+` for a space
   as a form echoes it), as the library scrubs its errors (`contextOf` in `engine.ts`). That holds for stderr. On stdout a bare secret is
   replaced only as a whole JSON string value (`redactWholeJsonValues`: `"Username":
   "***"`), never inside other text — a password `2023` turned the year in `"Statistik
@@ -553,6 +553,12 @@ for every transport (P5):
   of scope; note they use the **uppercase** `/genesisWS` path, so cross-pointing
   mostly 404s — use the right sibling CLI instead. The data terms also differ
   (rely on the response `Copyright`).
+- **Printed JSON is terminal-safe** (`escapeControlChars` in `shared.ts`): on stdout and
+  in the `-o` file the characters `JSON.stringify` leaves raw although a terminal acts on
+  them are written as `\uXXXX` escapes — DEL, the C1 range U+0080–U+009F (U+009B is the
+  8-bit CSI) and the bidi controls (`isBidiControl`: U+061C, U+200E, U+200F,
+  U+202A–U+202E, U+2066–U+2069; U+202E reverses the text that follows). The JSON stays
+  equivalent; a raw download (`data *file`) is passed through as bytes.
 - **Plain `http:` warning** (P20): `cleartextProblem(baseUrl, secrets)` in
   `engine.ts` (exported) returns one sentence when requests to the base URL travel
   unencrypted — `undefined` for `https:`, an unparseable URL and loopback
