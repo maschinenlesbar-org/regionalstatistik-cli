@@ -130,14 +130,14 @@ export interface RegionalstatistikClientOptions extends EngineOptions {
    * A personal API token. Sent in the `username` header field with no password.
    * Takes precedence over `username`/`password` if both are given.
    */
-  token?: string;
+  token?: string | undefined;
   /**
    * Account username (may be an email). Requires `password`: with only one of the
    * two (and no token) the constructor throws `RegionalstatistikValidationError`.
    */
-  username?: string;
+  username?: string | undefined;
   /** Account password. */
-  password?: string;
+  password?: string | undefined;
 }
 
 /** `catalogue/*` browse endpoints — each returns an enveloped `List`. */

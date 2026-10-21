@@ -255,6 +255,15 @@ has no `.default()` for `--language` or `find --category`, so an omitted value i
 not sent — by the CLI or the library — and GENESIS applies its own defaults
 (`de`, `all`); the help text says so.
 
+Every optional field of the exported option and parameter interfaces
+(`RegionalstatistikClientOptions`, `EngineOptions`, `FindParams`, `CatalogueParams`,
+`MetadataParams`, `DataTableParams`, `DataFileParams`, `ParamOptions`) is declared
+`?: T | undefined`, because the runtime treats `undefined` as omitted: a consumer compiled
+with `exactOptionalPropertyTypes` can write `new RegionalstatistikClient({ token:
+process.env.REGIONALSTATISTIK_API_TOKEN })`. `packages/client/test/types.test.ts` compiles
+such a consumer against the built declarations (it starts `tsc`, so it has 30 s), so a new
+field can't slip back.
+
 ## Host-specific facts (verified live 2026-07-13)
 
 ### 1. The API path is lowercase: `/genesisws/rest/2020`
@@ -575,7 +584,7 @@ for every transport (P5):
 `node --test` on the compiled output; no jest/vitest. Node 22.12 or later
 (`engines`); CI (`ci.yml`) type-checks, builds and tests on Node 22/24. Tests inject a mock
 `Transport` and a mocked `CliDeps`; no real network in the suite. The client's tests are
-in `packages/client/test/` (`query`, `http`, `engine`, `client`, `redirect-credentials`),
+in `packages/client/test/` (`query`, `http`, `engine`, `client`, `redirect-credentials`, `types`),
 with the transport helpers and the fixtures (`helpers.ts`, `fixtures.ts`); everything that
 drives the CLI, the credentials file (`config.test.ts`, temporary directories, never the
 real home) included, is in `apps/cli/test/`, and `apps/cli/test/helpers.ts` re-exports the

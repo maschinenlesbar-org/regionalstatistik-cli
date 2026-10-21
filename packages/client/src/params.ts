@@ -35,10 +35,10 @@ export type Criterion = (typeof CRITERIA)[number];
 /** Parameters for `find/find`. */
 export interface FindParams {
   term: string;
-  category?: FindCategory;
+  category?: FindCategory | undefined;
   /** Max results: an integer from 1 to `MAX_PAGELENGTH` (server default 100). */
-  pagelength?: number;
-  language?: Language;
+  pagelength?: number | undefined;
+  language?: Language | undefined;
 }
 
 /**
@@ -46,20 +46,20 @@ export interface FindParams {
  * by object code and supports a `*` wildcard (e.g. `"12411*"`).
  */
 export interface CatalogueParams {
-  selection?: string;
-  area?: string;
-  searchcriterion?: Criterion;
-  sortcriterion?: Criterion;
-  type?: string;
+  selection?: string | undefined;
+  area?: string | undefined;
+  searchcriterion?: Criterion | undefined;
+  sortcriterion?: Criterion | undefined;
+  type?: string | undefined;
   /** Max results: an integer from 1 to `MAX_PAGELENGTH` (server default 100). */
-  pagelength?: number;
-  language?: Language;
+  pagelength?: number | undefined;
+  language?: Language | undefined;
 }
 
 /** Parameters for the `metadata/*` describe endpoints (`name` is passed separately). */
 export interface MetadataParams {
-  area?: string;
-  language?: Language;
+  area?: string | undefined;
+  language?: Language | undefined;
 }
 
 /**
@@ -68,32 +68,32 @@ export interface MetadataParams {
  * table as a delimited CSV string in `Object.Content`.
  */
 export interface DataTableParams {
-  area?: string;
+  area?: string | undefined;
   /** Include the recursive dimension tree under `Object.Structure`. */
-  structureinformation?: boolean;
-  compress?: boolean;
-  transpose?: boolean;
-  contents?: string;
-  startyear?: string;
-  endyear?: string;
+  structureinformation?: boolean | undefined;
+  compress?: boolean | undefined;
+  transpose?: boolean | undefined;
+  contents?: string | undefined;
+  startyear?: string | undefined;
+  endyear?: string | undefined;
   /** Number of time slices from the end: a non-negative integer. */
-  timeslices?: number;
+  timeslices?: number | undefined;
   /** Regional level variable, e.g. KREISE (Kreise) or GEMEIN (Gemeinden). */
-  regionalvariable?: string;
+  regionalvariable?: string | undefined;
   /** Regional key selection (AGS/ARS), `*` wildcard allowed (e.g. "08*"). */
-  regionalkey?: string;
-  classifyingvariable1?: string;
-  classifyingkey1?: string;
-  classifyingvariable2?: string;
-  classifyingkey2?: string;
-  classifyingvariable3?: string;
-  classifyingkey3?: string;
-  classifyingvariable4?: string;
-  classifyingkey4?: string;
-  classifyingvariable5?: string;
-  classifyingkey5?: string;
-  stand?: string;
-  language?: Language;
+  regionalkey?: string | undefined;
+  classifyingvariable1?: string | undefined;
+  classifyingkey1?: string | undefined;
+  classifyingvariable2?: string | undefined;
+  classifyingkey2?: string | undefined;
+  classifyingvariable3?: string | undefined;
+  classifyingkey3?: string | undefined;
+  classifyingvariable4?: string | undefined;
+  classifyingkey4?: string | undefined;
+  classifyingvariable5?: string | undefined;
+  classifyingkey5?: string | undefined;
+  stand?: string | undefined;
+  language?: Language | undefined;
 }
 
 /** File-download output formats offered by the `data/*file` endpoints (`format`). */
@@ -104,7 +104,7 @@ export type DataFileFormat = (typeof DATA_FILE_FORMATS)[number];
 /** Parameters for the `data/*file` download endpoints (returns a ZIP wrapper). */
 export interface DataFileParams extends DataTableParams {
   /** Output format; defaults server-side to `datencsv`. */
-  format?: DataFileFormat;
+  format?: DataFileFormat | undefined;
 }
 
 // --- The parameter keys each endpoint takes (P10) -------------------------------
@@ -160,5 +160,5 @@ export interface ParamOptions {
    * value must still be a string, number or boolean, and `__proto__`, `constructor`
    * and `prototype` are never accepted.
    */
-  allowUnknownParams?: boolean;
+  allowUnknownParams?: boolean | undefined;
 }
