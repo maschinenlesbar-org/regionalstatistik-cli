@@ -23,7 +23,7 @@ function makeCli(
       out: (s) => out.push(s),
       err: (s) => err.push(s),
       writeFile: (p, d) => files.set(p, d),
-      fileExists: (p) => files.has(p),
+      fileState: (p) => (files.has(p) ? "exists" : "absent"),
       outBinary: (d) => out.push(d.toString("utf8")),
     },
     createClient: (opts) => new RegionalstatistikClient({ ...opts, transport: mt.transport }),
@@ -552,7 +552,7 @@ test("an existing -o file is refused before any request is sent", async () => {
   }
 });
 
-test("a file that appears between the check and the write (EEXIST) is refused like an existing one", async () => {
+test("a file that appears between the check and the write (EEXIST) is refused like an existing one, exit 1 (K7)", async () => {
   const cli = makeCli(() => jsonResponse(fx.tablesList));
   let overwriteFlag: boolean | undefined;
   cli.deps.io.writeFile = (_p, _d, overwrite) => {
@@ -560,7 +560,7 @@ test("a file that appears between the check and the write (EEXIST) is refused li
     throw Object.assign(new Error("EEXIST: file already exists"), { code: "EEXIST" });
   };
   const code = await run([...TOKEN, "-o", "race.json", "catalogue", "tables"], cli.deps);
-  assert.equal(code, 2);
+  assert.equal(code, 1);
   assert.equal(overwriteFlag, false);
   assert.match(cli.err.join("\n"), /Refusing to overwrite existing file "race.json"/);
 });
@@ -927,11 +927,18 @@ test("every -o failure is an ERROR record of regstat.output, with its exit code 
     },
   ];
   // An existing file is refused before the request (a usage error, 2); a write that
-  // fails once the answer is in is a runtime failure (1).
+  // fails once the answer is in is a runtime failure (1), a file that appeared
+  // meanwhile included (K7).
+  failures.push((cli) => {
+    cli.deps.io.writeFile = () => {
+      throw Object.assign(new Error("EEXIST: file already exists, open 'out.json'"), { code: "EEXIST" });
+    };
+  });
   for (const [fail, exit] of failures.map((f, i) => [f, i === 0 ? 2 : 1] as const)) {
     const cli = makeCli(() => jsonResponse(fx.tablesList));
     fail(cli);
     assert.equal(await run([...TOKEN, "-o", "out.json", "catalogue", "tables"], cli.deps), exit);
+    if (exit === 2) assert.equal(cli.mt.calls.length, 0);
     assert.match(untimed(cli.err.join("\n")), /^ERROR \[regstat\.output\] (Refusing to overwrite|Could not write to)/m);
     assert.doesNotMatch(cli.err.join("\n"), /Unexpected error|ERROR \[regstat\.cli\]/);
   }

@@ -21,7 +21,7 @@ const VALUE_OPTION = "--timeout";
 /** A successful answer to SIMPLE_COMMAND. */
 const okBody = { "User-Agent": "regionalstatistik-cli" };
 /** The members this repo's CliIO has besides out/err. */
-const IO_EXTRAS = { writeFile: () => {}, fileExists: () => false, outBinary: () => {} };
+const IO_EXTRAS = { writeFile: () => {}, fileState: () => "absent" as const, outBinary: () => {} };
 /**
  * Keyed repos: the secret flags, their environment variables, a command that uses them and
  * one that ignores them. regstat has three (a token, or a username and password); a repo

@@ -19,7 +19,7 @@ async function exercise(extra: string[], failures: number, retryAfter?: string) 
       ? { status: 503, headers: retryAfter ? { "retry-after": retryAfter } : {}, body: Buffer.from("{}") }
       : jsonResponse(fx.whoami);
   const deps: CliDeps = {
-    io: { out: (s) => out.push(s), err: (s) => err.push(s), writeFile: () => {}, fileExists: () => false, outBinary: () => {} },
+    io: { out: (s) => out.push(s), err: (s) => err.push(s), writeFile: () => {}, fileState: () => "absent" as const, outBinary: () => {} },
     env: {},
     now: () => new Date("2026-01-02T03:04:05.678Z"),
     createClient: (opts) => new RegionalstatistikClient({ ...opts, transport, sleep: async () => {} }),

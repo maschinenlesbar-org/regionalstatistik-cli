@@ -4,7 +4,7 @@
 
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
-import { OutputError, OutputRefusedError, logOf, type CliDeps } from "./io.js";
+import { OutputError, OutputRefusedError, isDirectoryMessage, logOf, refuseOverwrite, type CliDeps } from "./io.js";
 import { CredentialsFileError, type CredentialStore } from "./credentials.js";
 import { cleartextProblem, DEFAULT_BASE_URL, type RawResponse, type RetryEvent } from "@maschinenlesbar.org/regionalstatistik-client/internal/engine";
 import type { RegionalstatistikClientOptions } from "@maschinenlesbar.org/regionalstatistik-client/internal/client";
@@ -280,38 +280,42 @@ export function toClientOptions(
 }
 
 /**
- * The usage error for an --output path that already exists (without --force), logged
- * under `regstat.output`.
+ * Check `-o` before any request, so a refused target costs none: `--force` without `-o`, a
+ * directory, and an existing path (a dangling link too) without `--force` are usage errors
+ * (`OutputRefusedError`, exit 2, logged under `regstat.output`). `-o -` is stdout. The
+ * write checks again: a file that appears during the request is not overwritten either
+ * (an `OutputError` then, exit 1).
  */
-function refuseOverwrite(path: string): OutputRefusedError {
-  return new OutputRefusedError(
-    `Refusing to overwrite existing file "${path}". Pass --force to overwrite, or choose a different --output path.`,
-  );
+export function checkOutputTarget(deps: CliDeps, global: GlobalOptions): void {
+  if (global.force === true && global.output === undefined) {
+    throw new OutputRefusedError("--force needs --output (it only allows overwriting the -o file).");
+  }
+  if (!toFile(global)) return;
+  const state = deps.io.fileState(global.output);
+  if (state === "directory") throw new OutputRefusedError(isDirectoryMessage(global.output));
+  if (state === "exists" && global.force !== true) throw new OutputRefusedError(refuseOverwrite(global.output));
 }
 
 /**
- * Write bytes to the --output file, guarding against an accidental overwrite and
- * wrapping raw filesystem errors in a typed error. Refuses to clobber an existing
- * file — or to write through a symlink, dangling or not — unless --force is set
- * (fail-secure: no silent data loss; an `OutputRefusedError`, a usage error, exit 2,
- * like the same refusal before the request), and turns an ENOENT/EISDIR/EACCES from
- * writeFile into a clean `OutputError` (a RegionalstatistikError, exit 1) instead of an
- * untyped "Unexpected error: ENOENT: …" — both logged under `regstat.output`: the request has been made and answered by then, so a write that
- * fails is a runtime failure, not a usage error. `action()` already refused an
- * existing path before the request; this re-check catches one that appeared
- * meanwhile.
+ * Write bytes to the --output file, atomically (`CliIO.writeFile`): without --force an
+ * exclusive create, so a symlink (even a dangling one) or a file that appeared during the
+ * request is refused too. A failure — that refusal, a directory, ENOENT, EACCES, a full
+ * disk — is an `OutputError` (a RegionalstatistikError, exit 1, logged under
+ * `regstat.output`) instead of an untyped "Unexpected error: ENOENT: …": the request has
+ * been made and answered by then, so a write that fails is a runtime failure, not a usage
+ * error. The old file is left as it was.
  */
 function writeOutputFile(deps: CliDeps, global: GlobalOptions, path: string, data: Buffer): void {
   const force = global.force === true;
-  if (!force && deps.io.fileExists(path)) throw refuseOverwrite(path);
+  if (deps.io.fileState(path) === "directory") throw new OutputError(isDirectoryMessage(path));
   try {
-    // Without --force the write is an exclusive create, so a symlink (even a
-    // dangling one) or a file that appeared since the check is refused too.
     deps.io.writeFile(path, data, force);
   } catch (err) {
-    if (!force && (err as NodeJS.ErrnoException | undefined)?.code === "EEXIST") throw refuseOverwrite(path);
+    if (!force && (err as NodeJS.ErrnoException | undefined)?.code === "EEXIST") {
+      throw new OutputError(refuseOverwrite(path), { cause: err });
+    }
     const reason = err instanceof Error ? err.message : String(err);
-    throw new OutputError(`Could not write to "${path}": ${reason}`, { cause: err });
+    throw new OutputError(`Could not write to "${cutForMessage(path)}": ${reason}`, { cause: err });
   }
 }
 
@@ -619,12 +623,10 @@ export function action(
     const command = args[args.length - 1] as Command;
     const positionals = args.slice(0, Math.max(0, args.length - 2)) as string[];
     const global = command.optsWithGlobals() as GlobalOptions;
-    // Refuse an existing --output file before any request, so the refusal costs no
+    // A refused -o target is a usage error before any request, so the refusal costs no
     // download (and no wait up to --timeout). writeOutputFile checks again at write
     // time with an exclusive create, which also catches a file that appears meanwhile.
-    if (toFile(global) && global.force !== true && deps.io.fileExists(global.output)) {
-      throw refuseOverwrite(global.output);
-    }
+    checkOutputTarget(deps, global);
     // A command that takes no credentials (`hello`) never sends any, so they are
     // not resolved at all: a half-configured or malformed env login must not fail
     // the very connectivity check used to debug it.

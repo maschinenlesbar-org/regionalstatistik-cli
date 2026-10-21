@@ -43,7 +43,7 @@ function makeCli(
       out: (s) => out.push(s),
       err: (s) => err.push(s),
       writeFile: () => undefined,
-      fileExists: () => false,
+      fileState: () => "absent" as const,
       outBinary: () => undefined,
       readSecret: async () => {
         if (secret === undefined) throw new Error("no secret prepared");

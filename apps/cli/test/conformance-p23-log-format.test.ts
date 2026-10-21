@@ -77,7 +77,7 @@ function makeDeps(out: string[], err: string[], now: () => Date, answer?: HttpRe
     body: Buffer.from(JSON.stringify(okBody)),
   };
   return {
-    io: { out: (s) => out.push(s), err: (s) => err.push(s), writeFile: () => {}, fileExists: () => false, outBinary: () => {} },
+    io: { out: (s) => out.push(s), err: (s) => err.push(s), writeFile: () => {}, fileState: () => "absent" as const, outBinary: () => {} },
     env: {},
     now,
     createClient: (opts) => new Client({ ...opts, transport }),

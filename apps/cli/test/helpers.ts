@@ -73,7 +73,7 @@ export async function parity(input: ParityInput): Promise<ParityResult> {
       out: (s) => out.push(s),
       err: (s) => err.push(s),
       writeFile: (p, d) => files.set(p, d),
-      fileExists: (p) => files.has(p),
+      fileState: (p) => (files.has(p) ? "exists" : "absent"),
       outBinary: (d) => out.push(d.toString("utf8")),
     },
     createClient: (opts) => defaultDeps.createClient({ ...opts, transport: mt.transport }),

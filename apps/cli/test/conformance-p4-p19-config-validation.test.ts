@@ -15,7 +15,7 @@ const BASE_URL_ENV: string | undefined = undefined; // regstat reads no base-URL
 const SIMPLE_COMMAND = ["hello"];
 const USAGE_EXIT = 2;
 /** The members this repo's CliIO has besides out/err. */
-const IO_EXTRAS = { writeFile: () => {}, fileExists: () => false, outBinary: () => {} };
+const IO_EXTRAS = { writeFile: () => {}, fileState: () => "absent" as const, outBinary: () => {} };
 /**
  * P4: what the rejection of a '%' in the userinfo says, and whether an escaped one (%25) is
  * accepted. regstat rejects any userinfo in a base URL (credentials travel in headers), so

@@ -1,36 +1,54 @@
 // I/O seam for the CLI. Everything the CLI writes goes through a CliIO object so
 // tests can capture output instead of hitting the real stdout/stderr/filesystem.
 
-import { lstatSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { chmodSync, closeSync, lstatSync, openSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import type { RegionalstatistikClient, RegionalstatistikClientOptions } from "@maschinenlesbar.org/regionalstatistik-client/internal/client";
-import { RegionalstatistikError, RegionalstatistikUsageError } from "@maschinenlesbar.org/regionalstatistik-client/internal/errors";
+import { RegionalstatistikError, RegionalstatistikUsageError, cutForMessage } from "@maschinenlesbar.org/regionalstatistik-client/internal/errors";
 import type { CredentialStore } from "./credentials.js";
 import { createLogger, type Logger } from "./log.js";
 
 /**
  * The `-o` file could not be written once the answer was in (a missing directory, a
- * directory, EACCES, …): a runtime failure as before (exit 1), logged as an ERROR of
- * `regstat.output`, the area of the `-o` file.
+ * directory, EACCES, a full disk, a file that appeared during the request): a runtime
+ * failure (exit 1), logged as an ERROR of `regstat.output`, the area of the `-o` file.
+ * The old file, if any, is left as it was.
  */
 export class OutputError extends RegionalstatistikError {}
 
 /**
- * The `-o` file exists and `--force` is not given: a usage error as before (exit 2),
+ * The `-o` target is refused before any request: `--force` without `-o`, a directory, or
+ * an existing path (a dangling link too) without `--force`. A usage error (exit 2),
  * logged as an ERROR of `regstat.output`, the area of the `-o` file.
  */
 export class OutputRefusedError extends RegionalstatistikUsageError {}
+
+/** What is at a path: nothing, a directory, or anything else (a file, a link: a dangling one too). */
+export type FileState = "absent" | "directory" | "exists";
+
+/** The message for an existing `-o` path without `--force`. */
+export function refuseOverwrite(path: string): string {
+  return `Refusing to overwrite existing file "${cutForMessage(path)}". Pass --force to overwrite, or choose a different --output path.`;
+}
+
+/** The message for an `-o` path that is a directory, which `--force` can't fix. */
+export function isDirectoryMessage(path: string): string {
+  return `"${cutForMessage(path)}" is a directory; give a file path to --output.`;
+}
 
 export interface CliIO {
   out(text: string): void;
   err(text: string): void;
   /**
-   * Persist raw bytes to a file. Without `overwrite` the file must not exist yet
-   * (exclusive create): anything at `path` — a file, or a symlink, even a dangling
-   * one — makes it throw an `EEXIST` error instead of writing through it.
+   * Persist raw bytes to a file, atomically: the old file stays as it was until the new
+   * one is complete. Without `overwrite` the file must not exist yet (exclusive create):
+   * anything at `path` — a file, or a symlink, even a dangling one — makes it throw an
+   * `EEXIST` error instead of writing through it. A failure leaves no file behind.
    */
   writeFile(path: string, data: Buffer, overwrite: boolean): void;
-  /** True if a filesystem entry already exists at `path` (a dangling symlink counts). */
-  fileExists(path: string): boolean;
+  /** What is at `path` (a dangling symlink counts as existing; a link to a directory is a directory). */
+  fileState(path: string): FileState;
   /** Write raw bytes to stdout (binary-safe). */
   outBinary(data: Buffer): void;
   /**
@@ -176,21 +194,85 @@ export const defaultIO: CliIO = {
   out: (text) => process.stdout.write(text + "\n"),
   // A record never lands inside the data when both streams share a pipe.
   err: stderrLine,
-  // "wx" = O_CREAT|O_EXCL: never follows a symlink planted at `path` and closes the
-  // gap between the fileExists check and the write.
-  writeFile: (path, data, overwrite) => writeFileSync(path, data, { flag: overwrite ? "w" : "wx" }),
-  // lstat, not existsSync: existsSync follows a symlink and reports a dangling one
-  // as absent, so -o would create a file wherever the link points.
-  fileExists: (path) => {
-    try {
-      lstatSync(path);
-      return true;
-    } catch {
-      return false;
-    }
-  },
+  writeFile: writeFileAtomic,
+  fileState: fileStateOf,
   outBinary: (data) => process.stdout.write(data),
 };
+
+/** `CliIO.fileState` on the real file system. */
+function fileStateOf(path: string): FileState {
+  try {
+    return statSync(path).isDirectory() ? "directory" : "exists";
+  } catch {
+    // statSync follows a link; a dangling one is still something an exclusive create
+    // refuses (existsSync would call it absent, and -o would create a file wherever it
+    // points), so lstat decides between "exists" and "absent".
+    try {
+      lstatSync(path);
+      return "exists";
+    } catch {
+      return "absent";
+    }
+  }
+}
+
+/**
+ * `CliIO.writeFile` on the real file system. Without `overwrite` the name is claimed first
+ * with an exclusive create ("wx" = O_CREAT|O_EXCL: it never follows a symlink planted at
+ * `path` and closes the gap between the check before the request and the write), which
+ * throws `EEXIST` for anything there. Then the data goes to a temporary file beside the
+ * target, renamed over it when complete. A write cut short (a full disk, a quota) leaves
+ * the old file as it was and no file under a new name, so the next run isn't refused for
+ * one that holds half a result. With `overwrite` an existing file's mode is kept and a
+ * symlink is written through to the file it points at.
+ */
+function writeFileAtomic(path: string, data: Buffer, overwrite: boolean): void {
+  let claimed = false;
+  try {
+    if (!overwrite) {
+      closeSync(openSync(path, "wx"));
+      claimed = true;
+    }
+    replaceFile(overwrite ? throughLinks(path) : path, data);
+  } catch (err) {
+    if (claimed) rmSync(path, { force: true });
+    throw err;
+  }
+}
+
+/**
+ * Replace `target` with `data` atomically: a temporary file beside it, created exclusively,
+ * renamed over it. An existing file's mode is kept.
+ */
+function replaceFile(target: string, data: Buffer): void {
+  const temporary = join(dirname(target), `.${basename(target)}.${process.pid}-${randomBytes(4).toString("hex")}.tmp`);
+  try {
+    writeFileSync(temporary, data, { flag: "wx" });
+    const mode = modeOf(target);
+    if (mode !== undefined) chmodSync(temporary, mode);
+    renameSync(temporary, target);
+  } catch (err) {
+    rmSync(temporary, { force: true });
+    throw err;
+  }
+}
+
+function modeOf(path: string): number | undefined {
+  try {
+    return statSync(path).mode & 0o7777;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The file a path names, through any symlinks, so --force writes where a link points. */
+function throughLinks(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
 
 /**
  * The longest secret `readSecretFrom` takes (64 KiB). Reading stops beyond it, so an

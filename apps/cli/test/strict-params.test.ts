@@ -79,7 +79,7 @@ test("P10: a repeated single-value flag is a usage error, not 'last one wins'", 
     const err: string[] = [];
     let requests = 0;
     const deps: CliDeps = {
-      io: { out: () => {}, err: (s) => err.push(s), writeFile: () => {}, fileExists: () => false, outBinary: () => {} },
+      io: { out: () => {}, err: (s) => err.push(s), writeFile: () => {}, fileState: () => "absent" as const, outBinary: () => {} },
       env: { REGIONALSTATISTIK_API_TOKEN: TOKEN },
       createClient: (opts) =>
         new RegionalstatistikClient({ ...opts, transport: async () => (requests++, { status: 200, headers: {}, body: Buffer.from(JSON.stringify(ok)) }) }),

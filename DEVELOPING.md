@@ -523,10 +523,11 @@ for every transport (P5):
 - **Zero runtime HTTP dependencies** — only `commander`. Strict TS + ESM.
 - **Exit codes** (`run.ts`): help/version → 0 (commander's own exit code 0);
   usage/credential error → 2, including a missing command (bare `regstat`,
-  `regstat data`), which prints the help to stderr, and an existing `-o` file
-  without `--force`; an `-o` write that fails after the answer is in →
-  `RegionalstatistikError`, exit 1 (`writeOutputFile`; it was 2 until the
-  2026-10-06 follow-up round);
+  `regstat data`), which prints the help to stderr, and a refused `-o` target
+  (`checkOutputTarget`, before any request: `--force` without `-o`, a directory, an
+  existing path without `--force`); an `-o` write that fails after the answer is in, a
+  file that appeared during the request included → `RegionalstatistikError`, exit 1
+  (`writeOutputFile`);
   not-found → 4; other errors → 1 (including auth failures, which additionally
   print a credentials hint).
 - **Retry/backoff:** transient `429`/`503` retried up to `maxRetries` (0..`MAX_RETRIES` = 10, enforced by the engine),
@@ -687,9 +688,14 @@ what `regstat config set|unset|list` did, and every failure to read, write or us
 file — a `CredentialsFileError`, exit 1 — whether `config` or a command that needs the
 login read it; a usage error of `config`, such as a refused name or value, stays `cli`)
 and
-`output` (the `-o` file written, `Wrote N bytes …`, or any failure to write it: an
-`OutputRefusedError` for an existing file, exit 2, an `OutputError` for a write that
-fails once the answer is in, exit 1; and a stdout write error). Code logs through `logOf(deps)` and never writes diagnostics
+`output` (the `-o` file written, `Wrote N bytes …`; a target refused before any request —
+`--force` without `-o`, a directory, an existing path without `--force` — an
+`OutputRefusedError`, exit 2; a write that failed after the request, a file that appeared
+meanwhile included, an `OutputError`, exit 1; and a stdout write error). The write is
+atomic (`writeFileAtomic` in `io.ts`, behind `CliIO.writeFile`): without `--force` the name
+is claimed with an exclusive create, the data goes to a temporary file beside the target
+and is renamed over it, `--force` keeps the old file's mode and writes through a symlink,
+and a failure leaves neither a temporary file nor a claimed name. Code logs through `logOf(deps)` and never writes diagnostics
 with `io.err` directly. `run()` builds the logger from argv before commander parses it
 (`logFormatFromArgv`, used only for the records of a parse error: the first
 `--log-format`, the value of one of the program's own value options skipped, as

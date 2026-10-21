@@ -34,7 +34,7 @@ const LOGINCHECK_ARGV = ["logincheck"];
 /** The line the CLI adds to an auth error. */
 const CREDENTIALS_HINT = /^\S+ INFO  \[regstat\.api\] check your credentials/m;
 /** The members this repo's CliIO has besides out/err. */
-const IO_EXTRAS = { writeFile: () => {}, fileExists: () => false, outBinary: () => {} };
+const IO_EXTRAS = { writeFile: () => {}, fileState: () => "absent" as const, outBinary: () => {} };
 /** The server's texts (live, www.regionalstatistik.de 2026-10-05; the success text is the guest answer's). */
 const FAIL_TEXT = "Ein Fehler ist aufgetreten. (Bitte prüfen und korrigieren Sie Ihren Nutzernamen bzw.\n das Passwort.)";
 const OK_TEXT =

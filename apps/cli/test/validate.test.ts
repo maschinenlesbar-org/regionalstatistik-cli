@@ -64,7 +64,7 @@ function depsThrowing(err: unknown): { deps: CliDeps; out: string[]; errs: strin
       out: (s) => out.push(s),
       err: (s) => errs.push(s),
       writeFile: () => undefined,
-      fileExists: () => false,
+      fileState: () => "absent" as const,
       outBinary: () => undefined,
     },
     createClient: () => {

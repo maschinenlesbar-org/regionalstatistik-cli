@@ -839,7 +839,7 @@ test("parity #12: the library's base-URL error alone maps to exit 2 in run()", a
   const mt = makeMockTransport(() => jsonResponse(fx.whoami));
   const err: string[] = [];
   const deps: CliDeps = {
-    io: { out: () => {}, err: (s) => err.push(s), writeFile: () => {}, fileExists: () => false, outBinary: () => {} },
+    io: { out: () => {}, err: (s) => err.push(s), writeFile: () => {}, fileState: () => "absent" as const, outBinary: () => {} },
     // Bypass the CLI's parser: the client gets a bad base URL the flag never saw.
     createClient: (opts) => new RegionalstatistikClient({ ...opts, baseUrl: "ftp://h.example", transport: mt.transport }),
     env: {},
