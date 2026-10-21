@@ -791,6 +791,18 @@ test("a password a server echoes form-encoded (a space as +) is scrubbed from th
   });
 });
 
+test("a header named __proto__ is an ordinary header, never the prototype of the headers read (T12)", async () => {
+  // A JavaScript transport may return any object; JSON.parse makes "__proto__" an own key.
+  const headers = JSON.parse('{"__proto__":{"content-type":"application/json; charset=x-bogus"}}') as Record<string, string>;
+  const body = Buffer.from('{"User-Agent":"regionalstatistik-cli"}');
+  const e = new RequestEngine({ transport: async () => ({ status: 200, headers, body }) });
+  // With the prototype set, its charset was read as the answer's and the answer refused.
+  assert.deepEqual(await e.getJson("/helloworld/whoami"), { "User-Agent": "regionalstatistik-cli" });
+  const fetchLike = new Headers([["__proto__", "x"], ["content-type", "application/json; charset=utf-8"]]);
+  const f = new RequestEngine({ transport: async () => ({ status: 200, headers: fetchLike as unknown as Record<string, string>, body }) });
+  assert.deepEqual(await f.getJson("/helloworld/whoami"), { "User-Agent": "regionalstatistik-cli" });
+});
+
 test("onRetry is called once per retry, with the event fields, right before the sleep", async () => {
   const log: string[] = [];
   const events: unknown[] = [];
