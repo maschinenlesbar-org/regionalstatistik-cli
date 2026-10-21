@@ -89,7 +89,7 @@ npm run bump -- <patch|minor|major>  # bump apps/cli, commit, tag vX.Y.Z
 node --test apps/cli/dist/test/cli.test.js   # one file, after a build
 ```
 
-CI (`ci.yml`) type-checks, builds and tests on Node 22/24, then packs the real tarball,
+CI (`ci.yml`) type-checks, builds and tests on Node 22/24/26, then packs the real tarball,
 checks the pack left nothing behind, installs it globally with the registry out of reach and
 runs the bin. `release.yml` (on a `v*` tag, made by `npm run bump`) verifies the tag against
 `apps/cli/package.json`, writes the SBOMs (scoped to the `apps/cli` workspace) and runs
@@ -594,7 +594,7 @@ for every transport (P5):
 ## Testing
 
 `node --test` on the compiled output; no jest/vitest. Node 22.12 or later
-(`engines`); CI (`ci.yml`) type-checks, builds and tests on Node 22/24. Tests inject a mock
+(`engines`); CI (`ci.yml`) type-checks, builds and tests on Node 22/24/26. Tests inject a mock
 `Transport` and a mocked `CliDeps`; no real network in the suite. The client's tests are
 in `packages/client/test/` (`query`, `http`, `engine`, `client`, `redirect-credentials`, `types`),
 with the transport helpers and the fixtures (`helpers.ts`, `fixtures.ts`); everything that
