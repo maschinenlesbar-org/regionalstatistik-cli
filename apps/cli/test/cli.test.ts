@@ -511,7 +511,7 @@ test("data tablefile with an empty body exits 1 and writes no file", async () =>
   const code = await run([...TOKEN, "data", "tablefile", "12411-01-01-4", "-o", "t.zip"], cli.deps);
   assert.equal(code, 1);
   assert.equal(cli.files.size, 0);
-  assert.match(cli.err.join("\n"), /Empty response body/);
+  assert.match(cli.err.join("\n"), /\/data\/tablefile: empty response body; expected a file download\./);
 });
 
 test("--output writes JSON to a file and keeps stdout clean", async () => {
@@ -659,7 +659,7 @@ test("an empty 200 reply exits 1 instead of printing null", async () => {
   const code = await run([...TOKEN, "find", "x"], cli.deps);
   assert.equal(code, 1);
   assert.deepEqual(cli.out, []);
-  assert.match(cli.err.join("\n"), /Empty response body from \/genesisws\/rest\/2020\/find\/find/);
+  assert.match(cli.err.join("\n"), /POST https:\/\/www\.regionalstatistik\.de\/genesisws\/rest\/2020\/find\/find: empty response body\./);
 });
 
 test("an answer nested too deeply is a clean error; it suggests --compact only where --compact prints it (D7)", async () => {

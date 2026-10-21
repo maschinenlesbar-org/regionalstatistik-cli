@@ -413,8 +413,15 @@ and `whoami` with an object carrying `User-Agent`. `null`, `{}`, `[]`, a bare
 string or an unrelated error object is a `RegionalstatistikParseError` (exit 1),
 never data. `logincheck` has its own check (below).
 
+Every error about an answer names the request, as the network and API errors do (D9 of the
+2026-10-21 round; `describeRequest`: method and absolute URL, credentials redacted):
+`POST <url>: empty response body.`, `… the answer is not valid JSON (expected JSON, got
+Content-Type "text/html").`, `… unsupported response charset "…".`, `… unexpected response
+shape: <problem>.`, `… the number <N> cannot be represented exactly.`, `… <problem>; the login
+was not confirmed.` and, for a download, `… expected a file download, got …`.
+
 A number JSON.parse cannot carry exactly is a `RegionalstatistikParseError` too
-(`Unexpected response from <path>: the number <N> cannot be represented exactly.`,
+(`POST <url>: the number <N> cannot be represented exactly.`,
 `firstInexactNumber` in `engine.ts`), on every JSON path (`find`, `catalogue`, `metadata`,
 `data`, `whoami`, `logincheck`): one out of a double's range (`1e400`), one past 2^53 that
 prints as another number (`12345678901234567890`, `…890.0`, `9007199254740993e0`,

@@ -66,7 +66,7 @@ test("an empty 200 body or a 204 is a RegionalstatistikParseError, not null", as
     const e = new RequestEngine({ transport: mt.transport });
     await assert.rejects(
       () => e.postJson("/find/find", {}, {}),
-      (err) => err instanceof RegionalstatistikParseError && err.message === "Empty response body from /find/find",
+      (err) => err instanceof RegionalstatistikParseError && err.message === "POST https://www.regionalstatistik.de/find/find: empty response body.",
     );
     await assert.rejects(() => e.getJson("/helloworld/whoami"), RegionalstatistikParseError);
   }
@@ -803,6 +803,39 @@ test("a header named __proto__ is an ordinary header, never the prototype of the
   assert.deepEqual(await f.getJson("/helloworld/whoami"), { "User-Agent": "regionalstatistik-cli" });
 });
 
+test("an answer error names the request: method and URL (D9)", async () => {
+  const base = "http://127.0.0.1:9/genesis";
+  const on = (body: string, type: string) =>
+    new RequestEngine({ baseUrl: base, transport: makeMockTransport(() => rawResponse(body, type)).transport });
+  const post = `POST ${base}/find/find: `;
+  const get = `GET ${base}/helloworld/whoami: `;
+  const login = `POST ${base}/helloworld/logincheck: `;
+  const file = `POST ${base}/data/tablefile: `;
+  const cases: Array<[Promise<unknown>, string]> = [
+    [on("", "application/json").postJson("/find/find", {}, {}), `${post}empty response body.`],
+    [on("<html>down</html>", "text/html").postJson("/find/find", {}, {}), `${post}the answer is not valid JSON (expected JSON, got Content-Type "text/html").`],
+    [on("{", "application/json").postJson("/find/find", {}, {}), `${post}the answer is not valid JSON.`],
+    [on("{}", "application/json; charset=x-bogus").postJson("/find/find", {}, {}), `${post}unsupported response charset "x-bogus".`],
+    [on("[]", "application/json").postJson("/find/find", {}, {}), `${post}unexpected response shape: not a JSON object.`],
+    [on('{"n":1e400,"User-Agent":"x"}', "application/json").getJson("/helloworld/whoami"), `${get}the number 1e400 cannot be represented exactly.`],
+    [on("{}", "application/json").getJson("/helloworld/whoami"), `${get}unexpected response shape: no "User-Agent".`],
+    [on("", "application/json").postLoginCheck("/helloworld/logincheck", {}, { username: "TOK" }), `${login}empty response body.`],
+    [on("x", "application/json").postLoginCheck("/helloworld/logincheck", {}, { username: "TOK" }), `${login}the answer is not valid JSON.`],
+    [on('{"Status":"hm","Username":"U"}', "application/json").postLoginCheck("/helloworld/logincheck", {}, { username: "TOK" }), `${login}a Status that says neither success nor failure; the login was not confirmed.`],
+    [on("", "application/zip").postRaw("/data/tablefile", "*/*", {}, {}), `${file}empty response body; expected a file download.`],
+    [on("<html>x</html>", "text/html").postRaw("/data/tablefile", "*/*", {}, {}), `${file}expected a file download, got an HTML page (Content-Type text/html); nothing was saved.`],
+    [on("{", "application/json").postRaw("/data/tablefile", "*/*", {}, {}), `${file}expected a file download, got an unparseable reply labelled application/json.`],
+    [on('{"a":1}', "application/json").postRaw("/data/tablefile", "*/*", {}, {}), `${file}expected a file download, got a JSON reply without a GENESIS status.`],
+  ];
+  for (const [call, message] of cases) {
+    await assert.rejects(call, (err: Error) => {
+      assert.ok(err instanceof RegionalstatistikParseError, message);
+      assert.equal(err.message, message);
+      return true;
+    });
+  }
+});
+
 test("onRetry is called once per retry, with the event fields, right before the sleep", async () => {
   const log: string[] = [];
   const events: unknown[] = [];
@@ -898,7 +931,7 @@ test("K1: a number the answer's JSON cannot carry exactly is a parse error, neve
     const e = new RequestEngine({ transport: makeMockTransport(() => rawResponse(envelopeWith(n), "application/json")).transport });
     await assert.rejects(e.postJson("/data/table", {}, { username: "TOK" }), (err) => {
       assert.ok(err instanceof RegionalstatistikParseError, n);
-      assert.equal(err.message, `Unexpected response from /data/table: the number ${n} cannot be represented exactly.`);
+      assert.equal(err.message, `POST https://www.regionalstatistik.de/data/table: the number ${n} cannot be represented exactly.`);
       return true;
     });
   }
@@ -914,7 +947,7 @@ test("K1: a number the answer's JSON cannot carry exactly is a parse error, neve
   });
   await assert.rejects(
     login.postLoginCheck("/helloworld/logincheck", {}, { username: "TOK" }),
-    /Unexpected response from \/helloworld\/logincheck: the number 12345678901234567890 cannot be represented exactly\./,
+    /: POST https:\/\/www\.regionalstatistik\.de\/helloworld\/logincheck: the number 12345678901234567890 cannot be represented exactly\.$/,
   );
   // What a double carries exactly, or as JSON means it (a decimal fraction below 2^53), passes.
   const ok: Array<[string, number]> = [
