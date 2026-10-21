@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { run } from "../src/cli/run.js";
+import { renderJson } from "../src/cli/shared.js";
 import { RegionalstatistikClient } from "@maschinenlesbar.org/regionalstatistik-client/internal/client";
 import type { CliDeps } from "../src/cli/io.js";
 import type { HttpRequest, HttpResponse } from "@maschinenlesbar.org/regionalstatistik-client/internal/http";
@@ -642,6 +643,25 @@ test("a deeply nested response fails pretty-printing cleanly and still prints wi
   const code = await run([...TOKEN, "--compact", "find", "x"], compact.deps);
   if (code === 0) assert.equal(compact.out.join("").length, text.length);
   else assert.match(untimed(compact.err.join("\n")), /^ERROR \[regstat\.cli\] The response is nested too deeply to print\./m);
+});
+
+test("--compact takes the gap path only for an answer holding a huge string, the fast path otherwise", (t) => {
+  // On Node 26 V8's fast path (no gap) aborts the process on a ~250 MB string from JSON.parse; its
+  // gap path (an empty gap, the same text) prints it. Only the fast path is iterative there, though,
+  // and prints nesting the gap path refuses at ~7,000 levels. So the path is chosen per answer.
+  // Too big a body for this suite: this pins the calls.
+  const { deps, out } = makeCli(() => jsonResponse(fx.whoami));
+  const stringify = t.mock.method(JSON, "stringify", () => '"stub"');
+  const huge = "x".repeat(64 * 1024 * 1024);
+  renderJson(deps, { compact: true }, { Object: { Content: huge } });
+  renderJson(deps, { compact: true }, { Object: { Content: huge.slice(1) }, x: [[["Tabelle"]]] });
+  renderJson(deps, { compact: true }, { [huge]: 1 });
+  renderJson(deps, { compact: true }, [[huge]]);
+  renderJson(deps, {}, { Code: 0 });
+  const calls = stringify.mock.calls.map((call) => call.arguments);
+  stringify.mock.restore();
+  assert.deepEqual(calls.map((args) => (args.length >= 3 ? args[2] : "none")), ["", "none", "", "", 2]);
+  assert.deepEqual(out, ['"stub"', '"stub"', '"stub"', '"stub"', '"stub"']);
 });
 
 test("BOM-prefixed JSON replies are read like plain ones", async () => {
