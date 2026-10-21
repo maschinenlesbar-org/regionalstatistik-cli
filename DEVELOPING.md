@@ -418,10 +418,12 @@ A number JSON.parse cannot carry exactly is a `RegionalstatistikParseError` too
 `firstInexactNumber` in `engine.ts`), on every JSON path (`find`, `catalogue`, `metadata`,
 `data`, `whoami`, `logincheck`): one out of a double's range (`1e400`), one past 2^53 that
 prints as another number (`12345678901234567890`, `…890.0`, `9007199254740993e0`,
-`9007199254740992.5`) and a non-zero one too small for a double (`1e-400`). Past 2^53 the
-number as printed (`String(value)`) is compared with the number as written, so a double a
-server printed in its shortest form (`1E23`, `1.7976931348623157E308`) passes. Below 2^53 a
-decimal fraction keeps a double's usual precision. The table values themselves are strings
+`9007199254740992.5`), a non-zero one too small for a double (`1e-400`), and a subnormal one
+(below 2.2250738585072014e-308, where a double has fewer digits) that does not print as written
+(`3e-324` would print `5e-324`). Past 2^53 and below the normal range the number as printed
+(`String(value)`) is compared with the number as written, so a double a server printed in its
+shortest form (`1E23`, `1.7976931348623157E308`, `5e-324`) passes. Between those edges a decimal
+fraction keeps a double's usual precision. The table values themselves are strings
 in the CSV `Content`, never touched; the check runs after the status mapping, so an error
 answer stays the API error it is. A `data/*file` download is passed through as bytes,
 unchecked.

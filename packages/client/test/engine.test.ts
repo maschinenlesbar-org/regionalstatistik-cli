@@ -879,6 +879,8 @@ test("K1: a number the answer's JSON cannot carry exactly is a parse error, neve
     "12345678901234567890", "-9007199254740993", "1e400", "-1E400", "12345678901234567890.0", "9007199254740993e0",
     "90071992547409930E-1", "9007199254740992.5", "-9007199254740992.5", "1e-400", "-0.0001e-399",
     "123456789012345678901234567890",
+    // Subnormal: below the smallest normal double a value has fewer digits; these print changed (D4).
+    "3e-324", "4e-324", "-4.9e-324", "1.2345678901234567e-310", "2.225073858507201e-309", "1.23456789e-320",
   ];
   for (const n of bad) {
     const e = new RequestEngine({ transport: makeMockTransport(() => rawResponse(envelopeWith(n), "application/json")).transport });
@@ -911,6 +913,8 @@ test("K1: a number the answer's JSON cannot carry exactly is a parse error, neve
     // same number: not a changed value, though the decimal is not the double's exact binary value.
     ["1e23", 1e23], ["100000000000000000000000", 1e23], ["1E23", 1e23], ["1.7976931348623157E308", Number.MAX_VALUE], ["-1.7976931348623157e308", -Number.MAX_VALUE],
     ["4.35e30", 4.35e30],
+    // A subnormal that prints as written, and the smallest normal double (D4).
+    ["-5e-324", -5e-324], ["1e-310", 1e-310], ["2.2250738585072014e-308", 2.2250738585072014e-308],
   ];
   for (const [n, value] of ok) {
     const e = new RequestEngine({ transport: makeMockTransport(() => rawResponse(envelopeWith(n), "application/json")).transport });
