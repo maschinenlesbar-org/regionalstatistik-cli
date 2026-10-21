@@ -194,7 +194,8 @@ What the library rejects:
   DEL, C1 and the bidi controls as stdout's JSON escapes them) and URL-encoded (`%20`, and `+` for a space
   as a form echoes it), as the library scrubs its errors (`contextOf` in `engine.ts`). That holds for stderr. On stdout a bare secret is
   replaced only as a whole JSON string value (`redactWholeJsonValues`: `"Username":
-  "***"`), never inside other text — a password `2023` turned the year in `"Statistik
+  "***"`; one linear pass without a regex, so a table of 100 MB in one string prints too),
+  never inside other text — a password `2023` turned the year in `"Statistik
   2023"` into `***` (destatis-genesis 03-1 of the 2026-10-09 round, which reproduces
   here; the user's decision for both GENESIS repos). The userinfo of a URL (`***@`) is
   replaced on both. `withoutStrayValues` drops the value from commander's "too many arguments" and `--x=value` "unknown option" errors, and from "unknown command"

@@ -837,6 +837,30 @@ test("a password a server echoes form-encoded (a space as +) is replaced in the 
   }
 });
 
+test("with a credential set, an answer holding one string of 12 MB prints, and a whole echoed value is still hidden (02-1)", async () => {
+  // `data table` carries the whole table as one CSV string. The stdout redaction scanned it with
+  // a backtracking regex, which overflowed the stack from about 10 M characters: "Unexpected
+  // error: Maximum call stack size exceeded", exit 1, for every account user.
+  const content = "a;b\n".repeat(3 * 1024 * 1024);
+  const answer = { ...fx.dataTable, Object: { ...(fx.dataTable.Object as object), Content: content }, Echo: TOKEN, Inner: `x ${TOKEN} y` };
+  const cli = makeCli({ responder: () => jsonResponse(answer) });
+  try {
+    for (const compact of [true, false]) {
+      cli.out.length = 0;
+      cli.err.length = 0;
+      const argv = ["data", "table", "12411-0001", ...(compact ? ["--compact"] : [])];
+      assert.equal(await run(argv, { ...cli.deps, env: { REGIONALSTATISTIK_API_TOKEN: TOKEN } }), 0, untimed(cli.err.join("\n")));
+      const printed = JSON.parse(cli.out.join("\n")) as typeof answer;
+      assert.equal(printed.Object.Content, content);
+      assert.equal(printed.Echo, "***");
+      // Only whole values: a secret inside other text is data (03-1 of 2026-10-09).
+      assert.equal(printed.Inner, `x ${TOKEN} y`);
+    }
+  } finally {
+    cli.cleanup();
+  }
+});
+
 test("config set refuses a credential given with --token, --username or --password instead of silently storing stdin", async () => {
   const flagValue = "flagvalue12345-abcdefgh";
   for (const flag of ["--token", "--username", "--password"]) {

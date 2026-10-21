@@ -171,12 +171,35 @@ export interface Redaction {
  * stdout prints it: JSON-escaped, DEL and C1 as `\u00XX`) replaced by `"***"`. Only whole
  * values: a secret inside a longer string is data and stays (destatis-genesis 03-1). A
  * non-JSON text has no string literals to match and passes through unchanged.
+ *
+ * One linear pass, no regex and no recursion: a string literal is skipped to its closing
+ * quote (past escapes), and only one whose length is that of a secret is compared. The regex
+ * this replaces (`"((?:[^"\\]|\\.)*)"`) backtracked per character and overflowed the stack on
+ * one string of some 8 M characters — the CSV `Content` of `data table` (02-1 of 2026-10-21).
+ * The text is copied only when a value is replaced.
  */
 function redactWholeJsonValues(text: string, secrets: ReadonlySet<string>): string {
-  if (secrets.size === 0) return text;
-  return text.replace(/"((?:[^"\\]|\\.)*)"/g, (literal, content: string) =>
-    content.trim().length >= 4 && secrets.has(content) ? '"***"' : literal,
-  );
+  const lengths = new Set<number>();
+  for (const secret of secrets) if (secret.trim().length >= 4) lengths.add(secret.length);
+  if (lengths.size === 0) return text;
+  const parts: string[] = [];
+  let copied = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) !== 0x22) continue;
+    const start = i;
+    for (i++; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      if (c === 0x5c) i++;
+      else if (c === 0x22) break;
+    }
+    if (i >= text.length) break; // no closing quote: no string literal
+    if (!lengths.has(i - start - 1) || !secrets.has(text.slice(start + 1, i))) continue;
+    parts.push(text.slice(copied, start), '"***"');
+    copied = i + 1;
+  }
+  if (parts.length === 0) return text;
+  parts.push(text.slice(copied));
+  return parts.join("");
 }
 
 /**
