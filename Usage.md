@@ -52,7 +52,7 @@ error (exit 2), not "the last one wins".
 | `--pagelength <n>` | max list results, `1..25000` (server default 100) |
 | `--timeout <ms>` · `--max-retries <n>` · `--max-response-bytes <n>` | transport tuning |
 | `--user-agent <ua>` | User-Agent header |
-| `--compact` | single-line JSON |
+| `--compact` | single-line JSON. An answer nested too deeply to pretty-print is an error (exit 1) that suggests `--compact` only when `--compact` prints it |
 | `--log-format <format>` | how errors, warnings and notes are written to stderr: `text` (default; log4j style, `2026-10-09T14:03:12.481Z WARN  [regstat.http] …`) or `jsonl` (one JSON object per line: `ts`, `level`, `topic`, `msg`). stdout is not affected |
 | `-o, --output <file>` | write output (JSON, or a download) to a file instead of stdout; `-o -` means stdout. The target is checked before any request: a directory, an existing path without `--force`, and a file whose directory is missing or not writable are a usage error (exit 2). The new file replaces the old one only once it is complete, so a write that fails part-way (a full disk) or is interrupted (Ctrl-C, `SIGTERM`, `SIGHUP`: exit 130, 143, 129) leaves the old file as it was and no half-written or temporary one (exit 1). A device, a FIFO or the shell's own descriptor (`/dev/null`, `/dev/stdout`, `>(gzip > x.gz)`) is written in place, without `--force` |
 | `--force` | overwrite the `--output` file if it already exists (otherwise the run is refused before any request is sent — also when a symlink, even a dangling one, sits at that path); keeps the old file's mode and writes through a symlink to the file it points at, which is created if the link dangles (the link stays). Without `-o` it is a usage error |
