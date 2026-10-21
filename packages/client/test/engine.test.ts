@@ -836,6 +836,45 @@ test("an answer error names the request: method and URL (D9)", async () => {
   }
 });
 
+test("text that is not valid is replaced with U+FFFD and reported through onWarning, never silently (D2)", async () => {
+  const cases: Array<[string, Buffer, string, unknown, number]> = [
+    // A lone surrogate written as an escape (high alone, low alone); a real pair and an escaped backslash stay.
+    ["lone escapes", Buffer.from('{"a":"x\\ud800y","b":"\\udc00","c":"\\ud83d\\ude00","d":"\\\\ud800"}'), "application/json", { a: "x\ufffdy", b: "\ufffd", c: "\u{1f600}", d: "\\ud800" }, 2],
+    // A lone surrogate in a member name.
+    ["lone in a key", Buffer.from('{"\\udbff":1}'), "application/json", { "\ufffd": 1 }, 1],
+    // Invalid UTF-8 bytes; a U+FFFD the server sent is not counted.
+    ["invalid bytes", Buffer.concat([Buffer.from('{"a":"'), Buffer.from([0xff, 0xc3]), Buffer.from('","b":"\ufffd"}')]), "application/json", { a: "\ufffd\ufffd", b: "\ufffd" }, 2],
+    // A byte undefined in a single-byte charset.
+    ["iso-8859-3", Buffer.concat([Buffer.from('{"a":"'), Buffer.from([0xa5]), Buffer.from('"}')]), "application/json; charset=iso-8859-3", { a: "\ufffd" }, 1],
+  ];
+  for (const [label, body, type, expected, count] of cases) {
+    const warnings: string[] = [];
+    const e = new RequestEngine({ onWarning: (m) => warnings.push(m), transport: makeMockTransport(() => rawResponse(body, type)).transport });
+    const value = await e.postJson("/find/find", {}, {}, "unchecked");
+    assert.deepEqual(value, expected, label);
+    assert.ok(!/[\ud800-\udfff]/u.test(JSON.stringify(value)), `${label}: well-formed`);
+    assert.deepEqual(warnings, [
+      `POST https://www.regionalstatistik.de/find/find: ${count} ${count === 1 ? "character" : "characters"} of the answer ${count === 1 ? "was" : "were"} not valid text (invalid bytes or a lone surrogate) and replaced with U+FFFD.`,
+    ], label);
+  }
+  // The login check reports it too.
+  const login: string[] = [];
+  const l = new RequestEngine({
+    onWarning: (m) => login.push(m),
+    transport: makeMockTransport(() => rawResponse('{"Status":"Sie wurden erfolgreich an- und abgemeldet!","Username":"U\\ud800"}', "application/json")).transport,
+  });
+  assert.deepEqual(await l.postLoginCheck("/helloworld/logincheck", {}, { username: "TOK" }), { Status: "Sie wurden erfolgreich an- und abgemeldet!", Username: "U\ufffd" });
+  assert.equal(login.length, 1);
+  // Valid text: no warning; a throwing hook never fails the request.
+  const quiet: string[] = [];
+  const ok = new RequestEngine({ onWarning: (m) => quiet.push(m), transport: makeMockTransport(() => rawResponse('{"a":"\\u00fc\ufffd"}', "application/json")).transport });
+  assert.deepEqual(await ok.postJson("/x", {}, {}, "unchecked"), { a: "ü\ufffd" });
+  assert.deepEqual(quiet, []);
+  const throwing = new RequestEngine({ onWarning: () => { throw new Error("hook"); }, transport: makeMockTransport(() => rawResponse('"\\ud800"', "application/json")).transport });
+  assert.equal(await throwing.postJson("/x", {}, {}, "unchecked"), "\ufffd");
+  assert.throws(() => new RequestEngine({ onWarning: "log" as unknown as () => void }), RegionalstatistikValidationError);
+});
+
 test("onRetry is called once per retry, with the event fields, right before the sleep", async () => {
   const log: string[] = [];
   const events: unknown[] = [];

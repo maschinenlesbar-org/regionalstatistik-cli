@@ -123,7 +123,10 @@ timestamp (UTC), a level (`ERROR`, `WARN`, `INFO`) and a topic, the program and 
 it comes from (`regstat.cli` for usage errors and credential notes, `regstat.api` for
 GENESIS's answers, a malformed one included, `regstat.http` for the connection, `regstat.config` for the
 credentials file, `regstat.output` for the `-o` file and stdout — each with its
-successes and its failures). By default it is written log4j style; `--log-format jsonl`
+successes and its failures). An error about an answer names the request (`POST <url>: the
+answer is not valid JSON`). Text in an answer is never changed silently: bytes that are not
+valid in its charset and half characters (lone surrogates) are replaced with U+FFFD, so the
+output stays readable for `jq`, and a `WARN` record of `regstat.api` says how many. By default it is written log4j style; `--log-format jsonl`
 writes one JSON object per line instead. A record is always one line: a line
 break, a control character or a bidi control in a message (a server's text, a value you
 typed) is written as an escape (`\n`, `\u001b`, `\u202e`), so it can neither split a

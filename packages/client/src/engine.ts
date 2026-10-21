@@ -154,6 +154,15 @@ export interface EngineOptions {
    * never when there is no retry. A throw is swallowed.
    */
   onRetry?: ((event: RetryEvent) => void) | undefined;
+  /**
+   * Called with a one-line warning about an answer the engine delivered changed: characters
+   * that were not valid text — invalid bytes in the declared (or default UTF-8) charset, or a
+   * lone surrogate written as a JSON escape — replaced with U+FFFD. The message names the
+   * request and the count (`POST <url>: 2 characters of the answer were not valid text …`).
+   * Without it the replacement is silent. A throw is swallowed. The CLI logs it as a `WARN`
+   * record of `regstat.api`.
+   */
+  onWarning?: ((message: string) => void) | undefined;
 }
 
 /** What `EngineOptions.onRetry` is told about one retry. */
@@ -575,26 +584,110 @@ function charsetOf(contentType: string): string | undefined {
  * Decode a response body by the charset its Content-Type names (UTF-8 when it names
  * none; a byte-order mark is dropped). GENESIS declares `charset=UTF-8`, but a mirror
  * or proxy answering in ISO-8859-1 would otherwise turn every umlaut into U+FFFD. An
- * unknown charset label is a `RegionalstatistikParseError` naming `request`.
+ * unknown charset label is a `RegionalstatistikParseError` naming `request`. Bytes that are not
+ * valid in the charset become U+FFFD, and `replaced` counts them: exactly for UTF-8 and the
+ * single-byte charsets; for UTF-16 a U+FFFD the server sent counts too.
  */
-function decodeBody(body: Buffer, contentType: string, request: string): string {
+function decodeBody(body: Buffer, contentType: string, request: string): { text: string; replaced: number } {
   const charset = charsetOf(contentType) ?? "utf-8";
   let decoder: TextDecoder;
   try {
-    decoder = new TextDecoder(charset);
+    decoder = new TextDecoder(charset, { fatal: true });
   } catch {
     throw new RegionalstatistikParseError(`${request}: unsupported response charset "${cutForMessage(sanitizeServerText(charset))}".`);
   }
-  return decoder.decode(body);
+  try {
+    return { text: decoder.decode(body), replaced: 0 };
+  } catch {
+    // Not valid in the charset: decode with replacement, and count what was replaced.
+    const text = new TextDecoder(decoder.encoding).decode(body);
+    const sent = decoder.encoding === "utf-8" ? countBytes(body, REPLACEMENT_UTF8) : 0;
+    return { text, replaced: countChar(text, 0xfffd) - sent };
+  }
 }
 
 /** decodeBody for error text: an unknown charset falls back to UTF-8 rather than hide the error. */
 function decodeErrorBody(body: Buffer, contentType: string): string {
   try {
-    return decodeBody(body, contentType, "error body");
+    return decodeBody(body, contentType, "error body").text;
   } catch {
     return body.toString("utf8");
   }
+}
+
+/** U+FFFD in UTF-8. */
+const REPLACEMENT_UTF8 = Buffer.from([0xef, 0xbf, 0xbd]);
+
+/** How often `needle` occurs in `body`. */
+function countBytes(body: Buffer, needle: Buffer): number {
+  let n = 0;
+  for (let at = body.indexOf(needle); at !== -1; at = body.indexOf(needle, at + needle.length)) n++;
+  return n;
+}
+
+/** How often the UTF-16 unit `code` occurs in `text`. */
+function countChar(text: string, code: number): number {
+  let n = 0;
+  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === code) n++;
+  return n;
+}
+
+/** A JSON escape of a surrogate, `\uD800`–`\uDFFF`, anywhere in a text (a cheap pre-check). */
+const SURROGATE_ESCAPE = /\\u[dD][89a-fA-F][0-9a-fA-F]{2}/;
+
+/** The value of the four hex digits of a `\uXXXX` escape whose `u` is at `at`, or -1. */
+function escapeAt(json: string, at: number): number {
+  if (json.charCodeAt(at) !== 0x75) return -1;
+  const hex = json.slice(at + 1, at + 5);
+  return /^[0-9a-fA-F]{4}$/.test(hex) ? parseInt(hex, 16) : -1;
+}
+
+/**
+ * `json` (decoded answer text) with every lone surrogate written as a JSON escape (`\ud800` not
+ * followed by a low-surrogate escape, or a `\udc00` not preceded by a high one) rewritten as
+ * `\ufffd`, and how many. JSON.parse would make such an escape half a character, which a JSON
+ * printer writes back as `\ud800` and `jq` refuses (the whole output with it). A raw lone
+ * surrogate cannot occur: TextDecoder never makes one. One linear pass, and only when the text
+ * holds a surrogate escape at all; the text is copied only when one is lone.
+ */
+function wellFormedEscapes(json: string): { json: string; replaced: number } {
+  if (!SURROGATE_ESCAPE.test(json)) return { json, replaced: 0 };
+  let out = "";
+  let copied = 0;
+  let replaced = 0;
+  for (let i = 0; i < json.length; i++) {
+    if (json.charCodeAt(i) !== 0x5c) continue;
+    const code = escapeAt(json, i + 1);
+    if (code < 0xd800 || code > 0xdfff) {
+      i++; // an escape of another kind (\", \\, \n, \u0041): skip its second character
+      continue;
+    }
+    const pairedLow = code <= 0xdbff && json.charCodeAt(i + 6) === 0x5c && isLowSurrogate(escapeAt(json, i + 7));
+    if (pairedLow) {
+      i += 11;
+      continue;
+    }
+    out += json.slice(copied, i) + "\\ufffd";
+    copied = i + 6;
+    replaced++;
+    i += 5;
+  }
+  return replaced === 0 ? { json, replaced } : { json: out + json.slice(copied), replaced };
+}
+
+function isLowSurrogate(code: number): boolean {
+  return code >= 0xdc00 && code <= 0xdfff;
+}
+
+/**
+ * The text of a JSON answer as JSON.parse should read it: decoded by its charset, every lone
+ * surrogate escape rewritten (`wellFormedEscapes`), and how many characters were replaced with
+ * U+FFFD on the way (invalid bytes or lone surrogates).
+ */
+function answerText(res: RawResponse, request: string): { text: string; replaced: number } {
+  const decoded = decodeBody(res.data, res.contentType, request);
+  const repaired = wellFormedEscapes(decoded.text);
+  return { text: repaired.json, replaced: decoded.replaced + repaired.replaced };
 }
 
 /** What the error paths of one request need to know about its credentials. */
@@ -704,6 +797,7 @@ export class RequestEngine {
   private readonly maxResponseBytes: number;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly onRetry: ((event: RetryEvent) => void) | undefined;
+  private readonly onWarning: ((message: string) => void) | undefined;
 
   constructor(options: EngineOptions = {}) {
     const baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
@@ -737,6 +831,24 @@ export class RequestEngine {
       DEFAULT_MAX_RESPONSE_BYTES;
     this.sleep = options.sleep === undefined ? realSleep : assertValid("sleep", options.sleep, functionProblem);
     this.onRetry = options.onRetry === undefined ? undefined : assertValid("onRetry", options.onRetry, functionProblem);
+    this.onWarning =
+      options.onWarning === undefined ? undefined : assertValid("onWarning", options.onWarning, functionProblem);
+  }
+
+  /**
+   * Tell `onWarning` that `replaced` characters of the answer to `request` were not valid text
+   * and were replaced with U+FFFD. A throwing callback never breaks the request.
+   */
+  private warnReplaced(request: string, replaced: number): void {
+    if (replaced === 0) return;
+    try {
+      this.onWarning?.(
+        `${request}: ${replaced} ${replaced === 1 ? "character" : "characters"} of the answer ${replaced === 1 ? "was" : "were"} ` +
+          "not valid text (invalid bytes or a lone surrogate) and replaced with U+FFFD.",
+      );
+    } catch {
+      // a logging hook is no reason to fail the request
+    }
   }
 
   /** Tell `onRetry` about a retry, then wait. A throwing callback never breaks the request. */
@@ -946,7 +1058,7 @@ export class RequestEngine {
     const res = await this.request("POST", path, { params, accept: "application/json", authHeaders });
     const ctx = contextOf(authHeaders);
     const request = this.describeRequest("POST", path);
-    const text = decodeBody(res.data, res.contentType, request);
+    const { text, replaced } = answerText(res, request);
     if (text.trim().length === 0) throw new RegionalstatistikParseError(`${request}: empty response body.`);
     let parsed: unknown;
     try {
@@ -975,6 +1087,7 @@ export class RequestEngine {
       });
     }
     assertExactNumbers(text, request);
+    this.warnReplaced(request, replaced);
     return parsed as T;
   }
 
@@ -1010,7 +1123,7 @@ export class RequestEngine {
     const ctx = contextOf(authHeaders);
     // A body labelled JSON is decoded by its charset; anything else is only sniffed
     // (after an optional UTF-8 BOM).
-    const raw = jsonType ? decodeBody(res.data, res.contentType, request) : stripBom(res.data.toString("utf8"));
+    const raw = jsonType ? decodeBody(res.data, res.contentType, request).text : stripBom(res.data.toString("utf8"));
     // An HTML page (a maintenance or proxy page, a login portal) is not the file either;
     // a ZIP — what GENESIS delivers for every format — always counts as one. Only a
     // download asked for as `format: "html"` may be HTML itself.
@@ -1063,7 +1176,9 @@ export class RequestEngine {
   ): T {
     // Every error about the answer names the request (`POST <url>: …`, credentials redacted).
     const request = this.describeRequest(method, path);
-    const text = decodeBody(res.data, res.contentType, request);
+    // Text is never changed silently: invalid bytes and lone surrogates become U+FFFD (so the
+    // output stays well-formed and `jq` reads it), and `onWarning` is told how many.
+    const { text, replaced } = answerText(res, request);
     // Every GENESIS endpoint answers with a JSON body (the envelope, or the
     // helloworld objects); an empty 200 or a 204 is a broken response, not a
     // result — returning null would print "null" with exit 0.
@@ -1084,6 +1199,7 @@ export class RequestEngine {
     if (problem !== undefined) {
       throw new RegionalstatistikParseError(`${request}: unexpected response shape: ${problem}.`);
     }
+    this.warnReplaced(request, replaced);
     return parsed as T;
   }
 

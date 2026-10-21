@@ -141,5 +141,10 @@ vor Zugangsdaten in einer Option), `api` (die Antworten von GENESIS: ein Fehlers
 Hinweis zu den Zugangsdaten und eine fehlerhafte Antwort — ungültiges JSON, die falsche
 Form, ein leerer Body, eine Zahl, die JSON nicht exakt tragen kann, eine HTML-Seite statt einer Datei, eine Anmeldeprüfung, die
 nichts bestätigt), `http` (die Verbindung, die Klartext-Warnung und je Wiederholung eine WARN-Zeile vor dem Warten), `config` (die
-Zugangsdaten-Datei) und `output` (die `-o`-Datei, Schreibfehler auf stdout). Ein Eintrag ist immer eine Zeile; Steuerzeichen darin werden
-maskiert.
+Zugangsdaten-Datei) und `output` (die `-o`-Datei, Schreibfehler auf stdout, eine Antwort, die zu
+tief verschachtelt oder zu groß zum Ausgeben ist). Ein Eintrag ist immer eine Zeile; Steuerzeichen
+darin werden maskiert.
+
+**Ersetzter Text.** Bytes einer Antwort, die in ihrem Zeichensatz ungültig sind, und halbe
+Zeichen (einzelne Surrogate) werden durch U+FFFD ersetzt und in einem `WARN`-Eintrag von
+`regstat.api` mit Anzahl und Anfrage gemeldet; der Lauf gelingt trotzdem.

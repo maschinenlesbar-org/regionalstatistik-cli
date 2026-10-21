@@ -721,6 +721,8 @@ export function action(
     // A half username/password pair gets the library's pair error, reworded.
     const clientOptions = toClientOptions(global, creds);
     clientOptions.onRetry = (event) => logOf(deps).warn("http", retryMessage(event));
+    // Text of an answer replaced with U+FFFD (invalid bytes, a lone surrogate) is never silent.
+    clientOptions.onWarning = (message) => logOf(deps).warn("api", message);
     const client = createClient(deps, clientOptions, setBy);
     warnCleartext(deps, global, creds);
     if (creds.present) warnArgvCredentials(deps, command);

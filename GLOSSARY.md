@@ -140,5 +140,9 @@ commander's messages, unexpected errors, the warning about a credential given as
 `api` (GENESIS's answers: an error status, the credentials hint, and a malformed answer —
 bad JSON, the wrong shape, an empty body, a number JSON cannot carry exactly, an HTML page instead of a file, a login check
 that confirms nothing), `http` (the connection, the cleartext warning, and one WARN per retry before it waits), `config` (the
-credentials file) and `output` (the `-o` file, stdout failures). A record is always one
-line; control characters in it are escaped.
+credentials file) and `output` (the `-o` file, stdout failures, an answer too deeply nested or
+too large to print). A record is always one line; control characters in it are escaped.
+
+**Replaced text.** Bytes of an answer that are not valid in its charset, and half characters
+(lone surrogates), are replaced with U+FFFD and reported in one `WARN` record of
+`regstat.api` with the count and the request; the run still succeeds.
