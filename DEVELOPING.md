@@ -511,7 +511,10 @@ for every transport (P5):
   `RegionalstatistikNetworkError`.
 - **Errors** — whatever a transport throws (fetch's `TypeError`, a string, `null`)
   becomes a `RegionalstatistikNetworkError` naming the request, with the original (scrubbed)
-  as `cause`. A reset is not retried, from any transport: only 429/503 are.
+  as `cause`. So does every network error: a reset, a timeout (the engine's deadline
+  too), the size cap, a refused connection and a DNS failure all read
+  `<METHOD> <url> failed: <reason>` (userinfo redacted); one that names the request
+  already passes through. A reset is not retried, from any transport: only 429/503 are.
 
 ## Conventions matched from the blueprint
 

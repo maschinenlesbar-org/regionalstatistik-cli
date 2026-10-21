@@ -10,6 +10,7 @@ import {
   cutText,
   toWellFormed,
 } from "../src/errors.js";
+import { sizeLimitMessage } from "../src/http.js";
 import { makeMockTransport, jsonResponse, rawResponse, bodyOf } from "./helpers.js";
 import * as fx from "./fixtures.js";
 
@@ -940,4 +941,39 @@ test("K1: an error answer with a big number stays the API error it is", async ()
   const body = '{"Status":{"Code":90,"Content":"nicht gefunden","Type":"Fehler"},"Object":{"n":12345678901234567890}}';
   const e = new RequestEngine({ transport: makeMockTransport(() => rawResponse(body, "application/json")).transport });
   await assert.rejects(e.postJson("/data/table", {}, { username: "TOK" }), (err) => err instanceof RegionalstatistikApiError && err.isNotFound);
+});
+
+test("K3: a timeout, the size cap, a refused connection and a DNS failure name the request", async () => {
+  const url = "https://www.regionalstatistik.de/genesisws/rest/2020/find/find";
+  const path = "/genesisws/rest/2020/find/find";
+  // The engine's own deadline.
+  const slow = new RequestEngine({ timeoutMs: 20, transport: () => new Promise(() => {}) });
+  await assert.rejects(slow.postJson(path, {}, {}), (err) => {
+    assert.ok(err instanceof RegionalstatistikNetworkError);
+    assert.equal(err.message, `POST ${url} failed: Request timed out after 20ms`);
+    assert.ok(err.cause instanceof RegionalstatistikNetworkError);
+    return true;
+  });
+  // What the default transport rejects with: the size cap, ECONNREFUSED, ENOTFOUND.
+  const reasons = [sizeLimitMessage(10), "connect ECONNREFUSED 127.0.0.1:1", "getaddrinfo ENOTFOUND regionalstatistik.invalid"];
+  for (const reason of reasons) {
+    const original = new RegionalstatistikNetworkError(reason);
+    const e = new RequestEngine({ transport: () => Promise.reject(original) });
+    await assert.rejects(e.postJson(path, {}, {}), (err) => {
+      assert.ok(err instanceof RegionalstatistikNetworkError, reason);
+      assert.equal(err.message, `POST ${url} failed: ${reason}`);
+      assert.equal(err.cause, original);
+      return true;
+    });
+  }
+  // A GET (whoami) too.
+  const refused = new RegionalstatistikNetworkError("connect ECONNREFUSED 127.0.0.1:1");
+  const g = new RequestEngine({ transport: () => Promise.reject(refused) });
+  await assert.rejects(g.getJson("/genesisws/rest/2020/helloworld/whoami"), {
+    message: "GET https://www.regionalstatistik.de/genesisws/rest/2020/helloworld/whoami failed: connect ECONNREFUSED 127.0.0.1:1",
+  });
+  // One that names the request already is left as it is.
+  const named = new RegionalstatistikNetworkError(`POST ${url} failed: socket hang up`);
+  const e = new RequestEngine({ transport: () => Promise.reject(named) });
+  await assert.rejects(e.postJson(path, {}, {}), (err) => err === named);
 });
