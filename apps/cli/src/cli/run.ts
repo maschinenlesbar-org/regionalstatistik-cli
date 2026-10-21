@@ -42,6 +42,40 @@ export function withoutStrayValues(message: string): string {
 }
 
 /**
+ * Escape the characters a terminal acts on in one commander error message: CR and LF
+ * become `\r` and `\n` (as a log record writes them, `escapeForRecord`), the other C0
+ * controls (tab excepted), DEL, C1 and Unicode format characters (bidi overrides,
+ * zero-width characters, a soft hyphen) `\uXXXX`. Commander repeats a rejected argument raw
+ * ("command-argument value '<value>' is invalid"), and a code can come from a pipeline: the
+ * record escapes the controls, this also keeps the invisible format characters visible, so a
+ * refusal of `a<U+200B>b` shows why (D10). The library escapes the values it echoes itself
+ * (`quoteValue`).
+ */
+export function escapeTerminalText(text: string): string {
+  return text.replace(/[\u0000-\u0008\u000a-\u001f\u007f-\u009f]|\p{Cf}/gu, (ch) =>
+    ch === "\n"
+      ? "\\n"
+      : ch === "\r"
+        ? "\\r"
+        : Array.from({ length: ch.length }, (_, i) => `\\u${ch.charCodeAt(i).toString(16).padStart(4, "0")}`).join(""),
+  );
+}
+
+/**
+ * escapeTerminalText for one commander error message, except for the
+ * `\n(Did you mean …?)` line commander appends after an unknown command or option.
+ * That hint is built from this CLI's own command and option names, and it can only
+ * end the message: commander quotes the user's value (`unknown command '<value>'`), so
+ * a value that contains the same text is followed by its closing quote and stays
+ * escaped.
+ */
+function escapeCommanderError(message: string): string {
+  const hint = /\n\(Did you mean [^\n]*\?\)$/.exec(message);
+  if (hint === null) return escapeTerminalText(message);
+  return escapeTerminalText(message.slice(0, hint.index)) + hint[0];
+}
+
+/**
  * Apply exitOverride + output redirection to every command in the tree.
  * commander does not propagate these to subcommands, so a parse error on a
  * subcommand would otherwise call process.exit() and bypass our error handling.
@@ -52,7 +86,9 @@ function configureTree(command: Command, deps: CliDeps, state: { errorLogged: bo
   command.configureOutput({
     writeOut: (str) => deps.io.out(str.replace(/\n$/, "")),
     writeErr: (str) => writeCommanderErr(command, deps, state, str),
-    outputError: (str, write) => write(withoutStrayValues(str)),
+    // The error message alone: a stray value dropped, then escaped, keeping the line break
+    // before commander's own "(Did you mean …?)" hint.
+    outputError: (str, write) => write(escapeCommanderError(withoutStrayValues(str).replace(/\n$/, ""))),
   });
   for (const child of command.commands) configureTree(child, deps, state);
 }
@@ -255,6 +291,8 @@ export function redactionFor(argv: readonly string[], env: Record<string, string
       // stdout's JSON escapes DEL, C1 and the bidi controls after JSON.stringify
       // (`escapeControlChars`): a password with U+0085 is printed as `pass\u0085word` there.
       secrets.add(escapeControlChars(JSON.stringify(form).slice(1, -1)));
+      // A commander error message escapes C1 and format characters (`escapeTerminalText`).
+      secrets.add(escapeTerminalText(form));
       // What a server echoes back URL-encoded (`pw=s3cret%2Bp%40ss`): the forms the
       // library scrubs from its errors, so a success answer is covered too.
       secrets.add(encodeURIComponent(form));

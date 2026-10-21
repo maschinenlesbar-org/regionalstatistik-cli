@@ -1014,3 +1014,15 @@ test("the Content-Type a download is logged with is quoted cut, its control char
   assert.match(record, /Wrote 8 bytes to t\.zip \(Content-Type: application\/zip; x=y+…\)$/);
   assert.ok(record.length < 700, `${record.length}`);
 });
+
+test("commander's echo of a refused value shows an invisible or format character escaped, never raw (D10)", async () => {
+  const zwsp = String.fromCharCode(0x200b);
+  const shy = String.fromCharCode(0x00ad);
+  for (const argv of [["--pagelength", `1${zwsp}`, ...TOKEN, "find", "x"], [...TOKEN, "find", "x", "--category", `tab${shy}les`]]) {
+    const cli = makeCli(() => jsonResponse(fx.findResult));
+    assert.equal(await run(argv, cli.deps), 2, argv.join(" "));
+    const err = cli.err.join("\n");
+    assert.ok(!err.includes(zwsp) && !err.includes(shy), err);
+    assert.match(err, /\\u200b|\\u00ad/, err);
+  }
+});

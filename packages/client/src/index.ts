@@ -27,6 +27,7 @@ export {
   credentialsIn,
   cutForMessage,
   MAX_MESSAGE_VALUE_LENGTH,
+  quoteValue,
   redactCredentials,
   redactSecrets,
 } from "./errors.js";
