@@ -4,7 +4,7 @@
 
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
-import { OutputError, OutputRefusedError, isDirectoryMessage, logOf, refuseOverwrite, type CliDeps } from "./io.js";
+import { OutputError, OutputRefusedError, isDirectoryMessage, logOf, reasonOf, refuseOverwrite, type CliDeps } from "./io.js";
 import { CredentialsFileError, type CredentialStore } from "./credentials.js";
 import { cleartextProblem, DEFAULT_BASE_URL, isBidiControl, type RawResponse, type RetryEvent } from "@maschinenlesbar.org/regionalstatistik-client/internal/engine";
 import type { RegionalstatistikClientOptions } from "@maschinenlesbar.org/regionalstatistik-client/internal/client";
@@ -281,10 +281,12 @@ export function toClientOptions(
 
 /**
  * Check `-o` before any request, so a refused target costs none: `--force` without `-o`, a
- * directory, and an existing path (a dangling link too) without `--force` are usage errors
- * (`OutputRefusedError`, exit 2, logged under `regstat.output`). `-o -` is stdout. The
- * write checks again: a file that appears during the request is not overwritten either
- * (an `OutputError` then, exit 1).
+ * directory, an existing path (a dangling link too) without `--force`, and a file whose
+ * directory is missing or not writable (`CliIO.parentProblem`) are usage errors
+ * (`OutputRefusedError`, exit 2, logged under `regstat.output`). A stream (`/dev/null`, a
+ * FIFO, `/dev/stdout`, `>(…)`) needs no `--force`: it is written in place, and nothing in it
+ * can be lost. `-o -` is stdout. The write checks again: a file that appears during the
+ * request is not overwritten either (an `OutputError` then, exit 1).
  */
 export function checkOutputTarget(deps: CliDeps, global: GlobalOptions): void {
   if (global.force === true && global.output === undefined) {
@@ -293,7 +295,10 @@ export function checkOutputTarget(deps: CliDeps, global: GlobalOptions): void {
   if (!toFile(global)) return;
   const state = deps.io.fileState(global.output);
   if (state === "directory") throw new OutputRefusedError(isDirectoryMessage(global.output));
+  if (state === "stream") return;
   if (state === "exists" && global.force !== true) throw new OutputRefusedError(refuseOverwrite(global.output));
+  const problem = deps.io.parentProblem?.(global.output, global.force === true);
+  if (problem !== undefined) throw new OutputRefusedError(problem);
 }
 
 /**
@@ -314,8 +319,7 @@ function writeOutputFile(deps: CliDeps, global: GlobalOptions, path: string, dat
     if (!force && (err as NodeJS.ErrnoException | undefined)?.code === "EEXIST") {
       throw new OutputError(refuseOverwrite(path), { cause: err });
     }
-    const reason = err instanceof Error ? err.message : String(err);
-    throw new OutputError(`Could not write to "${cutForMessage(path)}": ${reason}`, { cause: err });
+    throw new OutputError(`Could not write to "${cutForMessage(path)}": ${reasonOf(err)}`, { cause: err });
   }
 }
 

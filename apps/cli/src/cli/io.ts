@@ -2,8 +2,21 @@
 // tests can capture output instead of hitting the real stdout/stderr/filesystem.
 
 import { randomBytes } from "node:crypto";
-import { chmodSync, closeSync, lstatSync, openSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import {
+  accessSync,
+  chmodSync,
+  closeSync,
+  constants,
+  lstatSync,
+  openSync,
+  readlinkSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import type { RegionalstatistikClient, RegionalstatistikClientOptions } from "@maschinenlesbar.org/regionalstatistik-client/internal/client";
 import { RegionalstatistikError, RegionalstatistikUsageError, cutForMessage } from "@maschinenlesbar.org/regionalstatistik-client/internal/errors";
 import type { CredentialStore } from "./credentials.js";
@@ -18,14 +31,19 @@ import { createLogger, type Logger } from "./log.js";
 export class OutputError extends RegionalstatistikError {}
 
 /**
- * The `-o` target is refused before any request: `--force` without `-o`, a directory, or
- * an existing path (a dangling link too) without `--force`. A usage error (exit 2),
- * logged as an ERROR of `regstat.output`, the area of the `-o` file.
+ * The `-o` target is refused before any request: `--force` without `-o`, a directory, an
+ * existing path (a dangling link too) without `--force`, or a file whose directory is missing
+ * or not writable. A usage error (exit 2), logged as an ERROR of `regstat.output`, the area of
+ * the `-o` file.
  */
 export class OutputRefusedError extends RegionalstatistikUsageError {}
 
-/** What is at a path: nothing, a directory, or anything else (a file, a link: a dangling one too). */
-export type FileState = "absent" | "directory" | "exists";
+/**
+ * What an `-o` path names: nothing, a directory, a stream (a character device such as
+ * `/dev/null`, a FIFO, a socket, or a descriptor path such as `/dev/stdout` or `/dev/fd/63` from
+ * `>(…)`), or anything else (a regular file, a link: a dangling one too).
+ */
+export type FileState = "absent" | "directory" | "stream" | "exists";
 
 /** The message for an existing `-o` path without `--force`. */
 export function refuseOverwrite(path: string): string {
@@ -41,14 +59,24 @@ export interface CliIO {
   out(text: string): void;
   err(text: string): void;
   /**
-   * Persist raw bytes to a file, atomically: the old file stays as it was until the new
-   * one is complete. Without `overwrite` the file must not exist yet (exclusive create):
-   * anything at `path` — a file, or a symlink, even a dangling one — makes it throw an
-   * `EEXIST` error instead of writing through it. A failure leaves no file behind.
+   * Persist raw bytes to `path`. A stream (`/dev/null`, a FIFO, `/dev/stdout`) is written in
+   * place, with no claim and no temporary file. A file is written atomically: the old file
+   * stays as it was until the new one is complete. Without `overwrite` the file must not exist
+   * yet (exclusive create): anything at `path` — a file, or a symlink, even a dangling one —
+   * makes it throw an `EEXIST` error instead of writing through it. With `overwrite` a symlink
+   * is written through, also a dangling one (the file it names is created). A failure leaves no
+   * file behind.
    */
   writeFile(path: string, data: Buffer, overwrite: boolean): void;
   /** What is at `path` (a dangling symlink counts as existing; a link to a directory is a directory). */
   fileState(path: string): FileState;
+  /**
+   * Why the file `path` names (through any links, with `overwrite`) cannot be created where it
+   * would go, or undefined: its directory is missing, not a directory, or not writable; or the
+   * link chain loops. Checked before the request, so a typo in the path costs none. Optional:
+   * deps without it (tests with no real file system) skip the check.
+   */
+  parentProblem?(path: string, overwrite: boolean): string | undefined;
   /** Write raw bytes to stdout (binary-safe). */
   outBinary(data: Buffer): void;
   /**
@@ -196,13 +224,25 @@ export const defaultIO: CliIO = {
   err: stderrLine,
   writeFile: writeFileAtomic,
   fileState: fileStateOf,
+  parentProblem: parentProblemOf,
   outBinary: (data) => process.stdout.write(data),
 };
 
+/** A path that names an open descriptor: `/dev/stdout`, `/dev/stderr`, `/dev/fd/N`, `/proc/self/fd/N`. */
+const DESCRIPTOR_PATH = /^\/dev\/(?:stdout|stderr|fd\/\d+)$|^\/proc\/self\/fd\/\d+$/;
+
+/** The longest file name (in bytes) most file systems take (NAME_MAX). */
+const NAME_MAX = 255;
+
 /** `CliIO.fileState` on the real file system. */
 function fileStateOf(path: string): FileState {
+  // A descriptor path is the shell's redirection (`-o /dev/stdout`, `-o >(gzip > x.gz)`):
+  // written in place even when it leads to a regular file, which the shell opened.
+  if (DESCRIPTOR_PATH.test(path)) return "stream";
   try {
-    return statSync(path).isDirectory() ? "directory" : "exists";
+    const stats = statSync(path);
+    if (stats.isDirectory()) return "directory";
+    return stats.isFIFO() || stats.isCharacterDevice() || stats.isSocket() ? "stream" : "exists";
   } catch {
     // statSync follows a link; a dangling one is still something an exclusive create
     // refuses (existsSync would call it absent, and -o would create a file wherever it
@@ -216,27 +256,97 @@ function fileStateOf(path: string): FileState {
   }
 }
 
+/** `CliIO.parentProblem` on the real file system. */
+function parentProblemOf(path: string, overwrite: boolean): string | undefined {
+  let target: string;
+  try {
+    target = overwrite ? linkTarget(path) : path;
+  } catch (err) {
+    return `Cannot write to "${cutForMessage(path)}": ${reasonOf(err)}`;
+  }
+  const dir = dirname(target);
+  try {
+    if (!statSync(dir).isDirectory()) return `Cannot write to "${cutForMessage(path)}": "${cutForMessage(dir)}" is not a directory.`;
+    accessSync(dir, constants.W_OK | constants.X_OK);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return `Cannot write to "${cutForMessage(path)}": the directory "${cutForMessage(dir)}" does not exist.`;
+    if (code === "EACCES" || code === "EPERM" || code === "EROFS") {
+      return `Cannot write to "${cutForMessage(path)}": no permission to create files in "${cutForMessage(dir)}".`;
+    }
+    return `Cannot write to "${cutForMessage(path)}": ${reasonOf(err)}`;
+  }
+  return undefined;
+}
+
 /**
- * `CliIO.writeFile` on the real file system. Without `overwrite` the name is claimed first
- * with an exclusive create ("wx" = O_CREAT|O_EXCL: it never follows a symlink planted at
- * `path` and closes the gap between the check before the request and the write), which
- * throws `EEXIST` for anything there. Then the data goes to a temporary file beside the
- * target, renamed over it when complete. A write cut short (a full disk, a quota) leaves
- * the old file as it was and no file under a new name, so the next run isn't refused for
- * one that holds half a result. With `overwrite` an existing file's mode is kept and a
- * symlink is written through to the file it points at.
+ * Node's error text without its `, open '<path>'` tail, which named the hidden temporary file
+ * (`ENAMETOOLONG: name too long, lstat '.x….json.123-0d1a.tmp'`) instead of the user's file.
+ */
+export function reasonOf(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.replace(/, \w+ '.*'$/s, "");
+}
+
+/**
+ * `CliIO.writeFile` on the real file system. A stream (a device, a FIFO, a descriptor path) is
+ * written in place: it can't be renamed over, and nothing in it can be lost. Without `overwrite`
+ * the name is claimed first with an exclusive create ("wx" = O_CREAT|O_EXCL: it never follows a
+ * symlink planted at `path` and closes the gap between the check before the request and the
+ * write), which throws `EEXIST` for anything there. Then the data goes to a temporary file beside
+ * the target, renamed over it when complete. A write cut short (a full disk, a quota) leaves the
+ * old file as it was and no file under a new name, so the next run isn't refused for one that
+ * holds half a result. With `overwrite` an existing file's mode is kept and a symlink is written
+ * through to the file it points at, also when that file doesn't exist yet (the link stays).
  */
 function writeFileAtomic(path: string, data: Buffer, overwrite: boolean): void {
-  let claimed = false;
+  if (fileStateOf(path) === "stream") return writeInPlace(path, data);
+  if (overwrite) return replaceFile(linkTarget(path), data);
+  writeClaimed(path, data);
+}
+
+/** Paths to remove if a signal ends the run: the claim and the temporary file of a write under way. */
+const pending = new Set<string>();
+
+/** The exit codes of the signals that remove `pending` paths: 128 + the signal's number. */
+const SIGNAL_EXITS = { SIGINT: 130, SIGTERM: 143, SIGHUP: 129 } as const;
+
+let signalsHandled = false;
+
+/**
+ * From the first file write on, SIGINT, SIGTERM and SIGHUP remove the claim and the temporary
+ * file of a write under way, then exit with 130, 143 or 129. Before, Node's default action
+ * killed the process mid-write and left an empty claim (the next run refused it as an existing
+ * file) and the whole temporary file. The write itself is synchronous, so a signal that arrives
+ * during it is handled once it is done. Not installed for a stream: a handler restarts a blocked
+ * `open()` of a FIFO without a reader, so Ctrl-C could not end the wait.
+ */
+function removeOnSignals(): void {
+  if (signalsHandled) return;
+  signalsHandled = true;
+  for (const [signal, code] of Object.entries(SIGNAL_EXITS)) {
+    process.once(signal, () => {
+      for (const path of pending) rmSync(path, { force: true });
+      pending.clear();
+      process.exit(code);
+    });
+  }
+}
+
+/** Claim `path` (exclusive create), then replace the claim with `data`; the claim is removed on a failure. */
+function writeClaimed(path: string, data: Buffer): void {
+  removeOnSignals();
+  closeSync(openSync(path, "wx"));
+  pending.add(path);
   try {
-    if (!overwrite) {
-      closeSync(openSync(path, "wx"));
-      claimed = true;
-    }
-    replaceFile(overwrite ? throughLinks(path) : path, data);
+    replaceFile(path, data);
   } catch (err) {
-    if (claimed) rmSync(path, { force: true });
+    // A write cut short (a full disk, a quota) leaves no file under the new name either, so
+    // the next run isn't refused for a file that holds half a result.
+    rmSync(path, { force: true });
     throw err;
+  } finally {
+    pending.delete(path);
   }
 }
 
@@ -245,7 +355,9 @@ function writeFileAtomic(path: string, data: Buffer, overwrite: boolean): void {
  * renamed over it. An existing file's mode is kept.
  */
 function replaceFile(target: string, data: Buffer): void {
-  const temporary = join(dirname(target), `.${basename(target)}.${process.pid}-${randomBytes(4).toString("hex")}.tmp`);
+  removeOnSignals();
+  const temporary = join(dirname(target), temporaryName(basename(target)));
+  pending.add(temporary);
   try {
     writeFileSync(temporary, data, { flag: "wx" });
     const mode = modeOf(target);
@@ -254,7 +366,22 @@ function replaceFile(target: string, data: Buffer): void {
   } catch (err) {
     rmSync(temporary, { force: true });
     throw err;
+  } finally {
+    pending.delete(temporary);
   }
+}
+
+/**
+ * The temporary file's name for `base`: `.<base>.<pid>-<random>.tmp`, within NAME_MAX bytes. A
+ * long base name is shortened (at a character boundary), the random part is kept, so a valid
+ * name of up to 255 bytes can be written (`ENAMETOOLONG` named the hidden file before).
+ */
+function temporaryName(base: string): string {
+  const suffix = `.${process.pid}-${randomBytes(4).toString("hex")}.tmp`;
+  const room = NAME_MAX - 1 - Buffer.byteLength(suffix);
+  let kept = base;
+  while (Buffer.byteLength(kept) > room) kept = kept.slice(0, kept.length - (/[\udc00-\udfff]$/.test(kept) ? 2 : 1));
+  return `.${kept}${suffix}`;
 }
 
 function modeOf(path: string): number | undefined {
@@ -265,12 +392,57 @@ function modeOf(path: string): number | undefined {
   }
 }
 
-/** The file a path names, through any symlinks, so --force writes where a link points. */
-function throughLinks(path: string): string {
+/** Most links followed for one `-o` path, as the kernel's ELOOP limit. */
+const MAX_LINKS = 40;
+
+/**
+ * The file a path names, through any symlinks, so --force writes where a link points: also
+ * when the link dangles, where the file it names is created. A loop throws (ELOOP).
+ */
+function linkTarget(path: string): string {
+  let current = resolve(path);
+  for (let hops = 0; hops <= MAX_LINKS; hops++) {
+    let link: string;
+    try {
+      if (!lstatSync(current).isSymbolicLink()) return current;
+      link = readlinkSync(current);
+    } catch {
+      return current; // nothing there (yet): this is the file to create
+    }
+    current = resolve(dirname(current), link);
+  }
+  throw Object.assign(new Error("too many levels of symbolic links"), { code: "ELOOP" });
+}
+
+/** Write `data` to a stream target (a device, a FIFO, a descriptor path) in place, every byte. */
+function writeInPlace(path: string, data: Buffer): void {
+  // Append: on a descriptor path that leads to a file (`-o /dev/stdout >> log`), the shell's
+  // own mode stands; on a device or a FIFO it makes no difference.
+  const fd = openSync(path, "a");
   try {
-    return realpathSync(path);
-  } catch {
-    return path;
+    writeAll(fd, data);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** A short pause for a non-blocking descriptor that is full (EAGAIN), without a busy loop. */
+const pause = new Int32Array(new SharedArrayBuffer(4));
+
+/**
+ * Write all of `data` to `fd`, or throw. `writeSync` may write less than asked (a file-size
+ * limit, a full disk): the rest is written in a loop, and the call that cannot write throws
+ * (EFBIG, ENOSPC). A descriptor the shell made non-blocking (a pipe through `/dev/fd/N`) answers
+ * EAGAIN while the reader is behind: wait a moment and go on.
+ */
+function writeAll(fd: number, data: Buffer): void {
+  for (let at = 0; at < data.length; ) {
+    try {
+      at += writeSync(fd, data, at);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EAGAIN") throw err;
+      Atomics.wait(pause, 0, 0, 5);
+    }
   }
 }
 

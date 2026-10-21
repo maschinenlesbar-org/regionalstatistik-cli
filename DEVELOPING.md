@@ -528,7 +528,7 @@ for every transport (P5):
   usage/credential error → 2, including a missing command (bare `regstat`,
   `regstat data`), which prints the help to stderr, and a refused `-o` target
   (`checkOutputTarget`, before any request: `--force` without `-o`, a directory, an
-  existing path without `--force`); an `-o` write that fails after the answer is in, a
+  existing path without `--force`, a file whose directory is missing or not writable); an `-o` write that fails after the answer is in, a
   file that appeared during the request included → `RegionalstatistikError`, exit 1
   (`writeOutputFile`);
   not-found → 4; other errors → 1 (including auth failures, which additionally
@@ -633,8 +633,10 @@ side; no id goes into a request path, so the id list is empty), P25
 (`conformance-p25-response-corpus`: a number JSON can't carry exactly, or an empty answer, is
 a parse error, exit 1, read from a `find` envelope) and P26
 (`conformance-p26-output-integrity`: `regstat find x -o …` under `ulimit -f` leaves the old
-file and no half-written or temporary file; an existing file without `--force` is refused
-before any request; runs the built bin with a test token as a flag, so no credentials file is
+file and no half-written or temporary file; an existing file without `--force` and a missing
+directory are refused before any request; `/dev/null` and a FIFO are written in place; `--force`
+through a dangling link creates the file it names; a signal leaves no claim and no temporary
+file; runs the built bin with a test token as a flag, so no credentials file is
 read). `apps/cli/test/helpers.ts`'s `parity` also takes the kit's positional form, and its
 `LibOutcome.error` is an `Error`, as the shared bodies read it.
 
@@ -710,13 +712,18 @@ file — a `CredentialsFileError`, exit 1 — whether `config` or a command that
 login read it; a usage error of `config`, such as a refused name or value, stays `cli`)
 and
 `output` (the `-o` file written, `Wrote N bytes …`; a target refused before any request —
-`--force` without `-o`, a directory, an existing path without `--force` — an
-`OutputRefusedError`, exit 2; a write that failed after the request, a file that appeared
-meanwhile included, an `OutputError`, exit 1; and a stdout write error). The write is
-atomic (`writeFileAtomic` in `io.ts`, behind `CliIO.writeFile`): without `--force` the name
+`--force` without `-o`, a directory, an existing path without `--force`, a file whose directory
+is missing or not writable (`CliIO.parentProblem`: `Cannot write to "<path>": the directory
+"<dir>" does not exist.`) — an `OutputRefusedError`, exit 2; a write that failed after the
+request, a file that appeared meanwhile included, an `OutputError`, exit 1; and a stdout write
+error). A stream target (a character device, a FIFO, a socket, `/dev/stdout`, `/dev/fd/N`) is
+written in place, with no claim, no temporary file and no `--force` needed. A file is written
+atomically (`writeFileAtomic` in `io.ts`, behind `CliIO.writeFile`): without `--force` the name
 is claimed with an exclusive create, the data goes to a temporary file beside the target
-and is renamed over it, `--force` keeps the old file's mode and writes through a symlink,
-and a failure leaves neither a temporary file nor a claimed name. Code logs through `logOf(deps)` and never writes diagnostics
+(`.<name>.<pid>-<hex>.tmp`, the name shortened to stay within 255 bytes) and is renamed over it,
+`--force` keeps the old file's mode and writes through a symlink (`linkTarget`: a dangling one
+creates the file it names), and a failure leaves neither a temporary file nor a claimed name;
+nor does SIGINT, SIGTERM or SIGHUP during the write (exit 130, 143, 129). Code logs through `logOf(deps)` and never writes diagnostics
 with `io.err` directly. `run()` builds the logger from argv before commander parses it
 (`logFormatFromArgv`, used only for the records of a parse error: the first
 `--log-format`, the value of one of the program's own value options skipped, as
