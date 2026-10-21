@@ -632,8 +632,9 @@ trimmed and in NFC or refused, with a test token from `REGIONALSTATISTIK_API_TOK
 side; no id goes into a request path, so the id list is empty), P25
 (`conformance-p25-response-corpus`: a number JSON can't carry exactly, or an empty answer, is
 a parse error, exit 1, read from a `find` envelope), P27 (`conformance-p27-big-and-odd-answers`:
-a large flat answer prints with `--compact` under a small heap; it starts the built bin with
-`--max-old-space-size`, 30 s) and P26
+a large flat answer prints with `--compact` under a small heap, an answer full of DEL characters
+prints escaped or, past V8's longest string, is an ERROR record of `regstat.output`; it starts
+the built bin with `--max-old-space-size`, 30 s) and P26
 (`conformance-p26-output-integrity`: `regstat find x -o …` under `ulimit -f` leaves the old
 file and no half-written or temporary file; an existing file without `--force` and a missing
 directory are refused before any request; `/dev/null` and a FIFO are written in place; `--force`
@@ -716,7 +717,8 @@ and
 `output` (the `-o` file written, `Wrote N bytes …`; an answer that can't be printed, an
 `OutputError`, exit 1: `The answer is nested too deeply to pretty-print; try --compact.` — the
 hint only when `--compact` prints this very answer, probed — or `The answer is too large …`,
-past V8's longest string; a target refused before any request —
+past V8's longest string, also once its control characters are escaped (`escapeControlChars`
+measures first and builds the escaped text in 64 Ki chunks); a target refused before any request —
 `--force` without `-o`, a directory, an existing path without `--force`, a file whose directory
 is missing or not writable (`CliIO.parentProblem`: `Cannot write to "<path>": the directory
 "<dir>" does not exist.`) — an `OutputRefusedError`, exit 2; a write that failed after the
