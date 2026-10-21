@@ -8,6 +8,7 @@ import { makeMockTransport, jsonResponse, bodyOf, type MockTransport } from "./h
 import type { HttpRequest, HttpResponse } from "../src/http.js";
 import * as fx from "./fixtures.js";
 import { RegionalstatistikNetworkError, RegionalstatistikValidationError } from "../src/errors.js";
+import { normalizeText } from "../src/validate.js";
 
 function client(
   responder: (req: HttpRequest) => HttpResponse,
@@ -154,6 +155,25 @@ test("a non-http(s) base URL is rejected before any request carries credentials"
     );
     assert.equal(mt.calls.length, 0);
   }
+});
+
+test("K6: the find term goes out trimmed and in NFC; a blank one is refused before any request", async () => {
+  const { c, mt } = client(() => jsonResponse(fx.findResult), { token: "TOK" });
+  for (const term of ["  Bevölkerung  ", "Bevölkerung\n", "\tBevölkerung", "\u00a0Bevölkerung\u00a0", "Bevölkerung\u3000", "Bevo\u0308lkerung "]) {
+    await c.find({ term });
+    assert.equal(bodyOf(mt.last()).get("term"), "Bevölkerung", JSON.stringify(term));
+  }
+  await c.find({ term: " a  b " });
+  assert.equal(bodyOf(mt.last()).get("term"), "a  b");
+  // Codes are sent as given (NFC only, never trimmed).
+  await c.catalogue.tables({ selection: " 12411* " });
+  assert.equal(bodyOf(mt.last()).get("selection"), " 12411* ");
+  const before = mt.calls.length;
+  for (const term of ["", " ", "\n\t", "\u00a0", "\u3000"]) {
+    await assert.rejects(c.find({ term }), RegionalstatistikValidationError, JSON.stringify(term));
+  }
+  assert.equal(mt.calls.length, before);
+  assert.equal(normalizeText("  Bevo\u0308lkerung\n"), "Bevölkerung");
 });
 
 test("text parameters and object codes are sent in Unicode NFC (P11)", async () => {

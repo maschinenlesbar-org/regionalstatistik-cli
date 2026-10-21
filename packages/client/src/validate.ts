@@ -33,6 +33,17 @@ export function assertValid<T>(name: string, value: T, problem: Problem<T>): T {
 }
 
 /**
+ * A free-text value as GENESIS matches it (the `find` term): without surrounding
+ * whitespace (a term pasted with a trailing space or newline matched nothing) and in
+ * composed Unicode, NFC (a decomposed "Bevölkerung", o plus U+0308 as macOS file names
+ * produce, matched nothing — P11). Inner whitespace is kept. Codes, selections, regional
+ * keys, dates and credentials never go through it.
+ */
+export function normalizeText(value: string): string {
+  return value.trim().normalize("NFC");
+}
+
+/**
  * A required or given text value must not be blank (`""` or whitespace only):
  * GENESIS reads an empty parameter as "no filter", so a blank filter would
  * silently return unfiltered data. A non-string counts as missing.

@@ -244,8 +244,10 @@ What the library rejects:
   signup URL (exit 2, message unchanged).
 
 Text is sent in Unicode NFC (P11): every string parameter and the object `name` are
-normalised (`normalizeText` in `client.ts`), nothing else — no trimming, values go out
-as given. A decomposed umlaut (macOS clipboards, file names) looks the same but matches
+normalised (`composed` in `client.ts`), nothing else — no trimming, codes, selections,
+regional keys and dates go out as given. The one free-text input, the `find` term, is also
+trimmed (`normalizeText` in `validate.ts`, exported: `trim()` then NFC; inner whitespace
+kept), since a term pasted with a trailing space or newline matched nothing. A decomposed umlaut (macOS clipboards, file names) looks the same but matches
 nothing: live on the sibling destatis host (same GENESIS software, 2026-10-06), `find`
 with a decomposed "Bevölkerung" answered every list `null`, the composed term 80
 tables. Credentials are never normalised.

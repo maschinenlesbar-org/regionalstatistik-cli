@@ -7,7 +7,7 @@
 // format) must be one of the values exported below; pagelength is an integer
 // from 1 to MAX_PAGELENGTH and timeslices a non-negative integer. Valid values
 // are sent as-is, never trimmed — only normalised to Unicode NFC, which GENESIS
-// matches.
+// matches — except the free-text `find` term, which is trimmed too (`normalizeText`).
 //
 // The Regionaldatenbank's whole point is the regional dimension: on `data/*`
 // requests, `regionalvariable` picks the regional level (e.g. KREISE, GEMEIN)

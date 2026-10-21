@@ -101,7 +101,8 @@ regstat find <term> [--category all|tables|statistics|cubes|variables|time-serie
 Without `--category` no category is sent and GENESIS searches every object type
 (`all`). `--pagelength` bounds the result count. Returns parallel arrays
 (`Tables`/`Statistics`/`Cubes`/`Timeseries`/`Variables`), each `null` when not
-searched.
+searched. The term goes out without surrounding whitespace and in composed Unicode
+(NFC), as GENESIS matches it; a blank one is a usage error (exit 2) before any request.
 
 ```bash
 regstat find "bevölkerung kreise" --category tables --pagelength 20
