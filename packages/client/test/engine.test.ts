@@ -870,3 +870,74 @@ test("a throw in onRetry is swallowed", async () => {
 test("onRetry must be a function", () => {
   assert.throws(() => new RequestEngine({ onRetry: 5 as never }), RegionalstatistikValidationError);
 });
+
+test("K1: a number the answer's JSON cannot carry exactly is a parse error, never a changed value", async () => {
+  // JSON.parse turned these into 12345678901234567000, 9007199254740992, Infinity (printed as null) and 0, exit 0.
+  const envelopeWith = (n: string) => `{"Status":{"Code":0,"Content":"ok","Type":"Information"},"Object":{"Content":"x","n":${n}}}`;
+  const bad = [
+    "12345678901234567890", "-9007199254740993", "1e400", "-1E400", "12345678901234567890.0", "9007199254740993e0",
+    "90071992547409930E-1", "9007199254740992.5", "-9007199254740992.5", "1e-400", "-0.0001e-399",
+    "123456789012345678901234567890",
+  ];
+  for (const n of bad) {
+    const e = new RequestEngine({ transport: makeMockTransport(() => rawResponse(envelopeWith(n), "application/json")).transport });
+    await assert.rejects(e.postJson("/data/table", {}, { username: "TOK" }), (err) => {
+      assert.ok(err instanceof RegionalstatistikParseError, n);
+      assert.equal(err.message, `Unexpected response from /data/table: the number ${n} cannot be represented exactly.`);
+      return true;
+    });
+  }
+  // The other JSON paths: whoami (GET) and logincheck.
+  const whoami = new RequestEngine({
+    transport: makeMockTransport(() => rawResponse('{"User-Agent":"a\\"1e999","n":1e400}', "application/json")).transport,
+  });
+  await assert.rejects(whoami.getJson("/helloworld/whoami"), /the number 1e400 cannot be represented exactly/);
+  const login = new RequestEngine({
+    transport: makeMockTransport(() =>
+      rawResponse('{"Status":"Sie wurden erfolgreich an- und abgemeldet!","Username":"U","n":12345678901234567890}', "application/json"),
+    ).transport,
+  });
+  await assert.rejects(
+    login.postLoginCheck("/helloworld/logincheck", {}, { username: "TOK" }),
+    /Unexpected response from \/helloworld\/logincheck: the number 12345678901234567890 cannot be represented exactly\./,
+  );
+  // What a double carries exactly, or as JSON means it (a decimal fraction below 2^53), passes.
+  const ok: Array<[string, number]> = [
+    ["9007199254740991", 9007199254740991], ["9007199254740992.0", 2 ** 53], ["9007199254740992e0", 2 ** 53],
+    ["90071992547409920E-1", 2 ** 53], ["1e21", 1e21], ["1.2e21", 1.2e21], ["0", 0], ["-0", -0], ["0.0e-500", 0],
+    ["1.10", 1.1], ["0.1", 0.1], ["1.00000000000000001", 1], ["5e-324", 5e-324],
+    // A double a server printed in its shortest form reads back as that double and prints as the
+    // same number: not a changed value, though the decimal is not the double's exact binary value.
+    ["1e23", 1e23], ["100000000000000000000000", 1e23], ["1E23", 1e23], ["1.7976931348623157E308", Number.MAX_VALUE], ["-1.7976931348623157e308", -Number.MAX_VALUE],
+    ["4.35e30", 4.35e30],
+  ];
+  for (const [n, value] of ok) {
+    const e = new RequestEngine({ transport: makeMockTransport(() => rawResponse(envelopeWith(n), "application/json")).transport });
+    const got = await e.postJson<{ Object: { n: number } }>("/data/table", {}, { username: "TOK" });
+    assert.equal(got.Object.n, value, n);
+  }
+  // Numbers inside strings (the table values are strings in the CSV Content) are never touched.
+  const inString = new RequestEngine({
+    transport: makeMockTransport(() =>
+      rawResponse('{"Status":{"Code":0,"Content":"12345678901234567890","Type":"Information"},"Object":{"Content":"1e400;\\"9007199254740993"}}', "application/json"),
+    ).transport,
+  });
+  await inString.postJson("/data/table", {}, { username: "TOK" });
+});
+
+test("K1: the number check skips strings and costs one pass over the text", async () => {
+  // Escaped quotes and backslashes must not end a string early and expose its digits.
+  const tricky = `{"Status":{"Code":0,"Content":"ok","Type":"Information"},"s":"\\\\\\"12345678901234567890\\\\","t":"1e400","n":[1,2.5,-3e2]}`;
+  const e = new RequestEngine({ transport: makeMockTransport(() => rawResponse(tricky, "application/json")).transport });
+  assert.deepEqual(await e.postJson("/data/table", {}, { username: "TOK" }), JSON.parse(tricky));
+  // 1 MB of numbers: the scan is linear.
+  const big = `{"Status":{"Code":0,"Content":"ok","Type":"Information"},"n":[${Array.from({ length: 200_000 }, (_, i) => i * 7).join(",")}]}`;
+  const f = new RequestEngine({ transport: makeMockTransport(() => rawResponse(big, "application/json")).transport });
+  assert.equal((await f.postJson<{ n: number[] }>("/data/table", {}, { username: "TOK" })).n.length, 200_000);
+});
+
+test("K1: an error answer with a big number stays the API error it is", async () => {
+  const body = '{"Status":{"Code":90,"Content":"nicht gefunden","Type":"Fehler"},"Object":{"n":12345678901234567890}}';
+  const e = new RequestEngine({ transport: makeMockTransport(() => rawResponse(body, "application/json")).transport });
+  await assert.rejects(e.postJson("/data/table", {}, { username: "TOK" }), (err) => err instanceof RegionalstatistikApiError && err.isNotFound);
+});

@@ -138,7 +138,7 @@ and why redirects are not followed.
 `--log-format jsonl` as one JSON object per line. The areas: `cli` (usage errors,
 commander's messages, unexpected errors, the warning about a credential given as a flag),
 `api` (GENESIS's answers: an error status, the credentials hint, and a malformed answer —
-bad JSON, the wrong shape, an empty body, an HTML page instead of a file, a login check
+bad JSON, the wrong shape, an empty body, a number JSON cannot carry exactly, an HTML page instead of a file, a login check
 that confirms nothing), `http` (the connection, the cleartext warning, and one WARN per retry before it waits), `config` (the
 credentials file) and `output` (the `-o` file, stdout failures). A record is always one
 line; control characters in it are escaped.

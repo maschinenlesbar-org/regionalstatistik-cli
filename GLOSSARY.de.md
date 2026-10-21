@@ -139,7 +139,7 @@ Text (im Stil von log4j) oder mit `--log-format jsonl` als ein JSON-Objekt pro Z
 Bereiche: `cli` (Bedienfehler, Meldungen von commander, unerwartete Fehler, die Warnung
 vor Zugangsdaten in einer Option), `api` (die Antworten von GENESIS: ein Fehlerstatus, der
 Hinweis zu den Zugangsdaten und eine fehlerhafte Antwort — ungültiges JSON, die falsche
-Form, ein leerer Body, eine HTML-Seite statt einer Datei, eine Anmeldeprüfung, die
+Form, ein leerer Body, eine Zahl, die JSON nicht exakt tragen kann, eine HTML-Seite statt einer Datei, eine Anmeldeprüfung, die
 nichts bestätigt), `http` (die Verbindung, die Klartext-Warnung und je Wiederholung eine WARN-Zeile vor dem Warten), `config` (die
 Zugangsdaten-Datei) und `output` (die `-o`-Datei, Schreibfehler auf stdout). Ein Eintrag ist immer eine Zeile; Steuerzeichen darin werden
 maskiert.
