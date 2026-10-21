@@ -636,7 +636,7 @@ a parse error, exit 1, read from a `find` envelope) and P26
 file and no half-written or temporary file; an existing file without `--force` and a missing
 directory are refused before any request; `/dev/null` and a FIFO are written in place; `--force`
 through a dangling link creates the file it names; a signal leaves no claim and no temporary
-file; runs the built bin with a test token as a flag, so no credentials file is
+file; stdout redirected to a file and cut short is exit 1; runs the built bin with a test token as a flag, so no credentials file is
 read). `apps/cli/test/helpers.ts`'s `parity` also takes the kit's positional form, and its
 `LibOutcome.error` is an `Error`, as the shared bodies read it.
 
@@ -716,7 +716,9 @@ and
 is missing or not writable (`CliIO.parentProblem`: `Cannot write to "<path>": the directory
 "<dir>" does not exist.`) — an `OutputRefusedError`, exit 2; a write that failed after the
 request, a file that appeared meanwhile included, an `OutputError`, exit 1; and a stdout write
-error). A stream target (a character device, a FIFO, a socket, `/dev/stdout`, `/dev/fd/N`) is
+error: when stdout is a regular file, `stdoutWriter` writes every byte with `writeAll`, so a
+write cut short — EFBIG under a file-size limit, ENOSPC — is an ERROR record and exit 1, never a
+short file with exit 0). A stream target (a character device, a FIFO, a socket, `/dev/stdout`, `/dev/fd/N`) is
 written in place, with no claim, no temporary file and no `--force` needed. A file is written
 atomically (`writeFileAtomic` in `io.ts`, behind `CliIO.writeFile`): without `--force` the name
 is claimed with an exclusive create, the data goes to a temporary file beside the target

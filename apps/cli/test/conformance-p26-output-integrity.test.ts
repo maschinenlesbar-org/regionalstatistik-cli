@@ -30,6 +30,10 @@ const outputArgv = (base: string, file: string, force: boolean): string[] => [
   "--base-url", base, "--max-retries", "0", "-o", file, ...(force ? ["--force"] : []),
   "--token", "0123456789abcdef0123456789abcdef", "find", "x",
 ];
+/** argv that prints the server's answer to stdout, given the mock's base URL. */
+const stdoutArgv = (base: string): string[] => [
+  "--base-url", base, "--max-retries", "0", "--token", "0123456789abcdef0123456789abcdef", "find", "x",
+];
 /** An answer for that command of about `items` × 20 bytes, as the server sends it: a find envelope. */
 const answerOf = (items: number): { body: string; contentType: string } => ({
   body: JSON.stringify({
@@ -160,6 +164,17 @@ async function inTempDir(body: (dir: string) => Promise<void>): Promise<void> {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+test("P26: stdout redirected to a file and cut short is an error (exit 1, ERROR of output), never exit 0", STARTS_A_PROCESS, async () => {
+  await inTempDir(async (dir) => {
+    await withServer(async (base) => {
+      const out = join(dir, "stdout.json");
+      const cut = await runLimited(stdoutArgv(base), out);
+      assert.equal(cut.code, 1, cut.stderr);
+      assert.match(cut.stderr, new RegExp(`ERROR \\[${PROGRAM}\\.output\\] Could not write to stdout: .*EFBIG`), cut.stderr);
+    });
+  });
+});
 
 test("P26: a missing directory is refused before any request", STARTS_A_PROCESS, async () => {
   await inTempDir(async (dir) => {
