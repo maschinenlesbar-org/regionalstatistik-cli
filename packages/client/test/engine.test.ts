@@ -1,6 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MAX_RETRIES, MAX_RETRY_AFTER_MS, RequestEngine, cleartextProblem, parseRetryAfter, redactUrl } from "../src/engine.js";
+import {
+  MAX_RETRIES,
+  MAX_RETRY_AFTER_MS,
+  RequestEngine,
+  bigIntegerKeysOption,
+  cleartextProblem,
+  firstInexactNumber,
+  parseRetryAfter,
+  redactUrl,
+  scanNumbers,
+} from "../src/engine.js";
 import { MAX_TIMEOUT_MS } from "../src/http.js";
 import {
   RegionalstatistikValidationError,
@@ -873,6 +883,49 @@ test("text that is not valid is replaced with U+FFFD and reported through onWarn
   const throwing = new RequestEngine({ onWarning: () => { throw new Error("hook"); }, transport: makeMockTransport(() => rawResponse('"\\ud800"', "application/json")).transport });
   assert.equal(await throwing.postJson("/x", {}, {}, "unchecked"), "\ufffd");
   assert.throws(() => new RequestEngine({ onWarning: "log" as unknown as () => void }), RegionalstatistikValidationError);
+});
+
+test("bigIntegerKeys: a declared member's number is its exact literal as a string; others keep the rule (D3)", async () => {
+  const body = '{"Status":{"Code":0},"_version_":1858054135406919680,"small":{"_version_":5},"neg":{"\\u005fversion_":-12345678901234567890},' +
+    '"s":{"_version_":"text"},"n":{"_version_":null},"arr":{"_version_":[1]},"t":"\\"_version_\\":1","n2":42}';
+  const e = new RequestEngine({
+    bigIntegerKeys: new Set(["_version_"]),
+    transport: makeMockTransport(() => rawResponse(body, "application/json")).transport,
+  });
+  assert.deepEqual(await e.postJson("/find/find", {}, {}), {
+    Status: { Code: 0 }, _version_: "1858054135406919680", small: { _version_: "5" }, neg: { _version_: "-12345678901234567890" },
+    s: { _version_: "text" }, n: { _version_: null }, arr: { _version_: [1] }, t: '"_version_":1', n2: 42,
+  });
+  assert.deepEqual([...e.bigIntegerKeys], ["_version_"]);
+  // An undeclared big number is still refused; a declared member doesn't make others exact.
+  const other = new RequestEngine({
+    bigIntegerKeys: ["_version_"] as unknown as ReadonlySet<string>,
+    transport: makeMockTransport(() => rawResponse('{"Status":{"Code":0},"_version_":1858054135406919680,"id":12345678901234567890}', "application/json")).transport,
+  });
+  await assert.rejects(other.postJson("/find/find", {}, {}), /the number 12345678901234567890 cannot be represented exactly/);
+  // Malformed stays malformed: a declared member with a leading zero still fails JSON.parse.
+  const malformed = new RequestEngine({ bigIntegerKeys: new Set(["_version_"]), transport: makeMockTransport(() => rawResponse('{"_version_":01}', "application/json")).transport });
+  await assert.rejects(malformed.postJson("/find/find", {}, {}), /not valid JSON/);
+  // The login check and whoami read the declared members too.
+  const login = new RequestEngine({
+    bigIntegerKeys: new Set(["Id"]),
+    transport: makeMockTransport(() => rawResponse('{"Status":"Sie wurden erfolgreich an- und abgemeldet!","Username":"U","Id":12345678901234567890}', "application/json")).transport,
+  });
+  assert.deepEqual(await login.postLoginCheck("/helloworld/logincheck", {}, { username: "TOK" }), { Status: "Sie wurden erfolgreich an- und abgemeldet!", Username: "U", Id: "12345678901234567890" });
+  for (const bad of [new Set([""]), new Set([1]), "x", 5, null]) {
+    assert.throws(() => new RequestEngine({ bigIntegerKeys: bad as unknown as ReadonlySet<string> }),
+      (err: unknown) => err instanceof RegionalstatistikValidationError && err.message === "Invalid bigIntegerKeys: Expected a set of non-empty member names.");
+  }
+  // The option reader copies a set or a list; undefined is none.
+  const names = new Set(["a"]);
+  const copy = bigIntegerKeysOption(names);
+  names.add("b");
+  assert.deepEqual([...copy], ["a"]);
+  assert.deepEqual([...bigIntegerKeysOption(["x", "y"] as unknown as ReadonlySet<string>)], ["x", "y"]);
+  assert.equal(bigIntegerKeysOption(undefined).size, 0);
+  // Without declarations the scan is the plain number check.
+  assert.equal(firstInexactNumber('{"a":"1e400","b":3e-324}'), "3e-324");
+  assert.deepEqual(scanNumbers('{"a":1}'), { json: '{"a":1}', inexact: undefined });
 });
 
 test("onRetry is called once per retry, with the event fields, right before the sleep", async () => {

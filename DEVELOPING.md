@@ -443,7 +443,11 @@ shortest form (`1E23`, `1.7976931348623157E308`, `5e-324`) passes. Between those
 fraction keeps a double's usual precision. The table values themselves are strings
 in the CSV `Content`, never touched; the check runs after the status mapping, so an error
 answer stays the API error it is. A `data/*file` download is passed through as bytes,
-unchecked.
+unchecked. The check is one linear pass that skips strings (`scanNumbers`); it also serves the
+engine option `bigIntegerKeys` (D3 of the 2026-10-21 round): a declared member's number is
+delivered as its exact literal, as a string, whatever its size. This client declares none —
+GENESIS has no 64-bit member, its figures are strings in the CSV — so every number keeps the
+rule above; P25's `BIG_INTEGER_KEYS` is empty.
 
 **Divergence from the destatis reference (its engine misses this):**
 authentication failures arrive as a **flat, envelope-less**
