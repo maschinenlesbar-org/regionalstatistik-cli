@@ -37,8 +37,16 @@ export interface CliOutcome extends ParitySide {
   err: string;
 }
 
-export type LibOutcome = ParitySide &
-  ({ ok: true; value: unknown } | { ok: false; error: unknown });
+/**
+ * What the library call did: its value or its error. The shape is the kit's, which the
+ * shared conformance bodies (P24, P25) read (`error?.name`).
+ */
+export interface LibOutcome extends ParitySide {
+  ok: boolean;
+  value?: unknown;
+  /** What the call threw; anything but an Error is wrapped in one. */
+  error?: Error;
+}
 
 export interface ParityResult {
   cli: CliOutcome;
@@ -63,7 +71,21 @@ export interface ParityInput {
  * sent. A parity test then asserts the same outcome: both reject and neither
  * sends a request, or both send the identical request (see `requestKey`).
  */
-export async function parity(input: ParityInput): Promise<ParityResult> {
+export async function parity(input: ParityInput): Promise<ParityResult>;
+/** The kit's form, as the shared conformance bodies (P24, P25) call it. */
+export async function parity(
+  argv: string[],
+  lib: (transport: Transport) => unknown,
+  responder?: (req: HttpRequest) => HttpResponse | Promise<HttpResponse>,
+): Promise<ParityResult>;
+export async function parity(
+  first: ParityInput | string[],
+  call?: (transport: Transport) => unknown,
+  responder?: (req: HttpRequest) => HttpResponse | Promise<HttpResponse>,
+): Promise<ParityResult> {
+  const input: ParityInput = Array.isArray(first)
+    ? { argv: first, lib: call ?? (() => undefined), ...(responder !== undefined ? { responder } : {}) }
+    : first;
   const mt = makeMockTransport(input.responder ?? (() => jsonResponse({})));
   const out: string[] = [];
   const err: string[] = [];
@@ -87,7 +109,7 @@ export async function parity(input: ParityInput): Promise<ParityResult> {
     const value = await input.lib(mt.transport);
     lib = { ok: true, value, requests: mt.calls.splice(0) };
   } catch (error) {
-    lib = { ok: false, error, requests: mt.calls.splice(0) };
+    lib = { ok: false, error: error instanceof Error ? error : new Error(String(error)), requests: mt.calls.splice(0) };
   }
   return { cli: { code, out: out.join("\n"), err: untimed(err.join("\n")), requests: cliRequests }, lib };
 }

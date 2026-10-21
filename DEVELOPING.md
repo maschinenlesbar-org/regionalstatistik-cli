@@ -623,6 +623,18 @@ npmjs.com, so a relative link in it must point to a file `package.json` `files`
 ships — `DATA_LICENSE.md`, `LICENSING.md`, `CONTRIBUTING.md`; any other document is
 linked as `https://github.com/maschinenlesbar-org/regionalstatistik-cli/blob/main/<path>`).
 
+From the kit rollout of 2026-10-21: P24 (`conformance-p24-input-corpus`: a corpus of tricky
+values through every text filter, on the CLI and in the library — here the `find` term, sent
+trimmed and in NFC or refused, with a test token from `REGIONALSTATISTIK_API_TOKEN` on the CLI
+side; no id goes into a request path, so the id list is empty), P25
+(`conformance-p25-response-corpus`: a number JSON can't carry exactly, or an empty answer, is
+a parse error, exit 1, read from a `find` envelope) and P26
+(`conformance-p26-output-integrity`: `regstat find x -o …` under `ulimit -f` leaves the old
+file and no half-written or temporary file; an existing file without `--force` is refused
+before any request; runs the built bin with a test token as a flag, so no credentials file is
+read). `apps/cli/test/helpers.ts`'s `parity` also takes the kit's positional form, and its
+`LibOutcome.error` is an `Error`, as the shared bodies read it.
+
 ## Verified live (2026-07-13, without an account)
 
 - `helloworld/whoami` (GET, no auth) answers `{"User-Agent": …}`.
