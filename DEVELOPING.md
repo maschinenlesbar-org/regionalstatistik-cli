@@ -198,8 +198,11 @@ What the library rejects:
   C1 or bidi characters is matched in its raw form. It replaces, on stdout and stderr,
   the userinfo of every
   URL argument (`credentialsIn`, exported, parseable or not) with `***@` — only a
-  value that starts with a scheme counts (a bare `a:b@c` is a file name, a search text
-  or a User-Agent as often as a credential), except as the `--base-url` value — and
+  URL with a scheme counts (a bare `a:b@c` is a file name, a search text or a User-Agent
+  as often as a credential), except as the `--base-url` value; it is found anywhere in an
+  argument (`urlsWithin`), not only at its start, since values are sent trimmed: a padded
+  `" https://user:pw@host"`, one after a dash or inside a phrase reached a refusal that
+  quotes the value and a server's status text echoing the code (T15 of 2026-10-21) — and
   the whole values of `--token`/`--username`/`--password`, of the three
   `REGIONALSTATISTIK_*` variables, of a login read from the credentials file (added
   later through `io.redact`) and of any token-shaped argument (`looksLikeToken`) with

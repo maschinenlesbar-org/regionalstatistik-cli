@@ -1026,3 +1026,28 @@ test("commander's echo of a refused value shows an invisible or format character
     assert.match(err, /\\u200b|\\u00ad/, err);
   }
 });
+
+// Kit item T15 of the 2026-10-21 fix round (jobsuche-cli 28be809): a URL with a password inside an
+// argument, padded, after a dash or inside a phrase, was not found by the redaction (it looked for
+// a scheme at the start of each argument only), so the password reached stderr wherever the value
+// is quoted: a refusal, commander's echo, a server's status text echoing the code it was sent.
+test("a password in a URL inside any argument is redacted on stderr, padded, dash-led or mid-phrase (T15)", async () => {
+  const url = "https://bob:s3cretpw@host.example/";
+  const zwsp = String.fromCharCode(0x200b);
+  const argvs = [
+    ["find", ` ${url}${zwsp}`], ["find", `Bevölkerung ${url}${zwsp}`], ["metadata", "table", `\t${url}${zwsp}`],
+    ["-o", `-${url}`, "find", "x"], ["--output=-x", "find", `see ${url}`], ["--pagelength", ` ${url}`, "find", "x"],
+    ["find", "x", "--category", ` ${url}`], ["data", "table", ` ${url}`], ["data", "table", "x", `--region-key= ${url}`],
+  ];
+  // The server echoes the code it was sent in its status text (Code 90, "not found").
+  const echo = (req: HttpRequest) => {
+    const name = bodyOf(req).get("name") ?? bodyOf(req).get("term") ?? "";
+    return jsonResponse({ Status: { Code: 90, Content: `Objekt ${name} nicht gefunden`, Type: "Fehler" } });
+  };
+  for (const argv of argvs) {
+    const cli = makeCli(echo, { REGIONALSTATISTIK_API_TOKEN: "0123456789abcdef0123456789abcdef" });
+    await run(argv, cli.deps);
+    const err = cli.err.join("\n");
+    assert.doesNotMatch(err, /s3cretpw|bob%3As3/, `${JSON.stringify(argv)}: ${err}`);
+  }
+});
