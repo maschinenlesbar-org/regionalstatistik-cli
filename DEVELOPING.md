@@ -202,7 +202,9 @@ What the library rejects:
   as often as a credential), except as the `--base-url` value; it is found anywhere in an
   argument (`urlsWithin`), not only at its start, since values are sent trimmed: a padded
   `" https://user:pw@host"`, one after a dash or inside a phrase reached a refusal that
-  quotes the value and a server's status text echoing the code (T15 of 2026-10-21) — and
+  quotes the value and a server's status text echoing the code (T15 of 2026-10-21; each `://`
+  is found with `indexOf` and its scheme by walking back, so the search stays linear in a long
+  argument, and at most 64 URLs are read from one argument) — and
   the whole values of `--token`/`--username`/`--password`, of the three
   `REGIONALSTATISTIK_*` variables, of a login read from the credentials file (added
   later through `io.redact`) and of any token-shaped argument (`looksLikeToken`) with
