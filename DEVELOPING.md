@@ -384,6 +384,14 @@ and replaced with U+FFFD.` (a throw in it is swallowed); the CLI logs it as one 
 `regstat.api`. The JSON paths (`find`, `catalogue`, `metadata`, `data`, `whoami`,
 `logincheck`) do this; a download is passed through as bytes.
 
+A body too large to become one string (512 MB and more, possible only with
+`maxResponseBytes: 0` or `--max-response-bytes 0`) is a `RegionalstatistikParseError`, `POST
+<url>: the answer is too large to read as text (N bytes; the longest string is 536870888
+characters).` (ERROR record of `regstat.api`, exit 1), not a plain `Error` ("Unexpected error" in
+the CLI); an error status with such a body keeps its `RegionalstatistikApiError`, without the
+body. A `data/*file` download is sniffed from its first KiB and decoded whole only when it may be
+a JSON status, so a download of that size is still the file.
+
 **Redirects are NOT followed.** Following a cross-origin redirect would forward
 the credential headers to another origin; a 3xx surfaces as an error hinting at
 the canonical host (`https://www.regionalstatistik.de`). That has to hold for

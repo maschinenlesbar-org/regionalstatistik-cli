@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { TextDecoder } from "node:util";
 import assert from "node:assert/strict";
 import {
   MAX_RETRIES,
@@ -1117,4 +1118,51 @@ test("K3: a timeout, the size cap, a refused connection and a DNS failure name t
   const named = new RegionalstatistikNetworkError(`POST ${url} failed: socket hang up`);
   const e = new RequestEngine({ transport: () => Promise.reject(named) });
   await assert.rejects(e.postJson(path, {}, {}), (err) => err === named);
+});
+
+test("an answer longer than V8's longest string is a parse error naming the request, a download of that size is still the file (T14)", async (t) => {
+  // A real one needs a body of 512 MB and more (possible with maxResponseBytes 0): V8's own
+  // error is stood in for, for the bodies marked by their lengths.
+  // Each longer than the 1 KiB a download is sniffed from, so only a whole decode hits the stand-in.
+  const json = Buffer.from('{"Status":{"Code":0,"Content":"ok","Type":"Information"}}'.padEnd(1100));
+  const zip = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(1196, 0xff)]);
+  const braced = Buffer.from("{ a csv that only starts with a brace;1;2;3".padEnd(1300, ";4"));
+  const marked = new Set([json.length, zip.length, braced.length]);
+  assert.equal(marked.size, 3);
+  const tooLong = () => Object.assign(new Error("Cannot create a string longer than 0x1fffffe8 characters"), { code: "ERR_STRING_TOO_LONG" });
+  const decode = TextDecoder.prototype.decode;
+  t.mock.method(TextDecoder.prototype, "decode", function (this: InstanceType<typeof TextDecoder>, input?: Uint8Array, options?: { stream?: boolean }) {
+    if (input !== undefined && marked.has(input.byteLength)) throw tooLong();
+    return decode.call(this, input, options);
+  });
+  const toString = Buffer.prototype.toString;
+  t.mock.method(Buffer.prototype, "toString", function (this: Buffer, ...args: Parameters<Buffer["toString"]>) {
+    if (marked.has(this.length) && (args[0] === undefined || args[0] === "utf8")) throw tooLong();
+    return toString.apply(this, args);
+  });
+  const on = (body: Buffer, type: string, status = 200) =>
+    new RequestEngine({ maxResponseBytes: 0, transport: makeMockTransport(() => rawResponse(body, type, status)).transport });
+  await assert.rejects(on(json, "application/json").postJson("/data/table", {}, { username: "TOK" }), (err: unknown) => {
+    assert.ok(err instanceof RegionalstatistikParseError, String(err));
+    assert.equal(
+      err.message,
+      `POST https://www.regionalstatistik.de/data/table: the answer is too large to read as text (${json.length} bytes; the longest string is 536870888 characters).`,
+    );
+    return true;
+  });
+  // A JSON-labelled reply instead of a download: the same parse error.
+  await assert.rejects(
+    on(json, "application/json").postRaw("/data/tablefile", "application/zip", { name: "1" }, { username: "TOK" }),
+    (err: unknown) => err instanceof RegionalstatistikParseError && /the answer is too large to read as text/.test(err.message),
+  );
+  // A download is only sniffed, never decoded whole: a ZIP or a file that merely starts with "{" is the file.
+  for (const [body, type] of [[zip, "application/zip"], [braced, "application/octet-stream"]] as const) {
+    const res = await on(body, type).postRaw("/data/tablefile", "application/zip", { name: "1" }, { username: "TOK" });
+    assert.equal(res.data.length, body.length);
+  }
+  // An error status with such a body is still the API error, without the unreadable body.
+  await assert.rejects(
+    on(json, "text/plain", 500).postJson("/data/table", {}, { username: "TOK" }),
+    (err: unknown) => err instanceof RegionalstatistikApiError && err.httpStatus === 500 && err.body === "",
+  );
 });

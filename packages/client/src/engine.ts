@@ -19,6 +19,7 @@ import {
   type HttpResponse,
   type Transport,
 } from "./http.js";
+import { constants } from "node:buffer";
 import { TextDecoder } from "node:util";
 import { buildQueryString, type QueryParams } from "./query.js";
 import {
@@ -703,20 +704,51 @@ function decodeBody(body: Buffer, contentType: string, request: string): { text:
   }
   try {
     return { text: decoder.decode(body), replaced: 0 };
-  } catch {
+  } catch (err) {
+    if (isStringTooLong(err)) throw tooLargeForText(request, body);
     // Not valid in the charset: decode with replacement, and count what was replaced.
-    const text = new TextDecoder(decoder.encoding).decode(body);
+    let text: string;
+    try {
+      text = new TextDecoder(decoder.encoding).decode(body);
+    } catch (again) {
+      if (isStringTooLong(again)) throw tooLargeForText(request, body);
+      throw again;
+    }
     const sent = decoder.encoding === "utf-8" ? countBytes(body, REPLACEMENT_UTF8) : 0;
     return { text, replaced: countChar(text, 0xfffd) - sent };
   }
 }
 
-/** decodeBody for error text: an unknown charset falls back to UTF-8 rather than hide the error. */
+/**
+ * True for V8's error for a string past its longest one (2^29 − 24 characters on 64-bit): a body
+ * of 512 MB and more, possible once `maxResponseBytes` is lifted, can't be decoded into one.
+ */
+function isStringTooLong(err: unknown): boolean {
+  return (err as { code?: unknown } | null)?.code === "ERR_STRING_TOO_LONG";
+}
+
+/** The parse error for a body too large to decode: it used to escape as a plain Error ("Unexpected error"). */
+function tooLargeForText(request: string, body: Buffer): RegionalstatistikParseError {
+  return new RegionalstatistikParseError(
+    `${request}: the answer is too large to read as text (${body.byteLength} bytes; the longest string is ${constants.MAX_STRING_LENGTH} characters).`,
+  );
+}
+
+/**
+ * decodeBody for error text: an unknown charset falls back to UTF-8 rather than hide the error,
+ * and a body too large to be a string (maxResponseBytes lifted) is left out: the status is the
+ * error.
+ */
 function decodeErrorBody(body: Buffer, contentType: string): string {
   try {
     return decodeBody(body, contentType, "error body").text;
   } catch {
-    return body.toString("utf8");
+    try {
+      return body.toString("utf8");
+    } catch (err) {
+      if (isStringTooLong(err)) return "";
+      throw err;
+    }
   }
 }
 
@@ -1231,9 +1263,11 @@ export class RequestEngine {
     }
     const jsonType = /json/i.test(res.contentType);
     const ctx = contextOf(authHeaders);
-    // A body labelled JSON is decoded by its charset; anything else is only sniffed
-    // (after an optional UTF-8 BOM).
-    const raw = jsonType ? decodeBody(res.data, res.contentType, request).text : stripBom(res.data.toString("utf8"));
+    // A body labelled JSON is decoded by its charset; anything else is only sniffed (after an
+    // optional UTF-8 BOM) from its first KiB, and decoded whole only when it may be a JSON status:
+    // a download of 512 MB and more (maxResponseBytes lifted) can't be one string.
+    const head = jsonType ? "" : stripBom(res.data.subarray(0, 1024).toString("utf8"));
+    let raw = jsonType ? decodeBody(res.data, res.contentType, request).text : head;
     // An HTML page (a maintenance or proxy page, a login portal) is not the file either;
     // a ZIP — what GENESIS delivers for every format — always counts as one. Only a
     // download asked for as `format: "html"` may be HTML itself.
@@ -1243,7 +1277,15 @@ export class RequestEngine {
         `${request}: expected a file download, got an HTML page (Content-Type ${cutForMessage(res.contentType) || "none"}); nothing was saved.`,
       );
     }
-    if (!jsonType && !raw.trimStart().startsWith("{")) return res;
+    if (!jsonType) {
+      if (!head.trimStart().startsWith("{")) return res;
+      try {
+        raw = stripBom(res.data.toString("utf8"));
+      } catch (err) {
+        if (isStringTooLong(err)) return res; // too large to be a JSON status: a real file
+        throw err;
+      }
+    }
 
     let parsed: unknown;
     try {
