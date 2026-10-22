@@ -280,3 +280,25 @@ test("stdout to a regular file gets every byte or an error: a short write is nev
     assert.deepEqual(piped, ["data"]);
   });
 });
+
+test("-o refuses the next option as its file name, before any request; ./-name writes a dash-leading file (T13)", async () => {
+  await inTempDir(async (dir) => {
+    const cwd = process.cwd();
+    process.chdir(dir);
+    try {
+      for (const argv of [["hello", "-o", "--compact"], ["--output=-v", "hello"], ["-o", "-f", "hello"]]) {
+        const cli = makeCli();
+        assert.equal(await run(argv, cli.deps), 2, argv.join(" "));
+        assert.equal(cli.mt.calls.length, 0, argv.join(" "));
+        assert.match(cli.err.join("\n"), /looks like a missing value — "-[-a-z]+" is the next option/, argv.join(" "));
+        assert.match(cli.err.join("\n"), /\.\/-name/, argv.join(" "));
+      }
+      assert.deepEqual(readdirSync(dir), [], "no file named after an option");
+      const cli = makeCli();
+      assert.equal(await run(["--compact", "-o", "./-v.json", "hello"], cli.deps), 0, cli.err.join("\n"));
+      assert.deepEqual(JSON.parse(readFileSync(join(dir, "-v.json"), "utf8")), fx.whoami);
+    } finally {
+      process.chdir(cwd);
+    }
+  });
+});

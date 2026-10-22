@@ -18,7 +18,7 @@ import {
   parseHeaderValue,
   parsePassword,
   parseSecret,
-  parseNonEmpty,
+  parseOutputPath,
   parseBaseUrl,
 } from "./shared.js";
 import { registerHelloCommands } from "./commands/hello.js";
@@ -132,7 +132,7 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
       parseLogFormat,
     )
     .option("--compact", "print JSON on a single line instead of pretty-printed")
-    .option("-o, --output <file>", "write output (JSON, or a download) to this file; `-` means stdout", parseNonEmpty)
+    .option("-o, --output <file>", "write output (JSON, or a download) to this file; `-` means stdout (a name starting with a dash: ./-name)", parseOutputPath)
     .option("--force", "overwrite the --output file if it already exists")
     .showHelpAfterError();
 

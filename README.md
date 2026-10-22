@@ -165,7 +165,8 @@ regstat data tablefile 12411-01-01-4 --region-key "08*" --format ffcsv -o bevoel
 
 Every command prints the API's JSON envelope (including the `Copyright`
 attribution and a `Status` object). `-o <file>` writes it (or a download) to a
-file instead; `-o -` means stdout. See **[Usage.md](https://github.com/maschinenlesbar-org/regionalstatistik-cli/blob/main/Usage.md)** for the full
+file instead; `-o -` means stdout. Any other value starting with a dash is refused as the next
+option, so a file whose name starts with a dash is written as `./-name`. See **[Usage.md](https://github.com/maschinenlesbar-org/regionalstatistik-cli/blob/main/Usage.md)** for the full
 command reference and **[GLOSSARY.md](https://github.com/maschinenlesbar-org/regionalstatistik-cli/blob/main/GLOSSARY.md)** for the regional concepts
 (AGS/ARS keys, regionale Tiefe, Kreis/Gemeinde levels, `Status.Code` values).
 
