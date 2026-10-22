@@ -32,9 +32,13 @@ import {
   credentialPairProblem,
   credentialProblem,
   credentialsRequiredProblem,
-  nonBlankProblem,
+  LIST_PARAM_KEYS,
   normalizeText,
+  normalizeToken,
   plainObjectProblem,
+  splitList,
+  textProblem,
+  tokenProblem,
 } from "./validate.js";
 import {
   CATALOGUE_PARAM_KEYS,
@@ -103,27 +107,31 @@ function paramsOf(params: unknown, keys: readonly string[], options: unknown = {
   const copy = { ...(params as object) } as QueryParams;
   assertRequestParams(copy, keys, options as ParamOptions);
   for (const [key, value] of Object.entries(copy)) {
-    if (typeof value === "string") copy[key] = composed(value);
+    if (typeof value === "string") copy[key] = canonical(key, value);
   }
   return copy;
 }
 
 /**
- * A code, selection or other parameter as GENESIS matches it: Unicode NFC (P11). A value
- * typed or pasted in decomposed form ("o" + U+0308, as macOS file names and some
- * clipboards produce) looks identical but matched nothing — live on the destatis host
- * (same GENESIS software), `find "Bevölkerung"` decomposed answered every list `null`,
- * composed 80 tables. Nothing else is changed (no trimming: a code is sent as given).
- * The free-text `find` term is trimmed too (`normalizeText`).
+ * A parameter as GENESIS matches it (D8 of the 2026-10-21 round; checked first by
+ * `assertRequestParams`): a code, selection, year or key trimmed and in Unicode NFC
+ * (`normalizeToken`); the `find` term likewise (`normalizeText`); a comma-separated list
+ * (`contents`) item by item. A value typed or pasted in decomposed form ("o" + U+0308, as
+ * macOS file names and some clipboards produce) looks identical but matched nothing — live on
+ * the destatis host (same GENESIS software), `find "Bevölkerung"` decomposed answered every
+ * list `null`, composed 80 tables — and a code pasted with a trailing newline answered Status
+ * 104, "nothing found".
  */
-function composed(value: string): string {
-  return value.normalize("NFC");
+function canonical(key: string, value: string): string {
+  if (key === "term") return normalizeText(value);
+  if (LIST_PARAM_KEYS.includes(key)) return splitList(value).map(normalizeToken).join(",");
+  return normalizeToken(value);
 }
 
 /** Validate a request object's required `name` (the object code) and its parameters. */
 function named(name: string, params: unknown, keys: readonly string[], options: unknown): QueryParams {
-  assertValid("name", name, nonBlankProblem);
-  return { name: composed(name), ...paramsOf(params, keys, options) } as QueryParams;
+  assertValid("name", name, tokenProblem);
+  return { name: normalizeToken(name), ...paramsOf(params, keys, options) } as QueryParams;
 }
 
 /** Options for the Regionalstatistik client (engine options plus credentials). */
@@ -350,10 +358,9 @@ export class RegionalstatistikClient {
    */
   async find(params: FindParams, options: ParamOptions = {}): Promise<FindResponse> {
     assertValid("params", params, plainObjectProblem);
-    assertValid("term", params.term, nonBlankProblem);
+    assertValid("term", params.term, textProblem);
+    // The term is free text: trimmed and composed (`normalizeText`, in `paramsOf`).
     const checked = paramsOf(params, FIND_PARAM_KEYS, options);
-    // The term is free text: trimmed as well as composed (`normalizeText`).
-    checked["term"] = normalizeText(params.term);
     return postJson(this.engine, `${API}/find/find`, checked, () => this.requireAuth());
   }
 }

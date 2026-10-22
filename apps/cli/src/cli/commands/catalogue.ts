@@ -6,7 +6,7 @@ import { Option, type Command } from "commander";
 import type { CliDeps } from "../io.js";
 import type { RegionalstatistikClient } from "@maschinenlesbar.org/regionalstatistik-client/internal/client";
 import { CRITERIA, type CatalogueParams } from "@maschinenlesbar.org/regionalstatistik-client/internal/params";
-import { action, commonListParams, parseNonEmpty, renderJson } from "../shared.js";
+import { action, commonListParams, parseToken, renderJson } from "../shared.js";
 
 type CatalogueFn = (client: RegionalstatistikClient, params: CatalogueParams) => Promise<unknown>;
 
@@ -52,13 +52,13 @@ export function registerCatalogueCommands(program: Command, deps: CliDeps): void
     cat
       .command(sub.name)
       .description(sub.desc)
-      .argument("[selection]", "code selection, `*` wildcard ok (e.g. `12411*`)", parseNonEmpty)
-      .option("--area <area>", "data area (default server-side; try `all`)", parseNonEmpty)
+      .argument("[selection]", "code selection, `*` wildcard ok (e.g. `12411*`)", parseToken)
+      .option("--area <area>", "data area (default server-side; try `all`)", parseToken)
       .addOption(
         new Option("--search-criterion <c>", "field `selection` matches").choices([...CRITERIA]),
       )
       .addOption(new Option("--sort-criterion <c>", "result sort order").choices([...CRITERIA]))
-      .option("--type <type>", "object subtype filter", parseNonEmpty)
+      .option("--type <type>", "object subtype filter", parseToken)
       .action(
         action(deps, async ({ client, global, opts }, [selection]) => {
           renderJson(deps, global, await sub.run(client, buildParams(opts, selection, global)));

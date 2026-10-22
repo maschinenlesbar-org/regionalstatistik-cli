@@ -17,7 +17,7 @@ import {
   type DataFileParams,
   type DataTableParams,
 } from "@maschinenlesbar.org/regionalstatistik-client/internal/params";
-import { action, parseBoundedInt, parseNonEmpty, renderJson, renderRaw } from "../shared.js";
+import { action, parseBoundedInt, parseList, parseToken, renderJson, renderRaw } from "../shared.js";
 import type { GlobalOptions } from "../shared.js";
 
 type JsonFn = (c: RegionalstatistikClient, name: string, p: DataTableParams) => Promise<unknown>;
@@ -40,25 +40,25 @@ const FILE_SUBS: { name: string; desc: string; run: FileFn }[] = [
 /** Add the shared data-selection filter options to a command. */
 function addDataOptions(cmd: Command): Command {
   cmd
-    .option("--area <area>", "data area", parseNonEmpty)
-    .option("--start-year <year>", "earliest year (YYYY)", parseNonEmpty)
-    .option("--end-year <year>", "latest year (YYYY)", parseNonEmpty)
+    .option("--area <area>", "data area", parseToken)
+    .option("--start-year <year>", "earliest year (YYYY)", parseToken)
+    .option("--end-year <year>", "latest year (YYYY)", parseToken)
     .option(
       "--timeslices <n>",
       "number of time slices from the end",
       parseBoundedInt(0, Number.MAX_SAFE_INTEGER),
     )
-    .option("--region-var <code>", "regional level variable (e.g. KREISE, GEMEIN)", parseNonEmpty)
-    .option("--region-key <key>", "regional key: AGS/ARS code(s), `*` wildcard ok (e.g. `08*`, `08221`)", parseNonEmpty)
-    .option("--contents <labels>", "restrict to these value labels (comma-separated)", parseNonEmpty)
-    .option("--stand <date>", "only data newer than this date (DD.MM.YYYY)", parseNonEmpty)
+    .option("--region-var <code>", "regional level variable (e.g. KREISE, GEMEIN)", parseToken)
+    .option("--region-key <key>", "regional key: AGS/ARS code(s), `*` wildcard ok (e.g. `08*`, `08221`)", parseToken)
+    .option("--contents <labels>", "restrict to these value labels (comma-separated)", parseList)
+    .option("--stand <date>", "only data newer than this date (DD.MM.YYYY)", parseToken)
     .option("--structure", "include the dimension structure tree")
     .option("--transpose", "transpose rows and columns")
     .option("--compress", "compress repeated labels");
   for (let i = 1; i <= 5; i++) {
     cmd
-      .option(`--class-var${i} <code>`, `classifying variable ${i} code`, parseNonEmpty)
-      .option(`--class-key${i} <key>`, `classifying key ${i} (value selection)`, parseNonEmpty);
+      .option(`--class-var${i} <code>`, `classifying variable ${i} code`, parseToken)
+      .option(`--class-key${i} <key>`, `classifying key ${i} (value selection)`, parseToken);
   }
   return cmd;
 }
@@ -107,7 +107,7 @@ export function registerDataCommands(program: Command, deps: CliDeps): void {
     const cmd = data
       .command(sub.name)
       .description(sub.desc)
-      .argument("<name>", "object code (must be non-empty)", parseNonEmpty);
+      .argument("<name>", "object code (must be non-empty)", parseToken);
     addDataOptions(cmd).action(
       action(deps, async ({ client, global, opts }, [name]) => {
         renderJson(deps, global, await sub.run(client, name!, buildDataParams(opts, global)));
@@ -119,7 +119,7 @@ export function registerDataCommands(program: Command, deps: CliDeps): void {
     const cmd = data
       .command(sub.name)
       .description(sub.desc)
-      .argument("<name>", "object code (must be non-empty)", parseNonEmpty)
+      .argument("<name>", "object code (must be non-empty)", parseToken)
       .addOption(new Option("--format <fmt>", "download format").choices([...DATA_FILE_FORMATS]));
     addDataOptions(cmd).action(
       action(deps, async ({ client, global, opts }, [name]) => {

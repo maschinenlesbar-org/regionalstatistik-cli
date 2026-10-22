@@ -5,7 +5,7 @@ import type { Command } from "commander";
 import type { CliDeps } from "../io.js";
 import type { RegionalstatistikClient } from "@maschinenlesbar.org/regionalstatistik-client/internal/client";
 import type { MetadataParams } from "@maschinenlesbar.org/regionalstatistik-client/internal/params";
-import { action, parseNonEmpty, renderJson } from "../shared.js";
+import { action, parseToken, renderJson } from "../shared.js";
 
 type MetadataFn = (
   client: RegionalstatistikClient,
@@ -32,8 +32,8 @@ export function registerMetadataCommands(program: Command, deps: CliDeps): void 
     meta
       .command(sub.name)
       .description(sub.desc)
-      .argument("<name>", "object code (must be non-empty)", parseNonEmpty)
-      .option("--area <area>", "data area", parseNonEmpty)
+      .argument("<name>", "object code (must be non-empty)", parseToken)
+      .option("--area <area>", "data area", parseToken)
       .action(
         action(deps, async ({ client, global, opts }, [name]) => {
           const params: MetadataParams = {};

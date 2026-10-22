@@ -22,7 +22,11 @@ import {
   CREDENTIALS_REQUIRED_PROBLEM,
   headerValueProblem,
   intRangeProblem,
+  listProblem,
   nonBlankProblem,
+  splitList,
+  textProblem,
+  tokenProblem,
   type Problem,
 } from "@maschinenlesbar.org/regionalstatistik-client/internal/validate";
 import type { Language } from "@maschinenlesbar.org/regionalstatistik-client/internal/params";
@@ -55,9 +59,39 @@ function check<T>(value: T, problem: Problem<T>): T {
   return value;
 }
 
-/** commander value-parser: a non-empty (after trimming) string — the library's rule. */
+/** commander value-parser: a non-empty (after trimming) string, for a file path (`-o`). */
 export function parseNonEmpty(value: string): string {
   return check(value, nonBlankProblem);
+}
+
+/**
+ * commander value-parser for free text (the `find` term): the library's `textProblem` (not
+ * blank or only invisible, no control or format character but ZWJ/ZWNJ, no half character), as
+ * a usage error before any request. The library trims and composes what it sends
+ * (`normalizeText`), so the CLI passes the value on as typed.
+ */
+export function parseText(value: string): string {
+  return check(value, textProblem);
+}
+
+/**
+ * commander value-parser for a code GENESIS compares exactly (an object code, a selection, an
+ * area, a year, a date, a regional or classifying variable or key): the library's
+ * `tokenProblem`, as a usage error before any request. The library trims and composes what it
+ * sends (`normalizeToken`).
+ */
+export function parseToken(value: string): string {
+  return check(value, tokenProblem);
+}
+
+/**
+ * commander value-parser for a comma-separated list (`--contents A,B`): split with the library's
+ * `splitList`, each item checked by `listProblem` (a blank or invisible item is refused, never
+ * dropped). The value goes on as typed; the library canonicalises each item.
+ */
+export function parseList(value: string): string {
+  check(splitList(value), listProblem);
+  return value;
 }
 
 /**

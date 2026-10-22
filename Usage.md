@@ -102,7 +102,9 @@ Without `--category` no category is sent and GENESIS searches every object type
 (`all`). `--pagelength` bounds the result count. Returns parallel arrays
 (`Tables`/`Statistics`/`Cubes`/`Timeseries`/`Variables`), each `null` when not
 searched. The term goes out without surrounding whitespace and in composed Unicode
-(NFC), as GENESIS matches it; a blank one is a usage error (exit 2) before any request.
+(NFC), as GENESIS matches it; a blank one (also one of only invisible characters), or one
+holding a control or invisible character (a zero-width space, a soft hyphen; ZWJ in an emoji is
+fine), is a usage error (exit 2) before any request.
 
 ```bash
 regstat find "bevölkerung kreise" --category tables --pagelength 20
@@ -152,7 +154,10 @@ table as a `";"`-delimited CSV string in `Object.Content` (German number
 format — comma decimals; `.` `-` `x` `/` `…` are value-status placeholders).
 
 Selection filters (narrow large tables — see the too-large note below). The
-**regional filters are the point of this database**:
+**regional filters are the point of this database**. The object code and every filter value go
+out without surrounding whitespace and in composed Unicode (NFC); a blank value, or one holding
+an invisible or control character (a zero-width space, a soft hyphen), is a usage error (exit 2)
+before any request:
 
 | Flag | GENESIS param |
 |---|---|
@@ -160,7 +165,7 @@ Selection filters (narrow large tables — see the too-large note below). The
 | `--start-year <YYYY>` · `--end-year <YYYY>` | `startyear` / `endyear` |
 | `--timeslices <n>` | `timeslices` (from the latest period back) |
 | `--class-var1..5 <code>` · `--class-key1..5 <key>` | `classifyingvariable{n}` / `classifyingkey{n}` |
-| `--contents <labels>` | `contents` (comma-separated) |
+| `--contents <labels>` | `contents` (comma-separated; each label is trimmed, an empty one is a usage error) |
 | `--stand <DD.MM.YYYY>` | `stand` (only newer data) |
 | `--structure` · `--transpose` · `--compress` | `structureinformation` / `transpose` / `compress` |
 

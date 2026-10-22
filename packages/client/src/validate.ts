@@ -36,21 +36,133 @@ export function assertValid<T>(name: string, value: T, problem: Problem<T>): T {
  * A free-text value as GENESIS matches it (the `find` term): without surrounding
  * whitespace (a term pasted with a trailing space or newline matched nothing) and in
  * composed Unicode, NFC (a decomposed "Bevölkerung", o plus U+0308 as macOS file names
- * produce, matched nothing — P11). Inner whitespace is kept. Codes, selections, regional
- * keys, dates and credentials never go through it.
+ * produce, matched nothing — P11). Inner whitespace is kept. Check it with
+ * {@link textProblem} first. Credentials never go through it.
  */
 export function normalizeText(value: string): string {
   return value.trim().normalize("NFC");
 }
 
 /**
- * A required or given text value must not be blank (`""` or whitespace only):
- * GENESIS reads an empty parameter as "no filter", so a blank filter would
- * silently return unfiltered data. A non-string counts as missing.
+ * A required or given value must not be blank (`""` or whitespace only): GENESIS reads an
+ * empty parameter as "no filter", so a blank filter would silently return unfiltered data. A
+ * non-string counts as missing. Used for header values; a request value goes through
+ * {@link textProblem} or {@link tokenProblem}, which also count invisible characters as blank.
  */
 export function nonBlankProblem(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() !== "" ? undefined : "Expected a non-empty value.";
 }
+
+/** Characters that never make a value non-blank: whitespace, controls, format characters, combining marks. */
+const INVISIBLE = /[\s\p{Cc}\p{Cf}\p{M}]/gu;
+
+/** A lone surrogate: half of a character, which the form encoder would send as U+FFFD. */
+const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
+
+/**
+ * True when nothing in `value` would match anything: it holds only whitespace, control and
+ * format characters (a zero-width space, a soft hyphen) and combining marks. Such a value reads
+ * as "no filter" upstream, or matches nothing, so it is refused as blank.
+ */
+function isBlank(value: string): boolean {
+  return value.replace(INVISIBLE, "") === "";
+}
+
+/** `U+200B` for the first character of `text` that `pattern` matches. */
+function codePointOf(text: string, pattern: RegExp): string {
+  const ch = pattern.exec(text)?.[0] ?? "";
+  return `U+${(ch.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, "0")}`;
+}
+
+/** A control character inside a text filter: C0 and C1, but not TAB, LF or CR (whitespace in a pasted phrase). */
+const TEXT_CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/;
+
+/** A format character inside a text filter, but not ZWNJ/ZWJ (U+200C/U+200D), which some scripts and emoji need. */
+const TEXT_FORMAT = /(?![\u200c\u200d])\p{Cf}/u;
+
+/**
+ * Why `value` cannot be sent as free text (the `find` term), or undefined when it can. Refused,
+ * before any request, as GENESIS would match nothing or everything:
+ * - a value that is blank once trimmed (Unicode whitespace, U+00A0 included), or that holds only
+ *   invisible characters and combining marks (`isBlank`): an empty term reads as "no filter";
+ * - a lone surrogate (half of a character, sent as U+FFFD);
+ * - a control character (but TAB, LF and CR) or a format character (a zero-width space, a soft
+ *   hyphen, a bidi control; ZWNJ and ZWJ are allowed): pasted along, it makes the search find
+ *   nothing.
+ * The reason quotes the value with every invisible character escaped (`quoteValue`).
+ */
+export function textProblem(value: unknown): string | undefined {
+  if (typeof value !== "string") return "Expected a string.";
+  if (isBlank(value)) return "Expected a non-empty value.";
+  if (LONE_SURROGATE.test(value)) return `${quoteValue(value)} contains half of a character (a lone surrogate).`;
+  if (TEXT_CONTROL.test(value)) return `${quoteValue(value)} contains a control character (${codePointOf(value, TEXT_CONTROL)}).`;
+  if (TEXT_FORMAT.test(value)) return `${quoteValue(value)} contains an invisible character (${codePointOf(value, TEXT_FORMAT)}).`;
+  return undefined;
+}
+
+/** A control or format character in a token (after trimming): every Cc and every Cf. */
+const TOKEN_INVISIBLE = /[\p{Cc}\p{Cf}]/u;
+
+/**
+ * Why `value` cannot be sent as a token, or undefined when it can. A token is a value GENESIS
+ * compares as a code: an object code (`name`), a `selection`, an area, a year, a date, a
+ * regional or classifying variable or key. The rules apply to the value with surrounding
+ * whitespace trimmed, as it is sent ({@link normalizeToken}): not blank (and not only invisible
+ * characters or combining marks), no lone surrogate, and no control or format character at all
+ * (a zero-width space, ZWJ, a soft hyphen, a bidi control), since an invisible character in a
+ * code only ever makes it match nothing (GENESIS then answers Status 104, "nothing found").
+ * Inner spaces are allowed (a `selection` searched by content). The reason quotes the value
+ * visibly. The value lists (`language`, `category`, the criteria, `format`) are checked against
+ * their known values instead (`oneOfProblem`).
+ */
+export function tokenProblem(value: unknown): string | undefined {
+  if (typeof value !== "string") return "Expected a string.";
+  if (isBlank(value)) return "Expected a non-empty value.";
+  const token = value.trim();
+  if (LONE_SURROGATE.test(token)) return `${quoteValue(value)} contains half of a character (a lone surrogate).`;
+  if (TOKEN_INVISIBLE.test(token)) {
+    return `${quoteValue(value)} contains an invisible or control character (${codePointOf(token, TOKEN_INVISIBLE)}).`;
+  }
+  return undefined;
+}
+
+/** A token as it is sent: trimmed and in composed Unicode (NFC). Check it with {@link tokenProblem} first. */
+export function normalizeToken(value: string): string {
+  return value.trim().normalize("NFC");
+}
+
+/**
+ * The items of a comma-separated list (`contents`, `--contents A,B`), as typed: each item is
+ * checked (`listProblem`) and canonicalised (`normalizeToken`) on its own, so `"A, B"` sends
+ * `A,B`, and `"A,,B"`, `"A,"` and `","` are refused rather than sent with an empty item.
+ */
+export function splitList(value: string): string[] {
+  return value.split(",");
+}
+
+/**
+ * Why `items` cannot be sent as a list, or undefined when it can: not an array of strings, no
+ * item at all, or an item that `itemProblem` refuses (by default {@link tokenProblem}: a blank
+ * item is refused, never dropped). The reason names the item.
+ */
+export function listProblem(items: readonly string[], itemProblem: Problem<unknown> = tokenProblem): string | undefined {
+  if (!Array.isArray(items)) return "Expected a list of strings.";
+  if (items.length === 0) return "Expected at least one value.";
+  for (let i = 0; i < items.length; i++) {
+    const problem = itemProblem(items[i]);
+    if (problem !== undefined) return items.length === 1 ? problem : `item ${i + 1} of ${items.length}: ${problem}`;
+  }
+  return undefined;
+}
+
+/** A comma-separated list parameter (`contents`): a string whose items pass {@link listProblem}. */
+function commaListProblem(value: unknown): string | undefined {
+  return typeof value === "string" ? listProblem(splitList(value)) : "Expected a string.";
+}
+
+/** The parameters GENESIS takes as a comma-separated list. */
+export const LIST_PARAM_KEYS: readonly string[] = ["contents"];
+
 
 /**
  * A value must be one of `allowed` (exact, case-sensitive match). The reason
@@ -85,17 +197,13 @@ const RULES: Readonly<Record<string, Problem<unknown>>> = {
   searchcriterion: oneOfProblem(CRITERIA),
   sortcriterion: oneOfProblem(CRITERIA),
   format: oneOfProblem(DATA_FILE_FORMATS),
+  term: textProblem,
+  contents: commaListProblem,
 };
 
 /** A `true`/`false` parameter (`structureinformation`, `compress`, `transpose`). */
 export function booleanProblem(value: unknown): string | undefined {
   return typeof value === "boolean" ? undefined : "Expected true or false.";
-}
-
-/** A free-text parameter (`selection`, `startyear`, `classifyingkey1`, …): a non-blank string. */
-export function textProblem(value: unknown): string | undefined {
-  if (typeof value !== "string") return "Expected a string.";
-  return nonBlankProblem(value);
 }
 
 /** Keys that are never a parameter: they would reach Object.prototype in a careless consumer. */
@@ -105,8 +213,10 @@ const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
  * Check the parameters of one GENESIS request before it is sent. `undefined`
  * and `null` mean "omitted" and are never sent. A parameter with its own rule
  * (`pagelength`, `timeslices`, `language`, `category`, the criteria, `format`, …)
- * must pass it, `structureinformation`/`compress`/`transpose` must be a boolean;
- * every other parameter a non-blank string. GENESIS takes one value per parameter,
+ * must pass it, `structureinformation`/`compress`/`transpose` must be a boolean,
+ * `term` free text ({@link textProblem}), `contents` a comma-separated list
+ * ({@link listProblem}); every other parameter a token ({@link tokenProblem}: not blank or
+ * invisible, no control or format character). GENESIS takes one value per parameter,
  * so an array is rejected (it went out as repeated keys, of which the server read
  * one). Throws `RegionalstatistikValidationError` naming the parameter.
  *
@@ -136,11 +246,11 @@ export function assertRequestParams(
     else if ((BOOLEAN_PARAM_KEYS as readonly string[]).includes(key)) assertValid(key, value, booleanProblem);
     else if (allowed !== undefined && !allowed.includes(key)) {
       // An unknown key let through by allowUnknownParams: a plain scalar only.
-      if (typeof value === "string") assertValid(key, value, nonBlankProblem);
+      if (typeof value === "string") assertValid(key, value, tokenProblem);
       else if (!(typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value)))) {
         throw new RegionalstatistikValidationError(`Invalid ${key}: Expected a string, number or boolean.`);
       }
-    } else assertValid(key, value, textProblem);
+    } else assertValid(key, value, tokenProblem);
   }
 }
 

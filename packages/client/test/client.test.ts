@@ -165,9 +165,9 @@ test("K6: the find term goes out trimmed and in NFC; a blank one is refused befo
   }
   await c.find({ term: " a  b " });
   assert.equal(bodyOf(mt.last()).get("term"), "a  b");
-  // Codes are sent as given (NFC only, never trimmed).
+  // Codes go out trimmed and in NFC too (D8 of 2026-10-21; they used to be sent as given).
   await c.catalogue.tables({ selection: " 12411* " });
-  assert.equal(bodyOf(mt.last()).get("selection"), " 12411* ");
+  assert.equal(bodyOf(mt.last()).get("selection"), "12411*");
   const before = mt.calls.length;
   for (const term of ["", " ", "\n\t", "\u00a0", "\u3000"]) {
     await assert.rejects(c.find({ term }), RegionalstatistikValidationError, JSON.stringify(term));
@@ -198,5 +198,46 @@ test("a refused value is quoted visibly: an invisible or format character is esc
     assert.ok(!err.message.includes(zwsp), err.message);
     return true;
   });
+  assert.equal(mt.calls.length, 0);
+});
+
+test("codes and filter values go out trimmed and in NFC, a list item by item; an invisible character is refused (D8)", async () => {
+  const mt = makeMockTransport(() => jsonResponse(fx.dataTable));
+  const c = new RegionalstatistikClient({ token: "0123456789abcdef0123456789abcdef", transport: mt.transport });
+  await c.data.table(" 12411-0001\n", { startyear: " 2020 ", contents: " BEV001 , é ", regionalkey: "05 * " });
+  const body = bodyOf(mt.calls[0]!);
+  assert.equal(body.get("name"), "12411-0001");
+  assert.equal(body.get("startyear"), "2020");
+  assert.equal(body.get("contents"), "BEV001,é");
+  assert.equal(body.get("regionalkey"), "05 *");
+  for (const [name, params] of [
+    ["12411​-0001", {}],
+    ["12411-0001", { contents: "A,,B" }],
+    ["12411-0001", { classifyingkey1: "­" }],
+    ["́", {}],
+  ] as const) {
+    await assert.rejects(c.data.table(name, params), RegionalstatistikValidationError, name);
+  }
+  // Free text keeps ZWJ (an emoji sequence) and inner whitespace.
+  await c.find({ term: " a‍b  c " });
+  assert.equal(bodyOf(mt.calls[1]!).get("term"), "a‍b  c");
+  assert.equal(mt.calls.length, 2);
+});
+
+test("a non-string term or object code is called a wrong type, not empty (01-1)", async () => {
+  // A JavaScript caller passing a number (a year as term, a numeric code as name) was told the
+  // value was empty; every other parameter already said "Expected a string.".
+  const mt = makeMockTransport(() => jsonResponse(fx.findResult));
+  const c = new RegionalstatistikClient({ token: "0123456789abcdef0123456789abcdef", transport: mt.transport });
+  for (const term of [5, true, {}, ["x"]]) {
+    await assert.rejects(c.find({ term } as never), (err: Error) => {
+      assert.ok(err instanceof RegionalstatistikValidationError);
+      assert.equal(err.message, "Invalid term: Expected a string.");
+      return true;
+    });
+  }
+  for (const call of [() => c.metadata.table(5 as never), () => c.data.table(8221 as never)]) {
+    await assert.rejects(call(), (err: Error) => err instanceof RegionalstatistikValidationError && err.message === "Invalid name: Expected a string.");
+  }
   assert.equal(mt.calls.length, 0);
 });

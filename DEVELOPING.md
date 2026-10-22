@@ -113,12 +113,26 @@ transport and assert the same outcome.
 
 What the library rejects:
 
-- **Blank text** (`nonBlankProblem`, `assertRequestParams`): a blank (`""` or
-  whitespace-only) object `name`, `find` `term`, or any given string parameter
-  (`selection`, `area`, `type`, `regionalkey`, `classifyingkey1`, …).
-  GENESIS reads an empty parameter as "no filter", so it would silently return
-  unfiltered data. `undefined` still means "omitted". The CLI's `parseNonEmpty`
-  calls the same rule.
+- **Blank, invisible and half characters** (D8 of the 2026-10-21 round; `assertRequestParams`).
+  Every value that goes into a request passes one rule for its kind, and the CLI's parser for
+  it calls the same rule:
+  - the `find` `term` is free text (`textProblem`, CLI `parseText`): not blank — `""`,
+    whitespace, or only invisible characters (Cc, Cf) and combining marks — no lone surrogate,
+    no control character but TAB/LF/CR, no format character but ZWJ/ZWNJ;
+  - the object `name` and every other string parameter (`selection`, `area`, `type`,
+    `startyear`, `stand`, `regionalvariable`, `regionalkey`, `classifyingkey1`, …) is a code
+    (`tokenProblem`, CLI `parseToken`): not blank in the same sense, no lone surrogate, no
+    control or format character at all (a zero-width space, a soft hyphen, a bidi control only
+    ever make a code match nothing — GENESIS then answers Status 104, "nothing found"); inner
+    spaces are fine;
+  - `contents` is a comma-separated list (`splitList` + `listProblem`, CLI `parseList`): each
+    item is a code, and an empty item (`A,,B`, `A,`) refuses the whole list, naming the item.
+  A non-string `term` or `name` from a JavaScript caller is `Expected a string.`, as for every
+  other parameter (it read "Expected a non-empty value." before; 01-1 of 2026-10-21).
+  GENESIS reads an empty parameter as "no filter", so a blank one would silently return
+  unfiltered data. `undefined` still means "omitted". A refusal quotes the value with its
+  invisible characters escaped (`quoteValue`: `"a\u200bb" contains an invisible or control
+  character (U+200B).`).
 - **Unknown parameter keys, lists and wrong value types** (`assertRequestParams`
   with the endpoint's key list, P10): GENESIS ignores a parameter it does not know
   and answers unfiltered, so `find`, `catalogue.*`, `metadata.*` and `data.*` accept
@@ -244,11 +258,12 @@ What the library rejects:
   guard of its own: `action()` rewords this error with the flags, env vars and
   signup URL (exit 2, message unchanged).
 
-Text is sent in Unicode NFC (P11): every string parameter and the object `name` are
-normalised (`composed` in `client.ts`), nothing else — no trimming, codes, selections,
-regional keys and dates go out as given. The one free-text input, the `find` term, is also
-trimmed (`normalizeText` in `validate.ts`, exported: `trim()` then NFC; inner whitespace
-kept), since a term pasted with a trailing space or newline matched nothing. A decomposed umlaut (macOS clipboards, file names) looks the same but matches
+Every value is sent without surrounding whitespace and in Unicode NFC (P11, D8; `canonical` in
+`client.ts`): the `find` term by `normalizeText`, the object `name` and every other string
+parameter by `normalizeToken` (both exported: `trim()` then NFC; inner whitespace kept), and
+`contents` item by item (`A , B` goes out as `A,B`). A term or a code pasted with a trailing
+space or newline matched nothing (a code answered Status 104); until the 2026-10-21 round codes,
+selections, regional keys and dates went out as given. A decomposed umlaut (macOS clipboards, file names) looks the same but matches
 nothing: live on the sibling destatis host (same GENESIS software, 2026-10-06), `find`
 with a decomposed "Bevölkerung" answered every list `null`, the composed term 80
 tables. Credentials are never normalised.
@@ -648,9 +663,13 @@ ships — `DATA_LICENSE.md`, `LICENSING.md`, `CONTRIBUTING.md`; any other docume
 linked as `https://github.com/maschinenlesbar-org/regionalstatistik-cli/blob/main/<path>`).
 
 From the kit rollout of 2026-10-21: P24 (`conformance-p24-input-corpus`: a corpus of tricky
-values through every text filter, on the CLI and in the library — here the `find` term, sent
-trimmed and in NFC or refused, with a test token from `REGIONALSTATISTIK_API_TOKEN` on the CLI
-side; no id goes into a request path, so the id list is empty), P25
+values through every text filter, code and list, on the CLI and in the library — here the `find`
+term, the object codes and the filter values, sent trimmed and in NFC or refused (a value of only
+invisible characters or with a control, format or half character included, its refusal showing
+the character escaped), and `--contents` item by item; GENESIS takes its parameters in the form
+body, so the adapter reads them from the bodies the CLI and the library sent, with a test token
+from `REGIONALSTATISTIK_API_TOKEN` on the CLI side; no value goes into a request path, so the codes
+are text inputs and the id list is empty), P25
 (`conformance-p25-response-corpus`: a number JSON can't carry exactly, or an empty answer, is
 a parse error, exit 1, read from a `find` envelope), P27 (`conformance-p27-big-and-odd-answers`:
 a large flat answer prints with `--compact` under a small heap, an answer full of DEL characters

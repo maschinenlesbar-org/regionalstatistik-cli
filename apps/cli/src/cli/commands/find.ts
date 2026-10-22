@@ -2,7 +2,7 @@
 
 import { Option, type Command } from "commander";
 import type { CliDeps } from "../io.js";
-import { action, commonListParams, parseNonEmpty, renderJson } from "../shared.js";
+import { action, commonListParams, parseText, renderJson } from "../shared.js";
 import { FIND_CATEGORIES, type FindCategory } from "@maschinenlesbar.org/regionalstatistik-client/internal/params";
 
 export function registerFindCommand(program: Command, deps: CliDeps): void {
@@ -12,7 +12,7 @@ export function registerFindCommand(program: Command, deps: CliDeps): void {
       "Full-text search across statistics, tables, cubes, variables and time series " +
         '(e.g. `regstat find "bevölkerung kreise" --category tables`)',
     )
-    .argument("<term>", "search term (must be non-empty)", parseNonEmpty)
+    .argument("<term>", "search term (must be non-empty)", parseText)
     .addOption(
       // No .default(): an omitted --category is not sent, exactly like the library,
       // and GENESIS searches every object type.
