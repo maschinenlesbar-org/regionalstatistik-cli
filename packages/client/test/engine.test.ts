@@ -929,6 +929,30 @@ test("bigIntegerKeys: a declared member's number is its exact literal as a strin
   assert.deepEqual(scanNumbers('{"a":1}'), { json: '{"a":1}', inexact: undefined });
 });
 
+test("a number with a long run of zeros is refused in linear time (security audit 2026-10-27, A)", async () => {
+  // The trailing-zero regex `/0+$/` tried a match at every zero of a run that doesn't end the
+  // digits: 1.<100 000 zeros>1e300 took about 15 s, after the answer was in (past --timeout).
+  const literal = `1.${"0".repeat(100_000)}1e300`;
+  let start = performance.now();
+  assert.equal(scanNumbers(`[${literal}]`).inexact, literal);
+  assert.ok(performance.now() - start < 1000, `scanNumbers: ${Math.round(performance.now() - start)} ms`);
+  // The same through a request: one clean parse error, the literal cut in the message.
+  const e = new RequestEngine({ transport: makeMockTransport(() => rawResponse(`{"Username":"x","n":${literal}}`, "application/json")).transport });
+  start = performance.now();
+  await assert.rejects(e.getJson("/helloworld/whoami"), (err) => {
+    assert.ok(err instanceof RegionalstatistikParseError);
+    assert.match(err.message, /cannot be represented exactly\.$/);
+    assert.ok(err.message.length < 1000, "the message quotes the literal cut");
+    return true;
+  });
+  assert.ok(performance.now() - start < 1000, `getJson: ${Math.round(performance.now() - start)} ms`);
+  // Same digits and exponent as before: zeros at both ends are still dropped, inner ones kept.
+  assert.equal(firstInexactNumber(`[12345678901234567890.0000]`), "12345678901234567890.0000");
+  assert.equal(firstInexactNumber(`[9007199254740992.000]`), undefined);
+  assert.equal(firstInexactNumber(`[1${"0".repeat(400)}]`), `1${"0".repeat(400)}`);
+  assert.equal(firstInexactNumber(`[1e300, 1000e297, 0.001e303, 0e0, 0.000]`), undefined);
+});
+
 test("onRetry is called once per retry, with the event fields, right before the sleep", async () => {
   const log: string[] = [];
   const events: unknown[] = [];
