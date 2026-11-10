@@ -253,10 +253,16 @@ What the library rejects:
   full answer. Every other server value an own message quotes (a `Status.Type` in every
   answer shape, a charset, a download's Content-Type in the library's errors and in the
   CLI's `Wrote … (Content-Type: …)` record) goes through the same `cutForMessage`, so `err.message` stays
-  bounded for a library caller. It is also put on one line (`sanitizeServerText`): C0/C1 controls and
-  bidi overrides dropped, every run of whitespace — the live wrong-credentials
-  text's `\n` included — one space, so a server can't split or forge a log
-  record.
+  bounded for a library caller. It is also put on one line (`sanitizeServerText`, engine.ts):
+  it reads at most the first 16 384 characters (`MAX_SERVER_TEXT`), drops whole terminal
+  escape sequences (CSI, OSC and the other control strings, a control string ending at the
+  next introducer), then the C0 controls but whitespace, DEL, C1 and every format character
+  (Cf: bidi overrides, zero-width characters, a soft hyphen), and makes every run of
+  whitespace — the live wrong-credentials text's `\n` included — one space, so a server
+  can't split or forge a log record. Each step is a linear regex replace, so a 16 MB hostile
+  detail costs neither seconds nor the heap. Text built from many pieces of an answer
+  (`wellFormedEscapes`' repairs, `scanNumbers`' quoted members) goes through a `TextBuilder`
+  (errors.ts), joined in batches, so memory follows the text, not the number of pieces.
 - **Half a credential pair** (`credentialPairProblem`): with no token, a
   `username` without a `password` (or the reverse) throws at construction —
   `Invalid credentials: Provide both username and password (or a token).` A lone
