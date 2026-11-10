@@ -8,7 +8,7 @@
 
 import http from "node:http";
 import https from "node:https";
-import { RegionalstatistikNetworkError } from "./errors.js";
+import { RegionalstatistikNetworkError, credentialsIn, redactCredentials } from "./errors.js";
 
 export interface HttpRequest {
   method: string;
@@ -82,6 +82,16 @@ export function timeoutMessage(timeoutMs: number): string {
 export const MAX_TIMEOUT_MS = 2_147_483_647;
 
 /**
+ * `url` for a message, its userinfo redacted; one typed without its scheme (`user:pw@host`,
+ * `TOKEN:@host`) is read as if it had one, since `credentialsIn` finds a userinfo only after a
+ * scheme. This client takes no credentials in a URL; a library caller may still pass one.
+ */
+function shownUrl(url: string): string {
+  const typed = credentialsIn(url);
+  return redactCredentials(url, typed.length > 0 ? typed : credentialsIn(`http://${url}`));
+}
+
+/**
  * Default transport. Resolves with the raw response (including non-2xx) — status
  * interpretation is the client's job. Rejects only on transport-level failures
  * (connection errors, timeouts, malformed URLs). The body is read up to `maxResponseBytes`;
@@ -94,7 +104,7 @@ export const nodeHttpTransport: Transport = (request) =>
     try {
       url = new URL(request.url);
     } catch {
-      reject(new RegionalstatistikNetworkError(`Invalid URL: ${request.url}`));
+      reject(new RegionalstatistikNetworkError(`Invalid URL: ${shownUrl(request.url)}`));
       return;
     }
 
@@ -102,9 +112,10 @@ export const nodeHttpTransport: Transport = (request) =>
     // typed error instead of letting Node throw an opaque ERR_INVALID_PROTOCOL
     // (and so this never reaches the file:/ftp:/etc. drivers).
     if (url.protocol !== "http:" && url.protocol !== "https:") {
-      reject(
-        new RegionalstatistikNetworkError(`Unsupported protocol "${url.protocol}" in URL: ${request.url}`),
-      );
+      // `user:password@host` without a scheme parses with the user name as the scheme: name a
+      // scheme only when the value spells one (`<scheme>://`).
+      const named = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(request.url) ? ` "${url.protocol}"` : "";
+      reject(new RegionalstatistikNetworkError(`Unsupported protocol${named} in URL: ${shownUrl(request.url)}`));
       return;
     }
 
