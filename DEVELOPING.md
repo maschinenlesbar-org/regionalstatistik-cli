@@ -199,8 +199,15 @@ What the library rejects:
   `JSON.stringify` never show them. Every error the engine raises is scrubbed of the
   request's credential values (raw, JSON-, URL- and form-escaped; `redactSecrets`): the
   `message`, `detail` and `body` of a `RegionalstatistikApiError` (a server may echo them —
-  `logincheck` returns the token as `Username`), a transport's error text and the
-  `cause` chain (`scrubThrown` copies an error only when its text carries one).
+  `logincheck` returns the token as `Username`), a transport's error text, an echoed
+  `Content-Type` and the `cause` chain (`scrubThrown` copies an error only when its text
+  carries one). Each value is scrubbed whole, a password with inner spaces included (no
+  word of it is left). Text decoded from a JSON answer (a `detail`, `Status.Content`/`Type`) is
+  scrubbed again after the decode, before it is cleaned and cut: an escape (`\u00e4`, `\"`,
+  every character as `\uXXXX`) hid the credential from the scrub of the text as sent. For
+  the same reason `body` (`scrubBody`) stays as sent unless it is JSON with an escape whose
+  decoded text still holds a credential; then it is the decoded JSON written again
+  (`JSON.stringify`), scrubbed, and `""` for one nested too deeply to write again.
 - **Redaction on output** (`run.ts`, `redactionFor` and `withRedactedOutput`, P1):
   commander echoes rejected values and names unknown commands and options as typed, so
   `run()` wraps `deps.io` and builds the log first. The log replaces the secrets in

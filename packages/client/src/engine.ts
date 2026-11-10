@@ -896,6 +896,33 @@ function scrub(text: string, ctx: RequestContext): string {
 }
 
 /**
+ * An answer body, already scrubbed as sent (`scrub`), as a `RegionalstatistikApiError` keeps it: when it
+ * is JSON with an escape in it, checked decoded too. An escape (`\"`, `\u00e4`, every character
+ * as `\uXXXX`) hides an echoed credential from the scrub of the text as sent, while a caller who
+ * parses `body` sees it. Such a body is kept as the decoded JSON written again (`JSON.stringify`,
+ * one spelling per character, which is the JSON-escaped form `contextOf` lists) with the
+ * credential scrubbed in that spelling. A body that doesn't parse is text nobody decodes and
+ * stays as sent; one too deeply nested to write again is left out ("").
+ */
+function scrubBody(scrubbed: string, ctx: RequestContext): string {
+  if (ctx.secrets.length === 0 || !scrubbed.includes("\\")) return scrubbed;
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(scrubbed);
+  } catch {
+    return scrubbed;
+  }
+  let rewritten: string;
+  try {
+    rewritten = JSON.stringify(decoded);
+  } catch {
+    return "";
+  }
+  const again = scrub(rewritten, ctx);
+  return again === rewritten ? scrubbed : again;
+}
+
+/**
  * A thrown value without the request's credentials: the original when its text carries
  * none, otherwise a copy with them scrubbed (message, name, `code` and the cause chain
  * kept), so logging an error with its causes can't reveal them.
@@ -1195,8 +1222,9 @@ export class RequestEngine {
       }
 
       // Sanitize the server-controlled Content-Type at the source: it is echoed
-      // to stderr by renderRaw, so strip any embedded terminal control chars.
-      const contentType = sanitizeServerText(String(responseHeaders["content-type"] ?? ""));
+      // to stderr by renderRaw and quoted by parse errors, so strip any embedded
+      // terminal control chars, and any echoed credential first.
+      const contentType = sanitizeServerText(scrub(String(responseHeaders["content-type"] ?? ""), ctx));
       if (status < 200 || status >= 300) {
         throw this.toApiError(method, url, status, responseBody, ctx, retryNote, contentType);
       }
@@ -1258,7 +1286,7 @@ export class RequestEngine {
       throw new RegionalstatistikApiError({
         method: "POST",
         url: redactUrl(this.buildUrl(path)),
-        body: scrub(text, ctx),
+        body: scrubBody(scrub(text, ctx), ctx),
         httpStatus: res.status,
         ...(verdict.code !== undefined ? { code: verdict.code } : {}),
         ...(verdict.statusType !== undefined ? { statusType: sanitizeServerText(scrub(verdict.statusType, ctx)) } : {}),
@@ -1350,7 +1378,7 @@ export class RequestEngine {
     throw new RegionalstatistikApiError({
       method: "POST",
       url: redactUrl(url),
-      body: text,
+      body: scrubBody(text, ctx),
       ...(sent !== undefined ? { credentialsSent: sent } : {}),
       ...(code !== undefined ? { code } : {}),
       ...(type !== undefined ? { statusType: type } : {}),
@@ -1451,7 +1479,7 @@ export class RequestEngine {
     throw new RegionalstatistikApiError({
       method,
       url: redactUrl(url),
-      body,
+      body: scrubBody(body, ctx),
       ...(flat ? { httpStatus: 200 } : {}),
       ...(sent !== undefined ? { credentialsSent: sent } : {}),
       ...(code !== undefined ? { code } : {}),
@@ -1522,16 +1550,17 @@ export class RequestEngine {
         }
       }
       // All branches take server-controlled text; strip terminal control chars
-      // before it reaches stderr.
-      if (detail !== undefined) detail = sanitizeServerText(detail);
-      if (statusType !== undefined) statusType = sanitizeServerText(statusType);
+      // before it reaches stderr. A value decoded from JSON is scrubbed again first: an
+      // escape (`\u00e4`, `\"`) hid an echoed credential from the scrub of the text as sent.
+      if (detail !== undefined) detail = sanitizeServerText(scrub(detail, ctx));
+      if (statusType !== undefined) statusType = sanitizeServerText(scrub(statusType, ctx));
     }
     if (note !== undefined) detail = detail === undefined ? note : `${detail} — ${note}`;
     return new RegionalstatistikApiError({
       httpStatus: status,
       url: redactUrl(url),
       method,
-      body: text,
+      body: scrubBody(text, ctx),
       ...(sent !== undefined ? { credentialsSent: sent } : {}),
       ...(code !== undefined ? { code } : {}),
       ...(statusType !== undefined ? { statusType } : {}),

@@ -24,7 +24,7 @@ import {
   cutText,
   toWellFormed,
 } from "../src/errors.js";
-import { sizeLimitMessage } from "../src/http.js";
+import { sizeLimitMessage, type HttpResponse } from "../src/http.js";
 import { makeMockTransport, jsonResponse, rawResponse, bodyOf } from "./helpers.js";
 import * as fx from "./fixtures.js";
 
@@ -1278,4 +1278,107 @@ test("scanNumbers quotes millions of declared members within a small heap", STAR
     `process.stdout.write(String(scanNumbers(json, new Set(["k"])).json.length));`;
   const out = execFileSync(process.execPath, ["--max-old-space-size=128", "--input-type=module", "-e", script], { encoding: "utf8" });
   assert.equal(out, String(n * 10 + 1));
+});
+
+// ---- credentials echoed behind JSON escapes (class D of the 2026-10-27 security audit) ----
+// A password with characters a JSON writer escapes (a quote) or may write as \u00XX (an umlaut).
+const ECHO_PW = "pä\"s's-W0rd";
+const ECHO_LOGINS: Array<[string, Record<string, string>, string[]]> = [
+  ["a token", { username: "T0kenS3cret-0123456789abcdef0123" }, ["T0kenS3cret-0123456789abcdef0123"]],
+  ["a login", { username: "alice-user", password: ECHO_PW }, ["alice-user", ECHO_PW]],
+  // A stored password may hold inner spaces: it is scrubbed whole, no word of it left.
+  ["a password with inner spaces", { username: "alice-user", password: "Kor7ä Bl\"au9 Wiese3" }, ["alice-user", "Kor7ä Bl\"au9 Wiese3"]],
+];
+/** `text` as a JSON writer that escapes every non-ASCII character writes it (Python's json.dumps). */
+const asciiJson = (text: string): string =>
+  JSON.stringify(text).replace(/[\u0080-￿]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`);
+/** `text` with every character written as a \uXXXX escape: no spelling of it as sent matches. */
+const escapedJson = (text: string): string => `"${[...text].map((ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`).join("")}"`;
+/** Everything a library user may log of an error, and the decoded strings of its body. */
+function seenOf(err: unknown): string {
+  const e = err as { message?: unknown; detail?: unknown; statusType?: unknown; body?: unknown };
+  let text = [e.message, e.detail, e.statusType, e.body].map(String).join("\n");
+  const walk = (v: unknown): void => {
+    if (typeof v === "string") text += `\n${v}`;
+    else if (v !== null && typeof v === "object") for (const [k, w] of Object.entries(v)) (text += `\n${k}`), walk(w);
+  };
+  try {
+    walk(typeof e.body === "string" ? JSON.parse(e.body) : undefined);
+  } catch {
+    // not JSON
+  }
+  return text;
+}
+
+test("a credential echoed with JSON escapes is scrubbed from the message, the detail and the decoded body", async () => {
+  for (const [label, headers, secrets] of ECHO_LOGINS) {
+    for (const spell of [asciiJson, escapedJson]) {
+      const echo = (secret: string): string => spell(`wrong login ${secret} given`);
+      for (const secret of secrets) {
+        // Each answer that quotes server text into an error: a non-2xx with a GENESIS status, one
+        // with a plain detail, a 2xx error envelope, a flat status, a rejected login check and a
+        // status sent instead of a file.
+        const cases: Array<[string, HttpResponse, (e: RequestEngine) => Promise<unknown>]> = [
+          ["401 flat status", rawResponse(`{"Code":15,"Content":${echo(secret)},"Type":${echo(secret)}}`, "application/json", 401), (e) => e.postJson("/find/find", {}, headers)],
+          ["500 detail", rawResponse(`{"detail":${echo(secret)}}`, "application/json", 500), (e) => e.postJson("/find/find", {}, headers)],
+          ["200 envelope", rawResponse(`{"Status":{"Code":90,"Content":${echo(secret)},"Type":"Fehler"}}`, "application/json"), (e) => e.postJson("/find/find", {}, headers)],
+          ["200 logincheck", rawResponse(`{"Status":${spell(`Fehler: ${secret}`)},"Username":${spell(secret)}}`, "application/json"), (e) => e.postLoginCheck("/helloworld/logincheck", {}, headers)],
+          ["200 file status", rawResponse(`{"Status":{"Code":104,"Content":${echo(secret)},"Type":"Information"}}`, "application/json"), (e) => e.postRaw("/data/tablefile", "application/zip", { name: "1" }, headers)],
+        ];
+        for (const [what, response, call] of cases) {
+          const e = new RequestEngine({ transport: async () => response, maxRetries: 0 });
+          const err = await call(e).catch((caught: unknown) => caught);
+          assert.ok(err instanceof RegionalstatistikApiError, `${label} ${what}: ${String(err)}`);
+          const seen = seenOf(err);
+          // Every word of it too: a secret scrubbed word by word leaves its first word behind.
+          for (const s of secrets) for (const word of [s, ...s.split(" ")]) assert.ok(!seen.includes(word), `${label} ${what} ${spell.name}: ${seen.slice(0, 1000)}`);
+        }
+      }
+    }
+  }
+});
+
+test("an error body keeps its spelling unless a credential hides behind an escape", async () => {
+  const headers = { username: "alice-user", password: "s3cret-pw" };
+  const bodyOfError = async (body: string): Promise<string> => {
+    const e = new RequestEngine({ transport: async () => rawResponse(body, "application/json", 500), maxRetries: 0 });
+    const err = await e.postJson("/find/find", {}, headers).catch((caught: unknown) => caught);
+    assert.ok(err instanceof RegionalstatistikApiError, String(err));
+    return err.body;
+  };
+  // No credential, or one spelled as sent: the body as sent (scrubbed), escapes kept.
+  assert.equal(await bodyOfError('{"m":"caf\\u00e9 \\"x\\""}'), '{"m":"caf\\u00e9 \\"x\\""}');
+  assert.equal(await bodyOfError('{"m":"pw s3cret-pw \\u00e9"}'), '{"m":"pw *** \\u00e9"}');
+  // Escaped: written again decoded, scrubbed in that spelling.
+  assert.equal(await bodyOfError('{"m":"pw s3cret\\u002dpw \\u00e9"}'), '{"m":"pw *** é"}');
+  // Not JSON: nobody decodes it, it stays as sent.
+  assert.equal(await bodyOfError("pw s3cret\\u002dpw"), "pw s3cret\\u002dpw");
+  // Deeply nested: written again where this runtime can, else left out (probed, not assumed:
+  // whether JSON.stringify recurses depends on the Node version).
+  const deep = `${"[".repeat(200_000)}"s3cret\\u002dpw"${"]".repeat(200_000)}`;
+  let parses = true;
+  let writes = true;
+  try {
+    const value: unknown = JSON.parse(deep);
+    try {
+      JSON.stringify(value);
+    } catch {
+      writes = false;
+    }
+  } catch {
+    parses = false;
+  }
+  if (parses) {
+    const body = await bodyOfError(deep);
+    assert.ok(!body.includes("s3cret"), body.slice(199_990, 200_030));
+    assert.equal(body === "", !writes);
+  }
+});
+
+test("a credential echoed in the Content-Type is scrubbed from what the client reports", async () => {
+  const headers = { username: "T0kenS3cret-0123456789abcdef0123" };
+  const e = new RequestEngine({ transport: async () => rawResponse("<html>x</html>", `text/html; v=${headers.username}`), maxRetries: 0 });
+  const err = await e.postRaw("/data/tablefile", "application/zip", { name: "1" }, headers).catch((caught: unknown) => caught);
+  assert.ok(err instanceof RegionalstatistikParseError, String(err));
+  assert.ok(!err.message.includes(headers.username), err.message);
 });
