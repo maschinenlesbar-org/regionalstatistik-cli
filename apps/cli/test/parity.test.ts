@@ -639,6 +639,27 @@ for (const bc of baseUrlCases) {
   });
 }
 
+test("parity #5: a backslash or a scheme without // and the host is refused by both, never echoing the password", async () => {
+  const pw = "s3cret-Pw";
+  for (const [url, reason] of [
+    [`https://alice:${pw}@api.example\\@evil.example`, /backslash/],
+    [`https:\\\\alice:${pw}@mirror.example`, /backslash/],
+    [`http:///alice:${pw}@mirror.example`, /"https:\/\/" and the host/],
+    [`http:alice:${pw}@mirror.example`, /"https:\/\/" and the host/],
+    [`http:/alice:${pw}@127.0.0.1:9`, /"https:\/\/" and the host/],
+  ] as const) {
+    const p = await parity({
+      argv: ["--compact", ...TOKEN, "--base-url", url, "catalogue", "tables", "x"],
+      lib: async (t) => client(t, { baseUrl: url }).catalogue.tables({ selection: "x" }),
+      responder: () => jsonResponse(fx.tablesList),
+    });
+    assertBothReject(p, reason);
+    assert.match(p.cli.err, reason, url);
+    assert.ok(!p.cli.err.includes(pw) && !p.cli.out.includes(pw), `${url}: ${p.cli.err}`);
+    if (!p.lib.ok) assert.ok(!(p.lib.error as Error).message.includes(pw));
+  }
+});
+
 test("parity #5: the CLI keeps its flag hint for an embedded credential", async () => {
   const p = await parity({
     argv: ["--compact", "--base-url", "https://u:p@example.org", "hello"],

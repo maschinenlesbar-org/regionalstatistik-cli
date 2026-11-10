@@ -21,6 +21,7 @@ import {
   RegionalstatistikNetworkError,
   RegionalstatistikParseError,
   TextBuilder,
+  credentialsIn,
   cutText,
   toWellFormed,
 } from "../src/errors.js";
@@ -1381,4 +1382,75 @@ test("a credential echoed in the Content-Type is scrubbed from what the client r
   const err = await e.postRaw("/data/tablefile", "application/zip", { name: "1" }, headers).catch((caught: unknown) => caught);
   assert.ok(err instanceof RegionalstatistikParseError, String(err));
   assert.ok(!err.message.includes(headers.username), err.message);
+});
+
+// ---- the base URL as WHATWG reads it (classes F, F3, F4 of the 2026-10-27 security audit) ----
+
+test("credentialsIn ends the authority of a special scheme at a backslash, as WHATWG does", () => {
+  for (const scheme of ["http", "https", "HTTPS", "ws", "wss", "ftp"]) {
+    assert.deepEqual(credentialsIn(`${scheme}://u:p@a.example\\@b.example/x`), ["u:p"], scheme);
+    assert.equal(new URL(`${scheme}://u:p@a.example\\@b.example/x`).password, "p", scheme);
+  }
+  // Another scheme's authority runs on to "/", "?" or "#".
+  assert.deepEqual(credentialsIn("foo://u:p@a.example\\@b.example/x"), ["u:p@a.example\\"]);
+  assert.deepEqual(credentialsIn("https://u:p@a.example/x\\@y"), ["u:p"]);
+});
+
+test("credentialsIn skips the slashes and backslashes WHATWG skips after a special scheme (F3)", () => {
+  // `http:///u:pw@h`, `https:\\u:pw@h` and `http:u:pw@h` all carry `u:pw` for WHATWG; read
+  // after "://", the userinfo was missed, so a refused --base-url echoed the password in clear.
+  for (const value of [
+    "http:alice:pw@h.example",
+    "http:/alice:pw@h.example",
+    "http:///alice:pw@h.example/x",
+    "https:////alice:pw@h.example",
+    "HTTPS:\\\\alice:pw@h.example",
+    "wss:\\/alice:pw@h.example",
+    "ftp:alice:pw@h.example",
+  ]) {
+    assert.deepEqual(credentialsIn(value), ["alice:pw"], value);
+    assert.equal(new URL(value).password, "pw", value);
+  }
+  // Another scheme needs "//" before an authority: `foo:u:p@h` and `foo:///u:p@h` carry none.
+  assert.deepEqual(credentialsIn("foo:u:p@h.example"), []);
+  assert.deepEqual(credentialsIn("foo:///u:p@h.example"), []);
+  assert.equal(new URL("foo:///u:p@h.example").password, "");
+});
+
+test("a base URL with a backslash, or whose scheme is not followed by // and the host, is rejected at construction, never echoing the password", () => {
+  const pw = "s3cret-Pw";
+  for (const [baseUrl, reason] of [
+    [`https://alice:${pw}@api.example\\@evil.example`, /backslash/],
+    ["https://api.example\\evil", /backslash/],
+    [`https:\\\\alice:${pw}@mirror.example`, /backslash/],
+    [`http:alice:${pw}@127.0.0.1:9`, /"https:\/\/" and the host/],
+    [`http:/alice:${pw}@127.0.0.1:9`, /"https:\/\/" and the host/],
+    [`http:///alice:${pw}@127.0.0.1:9`, /"https:\/\/" and the host/],
+    [`HTTPS:alice:${pw}@mirror.example`, /"https:\/\/" and the host/],
+    ["http:///mirror.example", /"https:\/\/" and the host/],
+    ["https:/mirror.example", /"https:\/\/" and the host/],
+  ] as const) {
+    const mt = makeMockTransport(() => jsonResponse(fx.whoami));
+    assert.throws(
+      () => new RequestEngine({ baseUrl, transport: mt.transport }),
+      (err) => err instanceof RegionalstatistikValidationError && reason.test(err.message) && !err.message.includes(pw),
+      baseUrl,
+    );
+    assert.equal(mt.calls.length, 0);
+  }
+  // Surrounding whitespace keeps its own reason; an upper-case scheme with "//" is fine.
+  assert.throws(() => new RequestEngine({ baseUrl: " http://h.example" }), /surrounding whitespace/);
+  assert.doesNotThrow(() => new RequestEngine({ baseUrl: "HTTPS://H.example" }));
+});
+
+test("requests go to the base URL as it parses, the reading every check uses", async () => {
+  for (const [baseUrl, sent] of [
+    ["https://API.Example:443/v1", "https://api.example/v1/helloworld/whoami"],
+    ["https://api.example/v1/@evil.example/", "https://api.example/v1/@evil.example/helloworld/whoami"],
+    ["http://h.example:80/a/../b", "http://h.example/b/helloworld/whoami"],
+  ] as const) {
+    const mt = makeMockTransport(() => jsonResponse(fx.whoami));
+    await new RequestEngine({ baseUrl, transport: mt.transport }).getJson("/helloworld/whoami");
+    assert.equal(mt.last().url, sent, baseUrl);
+  }
 });

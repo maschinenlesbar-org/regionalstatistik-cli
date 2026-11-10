@@ -1013,7 +1013,10 @@ export class RequestEngine {
     // transport still checks the scheme per hop. The engine is exported and may
     // be handed a custom transport that does no such check, so this gate matters.
     assertValid("baseUrl", baseUrl, baseUrlProblem);
-    this.baseUrl = baseUrl.replace(/\/+$/, "");
+    // Requests go to the base URL as it parses (host lower-cased, a default port dropped, the
+    // path percent-encoded where WHATWG does it): the reading every check of it uses, so a
+    // transport that reads the URL as text reaches the same host.
+    this.baseUrl = new URL(baseUrl).href.replace(/\/+$/, "");
     this.transport =
       options.transport === undefined ? nodeHttpTransport : assertValid("transport", options.transport, functionProblem);
     // Only `undefined` selects the default; a given value must be a valid header

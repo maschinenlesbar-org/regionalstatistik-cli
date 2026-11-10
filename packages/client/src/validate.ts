@@ -300,12 +300,15 @@ export function headerNameProblem(value: unknown): string | undefined {
 export const BASE_URL_USERINFO_PROBLEM = "Must not embed credentials (user:pass@host).";
 
 /**
- * A base URL: an absolute `http:`/`https:` URL with no userinfo, no query or
- * fragment, no surrounding whitespace and no whitespace or control character
- * inside. Request paths are appended to it as a string, so `?`/`#` would swallow
- * every path and whitespace would end up in the request path (`new URL()` trims
- * and strips some of it silently, the raw string does not). Userinfo would turn
- * into a Basic Authorization header or leak into messages; GENESIS never uses
+ * A base URL: an absolute `http:`/`https:` URL with no backslash, its scheme followed by
+ * exactly `//` and the host, no userinfo, no query or fragment, no surrounding whitespace and
+ * no whitespace or control character inside. Request paths are appended to it as a string, so
+ * `?`/`#` would swallow every path and whitespace would end up in the request path (`new URL()`
+ * trims and strips some of it silently). WHATWG ends an http(s) host at a backslash, as at a
+ * `/`, while text-based code reads on (`https://h.example\@other.example`), and it skips any
+ * slashes after the scheme and repairs `http:host`, `http:/host` and `http:///host` into
+ * `http://host` silently: either way the host requested would not be the one typed. Userinfo
+ * would turn into a Basic Authorization header or leak into messages; GENESIS never uses
  * Basic auth. The reasons never echo the value.
  */
 export function baseUrlProblem(value: unknown): string | undefined {
@@ -319,6 +322,13 @@ export function baseUrlProblem(value: unknown): string | undefined {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     return 'Only "http:" and "https:" URLs are allowed.';
   }
+  // WHATWG reads a "\" in an http(s) URL as "/", so it ends the host: in
+  // `https://u:pw@a.example\@b.example` every reader of the base URL has to agree where.
+  if (value.includes("\\")) return 'A base URL cannot contain a backslash (\\); write "/" instead.';
+  // WHATWG skips any slashes after "http:" and repairs `http:host`, `http:/host` and
+  // `http:///host` into `http://host` silently. Read on the trimmed value, so surrounding
+  // whitespace keeps its own reason.
+  if (!/^https?:\/\/[^/]/i.test(value.trim())) return 'Expected an absolute http(s) URL ("https://" and the host).';
   if (url.username || url.password) return BASE_URL_USERINFO_PROBLEM;
   if (/[?#]/.test(value)) return "A base URL cannot have a query (?) or fragment (#).";
   if (value !== value.trim()) return "A base URL cannot have surrounding whitespace.";

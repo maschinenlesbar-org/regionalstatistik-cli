@@ -244,6 +244,12 @@ test("baseUrlProblem accepts an http(s) URL and names each rejected shape", () =
   assert.equal(baseUrlProblem(" https://h.example"), "A base URL cannot have surrounding whitespace.");
   assert.equal(baseUrlProblem("https://h.example/a b"), "A base URL cannot contain whitespace or control characters.");
   assert.equal(baseUrlProblem("https://h.example/a\x7fb"), "A base URL cannot contain whitespace or control characters.");
+  assert.equal(baseUrlProblem("https://h.example\\x"), 'A base URL cannot contain a backslash (\\); write "/" instead.');
+  assert.equal(baseUrlProblem("https:\\\\h.example"), 'A base URL cannot contain a backslash (\\); write "/" instead.');
+  for (const value of ["http:h.example", "http:/h.example", "http:///h.example", "HTTPS:h.example", "http:u:p@h.example"]) {
+    assert.equal(baseUrlProblem(value), 'Expected an absolute http(s) URL ("https://" and the host).', value);
+  }
+  assert.equal(baseUrlProblem("HTTPS://H.example"), undefined);
 });
 
 test("credentialPairProblem wants both or neither of username and password", () => {
