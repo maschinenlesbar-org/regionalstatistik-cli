@@ -208,3 +208,19 @@ test("a path that can't be inspected is reported as such, not as an existing fil
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("a stream target is written only when the descriptor opened is a stream", () => {
+  // The path was a stream when it was classified and is a regular file (through a link) when it
+  // is opened: it was appended to without --force (class G2 of the 2026-10-27 security audit).
+  const t = planted();
+  try {
+    const real = nodeFilesFor();
+    const switched = { ...real, state: () => "stream" as const };
+    assert.throws(() => switched.write(t.link, Buffer.from("appended\n"), false), /Refusing to overwrite/);
+    assert.equal(readFileSync(t.victim, "utf8"), "keep me\n");
+    // A real stream is still written in place.
+    assert.doesNotThrow(() => real.write("/dev/null", Buffer.from("x"), false));
+  } finally {
+    t.done();
+  }
+});

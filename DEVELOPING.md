@@ -813,7 +813,9 @@ request, a file that appeared meanwhile included, an `OutputError`, exit 1; and 
 error: when stdout is a regular file, `stdoutWriter` writes every byte with `writeAll`, so a
 write cut short — EFBIG under a file-size limit, ENOSPC — is an ERROR record and exit 1, never a
 short file with exit 0). A stream target (a character device, a FIFO, a socket, `/dev/stdout`, `/dev/fd/N`) is
-written in place, with no claim, no temporary file and no `--force` needed. A file is written
+written in place, with no claim, no temporary file and no `--force` needed — checked again on the descriptor it
+opens (`O_WRONLY|O_APPEND`, no `O_CREAT`): a path switched to a regular file after it was
+classified (a link swapped in) takes the way of a file, so without `--force` it is refused. A file is written
 atomically (`writeFileAtomic` in `io.ts`, behind `CliIO.writeFile`): without `--force` the name
 is claimed with an exclusive create, the data goes to a temporary file beside the target
 (`.<name>.<pid>-<hex>.tmp`, the name shortened to stay within 255 bytes) and is renamed over it,
