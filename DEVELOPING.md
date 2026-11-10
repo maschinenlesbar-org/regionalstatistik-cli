@@ -429,7 +429,10 @@ custom transports too (P3): `fetch` follows redirects by default and strips only
 every `HttpRequest` carries `redirect: "manual"` (a fetch transport passes it on),
 and a response whose reported final URL (`HttpResponse.url`, fetch's `r.url`) is
 on another origin is rejected as a `RegionalstatistikNetworkError` instead of
-being returned as data. `packages/client/test/redirect-credentials.test.ts` runs a pair of local
+being returned as data. Its message names that URL — a server's `Location`, which may echo
+the credentials it received in its path or query — scrubbed of them as reported, before it is
+parsed (`redactSecrets` counts a secret right after a percent escape as whole, so an encoded
+`user%3Apassword` loses both). `packages/client/test/redirect-credentials.test.ts` runs a pair of local
 servers, one redirecting to the other, and checks that the second receives
 nothing.
 `engine.ts:redactUrl` additionally scrubs any `username`/`password` that a

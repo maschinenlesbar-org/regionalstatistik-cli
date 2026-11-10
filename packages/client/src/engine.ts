@@ -1184,12 +1184,15 @@ export class RequestEngine {
         );
       }
       // A transport that followed a redirect anyway (fetch's default) has already sent
-      // the credential headers on; at least don't hand back the other host's answer.
+      // the credential headers on; at least don't hand back the other host's answer. The
+      // target is a server's Location, which may echo the credentials in its path or query:
+      // scrubbed as reported, before redactUrl parses it (which percent-encodes what is
+      // left in a new spelling, `'` as `%27`).
       const finalUrl = (response as { url?: unknown }).url;
       if (typeof finalUrl === "string" && finalUrl !== "" && otherOrigin(url, finalUrl)) {
         throw new RegionalstatistikNetworkError(
           `${method} ${redactUrl(url)} failed: the transport followed a redirect to another origin ` +
-            `(${sanitizeServerText(redactUrl(finalUrl))}); transports must not follow redirects ` +
+            `(${sanitizeServerText(redactUrl(scrub(finalUrl, ctx)))}); transports must not follow redirects ` +
             `(HttpRequest.redirect is "manual") — use the canonical host (default https://www.regionalstatistik.de)`,
         );
       }

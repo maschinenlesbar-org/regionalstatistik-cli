@@ -49,7 +49,9 @@ export function redactCredentials(text: string, credentials: readonly string[]):
  * values with no `@` to anchor on) replaced by `***`, longest first so a secret is
  * never left half-replaced by one of its own substrings. Only whole occurrences
  * count — not one inside a longer run of letters and digits — so the username `user`
- * leaves `--username` alone. Secrets shorter than 4 characters are skipped: they are
+ * leaves `--username` alone. A percent escape before it ends such a run, as in URL text:
+ * `alice%3As3cret` (an echoed `alice:s3cret`, encoded) holds the password `s3cret` after the
+ * escape's hex digits. Secrets shorter than 4 characters are skipped: they are
  * not plausible GENESIS credentials (a token has 32 characters, a password at least
  * 10), and replacing them would garble the rest of the text.
  */
@@ -58,7 +60,7 @@ export function redactSecrets(text: string, secrets: readonly string[]): string 
   for (const secret of [...secrets].sort((a, b) => b.length - a.length)) {
     if (secret.trim().length < 4) continue;
     const escaped = secret.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    out = out.replace(new RegExp(`(?<![A-Za-z0-9])${escaped}(?![A-Za-z0-9])`, "g"), "***");
+    out = out.replace(new RegExp(`(?:(?<![A-Za-z0-9])|(?<=%[0-9A-Fa-f]{2}))${escaped}(?![A-Za-z0-9])`, "g"), "***");
   }
   return out;
 }

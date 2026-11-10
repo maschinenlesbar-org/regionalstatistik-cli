@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { RegionalstatistikClient } from "../src/client.js";
-import { RegionalstatistikApiError, RegionalstatistikNetworkError } from "../src/errors.js";
+import { RegionalstatistikApiError, RegionalstatistikNetworkError, redactSecrets } from "../src/errors.js";
 import type { HttpRequest, HttpResponse, Transport } from "../src/http.js";
 
 const PW = "s3cret-Test-Pw";
@@ -131,4 +131,39 @@ test("P3: a response reported from the request's own origin is accepted", async 
   });
   const result = await new RegionalstatistikClient({ username: "testuser01", password: PW, transport }).catalogue.tables();
   assert.equal((result as unknown as { List: Array<{ Code: string }> }).List[0]!.Code, "from B");
+});
+
+test("the final URL of a redirect a transport followed is quoted without the credentials, in its path and its query", async () => {
+  // The URL the transport reports is the redirect's target: a server can put the credential it
+  // received into the Location (class D2 of the 2026-10-27 security audit). It is scrubbed as
+  // reported, before it is parsed, which percent-encodes what is left in a new spelling.
+  const pw = "pä\"s's-W0rd";
+  const token = "T0kenS3cret-0123456789abcdef0123";
+  const finals = (secret: string): string[] => [
+    `https://elsewhere.example/login?user=alice&pw=${encodeURIComponent(secret)}`,
+    `https://elsewhere.example/login?pw=${secret}`,
+    `https://elsewhere.example/${encodeURIComponent(`alice:${secret}`)}/x`,
+  ];
+  for (const [options, secret] of [
+    [{ username: "alice-user", password: pw }, pw],
+    [{ token }, token],
+  ] as const) {
+    for (const url of finals(secret)) {
+      const transport: Transport = async () => ({ status: 200, headers: { "content-type": "application/json" }, body: Buffer.from(okBody), url });
+      const err = await new RegionalstatistikClient({ ...options, transport }).catalogue.tables().catch((caught: unknown) => caught);
+      assert.ok(err instanceof RegionalstatistikNetworkError && /followed a redirect to another origin/.test(err.message), String(err));
+      const seen = decodeURIComponent(err.message.replace(/%(?![0-9a-fA-F]{2})/g, "%25"));
+      assert.ok(!seen.includes(secret) && !err.message.includes(secret), `${url}: ${err.message}`);
+    }
+  }
+});
+
+test("a secret right after a percent escape is a whole occurrence, as in URL text", () => {
+  // `alice%3As3cret-pw` is `alice:s3cret-pw` encoded: the password follows the escape's hex digits.
+  assert.equal(redactSecrets("x/alice%3As3cret-pw/y", ["s3cret-pw"]), "x/alice%3A***/y");
+  assert.equal(redactSecrets("x/s3cret-pw%2Fy", ["s3cret-pw"]), "x/***%2Fy");
+  // Inside a run of letters and digits it still isn't one.
+  assert.equal(redactSecrets("--username", ["user"]), "--username");
+  assert.equal(redactSecrets("%3", ["s3cret-pw"]), "%3");
+  assert.equal(redactSecrets("A3s3cret-pw", ["s3cret-pw"]), "A3s3cret-pw");
 });
