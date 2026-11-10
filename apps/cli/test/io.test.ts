@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defaultIO, handleOutputErrors, stderrAfterStdout } from "../src/cli/io.js";
+import { defaultIO, handleOutputErrors, nodeFilesFor, stderrAfterStdout, type LinkOwners } from "../src/cli/io.js";
 import { createLogger } from "../src/cli/log.js";
 
 function epipe(code: string): NodeJS.ErrnoException {
@@ -80,7 +80,10 @@ test("defaultIO: a dangling symlink counts as existing and is never written thro
     const plain = join(dir, "plain.json");
     assert.equal(defaultIO.fileState(plain), "absent");
     defaultIO.writeFile(plain, Buffer.from("one"), false);
-    assert.throws(() => defaultIO.writeFile(plain, Buffer.from("two"), false), /EEXIST/);
+    assert.throws(
+      () => defaultIO.writeFile(plain, Buffer.from("two"), false),
+      (err: NodeJS.ErrnoException) => err.code === "EEXIST" && /^Refusing to overwrite existing file/.test(err.message),
+    );
     defaultIO.writeFile(plain, Buffer.from("three"), true);
     assert.equal(readFileSync(plain, "utf8"), "three");
   } finally {
@@ -114,4 +117,94 @@ test("stderr waits for stdout: a record is held while stdout has a backlog, and 
   err("fifth");
   stdout.emit("error", new Error("EPIPE"));
   assert.deepEqual(written, ["first", "second", "third", "fourth", "fifth"]);
+});
+
+// ---- --force and other users' links (class G of the 2026-10-27 security audit) ----------
+
+/** The caller, and another user who planted links. */
+const ME = 1000;
+const OTHER = 1001;
+/** /tmp: owned by root, sticky and world-writable. */
+const SHARED = { uid: 0, mode: 0o41777 };
+
+/** Owners as a test says: link owners (the caller otherwise), directory owners and modes (the caller's, 0o40755, otherwise). */
+function owners(links: Record<string, number>, dirs: Record<string, { uid: number; mode: number }>): LinkOwners {
+  return {
+    uid: ME,
+    ownerOf: (path, follow) => (follow ? (dirs[path] ?? { uid: ME, mode: 0o40755 }) : { uid: links[path] ?? ME, mode: 0o120777 }),
+  };
+}
+
+/** A temporary directory with a victim file and a link `out.json` to it. */
+function planted(): { dir: string; victim: string; link: string; done: () => void } {
+  const dir = mkdtempSync(join(tmpdir(), "destatis-links-"));
+  const victim = join(dir, "victim.txt");
+  writeFileSync(victim, "keep me\n");
+  const link = join(dir, "out.json");
+  symlinkSync(victim, link);
+  return { dir, victim, link, done: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+test("--force does not follow a link another user made in a directory others can write to, at every hop", () => {
+  const t = planted();
+  try {
+    for (const dirMode of [SHARED, { uid: ME, mode: 0o40777 }]) {
+      const files = nodeFilesFor(owners({ [t.link]: OTHER }, { [t.dir]: dirMode }));
+      assert.match(files.parentProblem(t.link, true) ?? "", /another user/);
+      assert.throws(() => files.write(t.link, Buffer.from("x"), true), /another user/);
+      assert.equal(readFileSync(t.victim, "utf8"), "keep me\n");
+      assert.ok(lstatSync(t.link).isSymbolicLink());
+    }
+    // own link -> a foreign link in the shared directory -> the victim
+    const inner = join(t.dir, "inner");
+    symlinkSync(t.victim, inner);
+    const outer = join(t.dir, "outer.json");
+    symlinkSync(inner, outer);
+    assert.throws(() => nodeFilesFor(owners({ [inner]: OTHER }, { [t.dir]: SHARED })).write(outer, Buffer.from("x"), true), /another user/);
+    // A foreign dangling link: the file it names is not created.
+    const dangling = join(t.dir, "dangling.json");
+    const target = join(t.dir, "created-elsewhere.json");
+    symlinkSync(target, dangling);
+    assert.throws(() => nodeFilesFor(owners({ [dangling]: OTHER }, { [t.dir]: SHARED })).write(dangling, Buffer.from("x"), true), /another user/);
+    assert.throws(() => statSync(target));
+    assert.equal(readFileSync(t.victim, "utf8"), "keep me\n");
+  } finally {
+    t.done();
+  }
+});
+
+test("--force still follows the caller's own links, the directory owner's, and any link in a directory only its owner writes", () => {
+  const cases: Array<[string, (t: ReturnType<typeof planted>) => LinkOwners]> = [
+    ["the caller's own link in a shared directory", (t) => owners({}, { [t.dir]: SHARED })],
+    ["a link of the shared directory's owner", (t) => owners({ [t.link]: 0 }, { [t.dir]: SHARED })],
+    ["another user's link in a directory only its owner writes", (t) => owners({ [t.link]: OTHER }, { [t.dir]: { uid: OTHER, mode: 0o40755 } })],
+    ["another user's link where no caller id exists", (t) => ({ ...owners({ [t.link]: OTHER }, { [t.dir]: SHARED }), uid: undefined })],
+  ];
+  for (const [label, who] of cases) {
+    const t = planted();
+    try {
+      const files = nodeFilesFor(who(t));
+      assert.equal(files.parentProblem(t.link, true), undefined, label);
+      files.write(t.link, Buffer.from("new\n"), true);
+      assert.equal(readFileSync(t.victim, "utf8"), "new\n", label);
+      assert.ok(lstatSync(t.link).isSymbolicLink(), label);
+    } finally {
+      t.done();
+    }
+  }
+});
+
+test("a path that can't be inspected is reported as such, not as an existing file", { skip: process.getuid?.() === 0 }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "destatis-links-"));
+  const closed = join(dir, "closed");
+  try {
+    mkdirSync(closed);
+    const link = join(dir, "out.json");
+    symlinkSync(join(closed, "x.json"), link);
+    chmodSync(closed, 0o000);
+    assert.throws(() => defaultIO.fileState(link), (err: unknown) => err instanceof Error && /^Cannot write to ".*out\.json": EACCES/.test(err.message));
+  } finally {
+    chmodSync(closed, 0o700);
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

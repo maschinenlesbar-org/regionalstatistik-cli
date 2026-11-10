@@ -5,7 +5,7 @@
 import { constants } from "node:buffer";
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
-import { OutputError, OutputRefusedError, isDirectoryMessage, logOf, reasonOf, refuseOverwrite, type CliDeps } from "./io.js";
+import { OutputError, OutputRefusedError, isDirectoryMessage, logOf, reasonOf, refuseOverwrite, type CliDeps, type FileState } from "./io.js";
 import { CredentialsFileError, type CredentialStore } from "./credentials.js";
 import { cleartextProblem, DEFAULT_BASE_URL, isBidiControl, type RawResponse, type RetryEvent } from "@maschinenlesbar.org/regionalstatistik-client/internal/engine";
 import type { RegionalstatistikClientOptions } from "@maschinenlesbar.org/regionalstatistik-client/internal/client";
@@ -346,7 +346,13 @@ export function checkOutputTarget(deps: CliDeps, global: GlobalOptions): void {
     throw new OutputRefusedError("--force needs --output (it only allows overwriting the -o file).");
   }
   if (!toFile(global)) return;
-  const state = deps.io.fileState(global.output);
+  let state: FileState;
+  try {
+    state = deps.io.fileState(global.output);
+  } catch (err) {
+    // A path that can't be told (EACCES on the way) is refused as that, before any request.
+    throw new OutputRefusedError(err instanceof Error ? err.message : String(err));
+  }
   if (state === "directory") throw new OutputRefusedError(isDirectoryMessage(global.output));
   if (state === "stream") return;
   if (state === "exists" && global.force !== true) throw new OutputRefusedError(refuseOverwrite(global.output));
@@ -365,7 +371,13 @@ export function checkOutputTarget(deps: CliDeps, global: GlobalOptions): void {
  */
 function writeOutputFile(deps: CliDeps, global: GlobalOptions, path: string, data: Buffer): void {
   const force = global.force === true;
-  if (deps.io.fileState(path) === "directory") throw new OutputError(isDirectoryMessage(path));
+  let state: FileState;
+  try {
+    state = deps.io.fileState(path);
+  } catch (err) {
+    throw new OutputError(err instanceof Error ? err.message : String(err), { cause: err });
+  }
+  if (state === "directory") throw new OutputError(isDirectoryMessage(path));
   try {
     deps.io.writeFile(path, data, force);
   } catch (err) {

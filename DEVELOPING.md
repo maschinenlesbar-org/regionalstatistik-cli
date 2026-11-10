@@ -818,7 +818,13 @@ atomically (`writeFileAtomic` in `io.ts`, behind `CliIO.writeFile`): without `--
 is claimed with an exclusive create, the data goes to a temporary file beside the target
 (`.<name>.<pid>-<hex>.tmp`, the name shortened to stay within 255 bytes) and is renamed over it,
 `--force` keeps the old file's mode and writes through a symlink (`linkTarget`: a dangling one
-creates the file it names), and a failure leaves neither a temporary file nor a claimed name;
+creates the file it names) — unless, at any hop, the link's owner is neither the caller nor its
+directory's owner and that directory is sticky or writable by others (`SHARED_DIRECTORY`, the rule
+of Linux's fs.protected_symlinks, which never sees these links as the CLI resolves them itself):
+that is EACCES, naming the link; the owners come through `LinkOwners` (`nodeFilesFor(owners)`, the
+real file system is `nodeFiles`), so a test can be another user without root. `fileState` calls a
+path it can't inspect (EACCES on the way) neither existing nor absent: it throws, and the target
+is refused as that (exit 2) — it used to be "exists", which `--force` let through. A failure leaves neither a temporary file nor a claimed name;
 nor does SIGINT, SIGTERM or SIGHUP during the write (exit 130, 143, 129). Code logs through `logOf(deps)` and never writes diagnostics
 with `io.err` directly. `run()` builds the logger from argv before commander parses it
 (`logFormatFromArgv`, used only for the records of a parse error: the first
