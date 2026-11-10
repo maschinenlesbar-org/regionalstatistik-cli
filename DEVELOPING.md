@@ -103,7 +103,7 @@ job's digests, create the GitHub Release with `gh` (tarball, SBOMs, notes). So n
 code runs where the tarball is built or where the write token is. Update the tool by changing
 its version in `tools/sbom/package.json` and running `npm install --package-lock-only
 --ignore-scripts` there; don't chain its install into an npm script.
-`apps/cli/test/release-workflow.test.ts` reads the workflow and the lockfile and checks it.
+The shared conformance test P31 (`conformance-p31-release-pipeline`) reads the workflow and the lockfile and checks it.
 `publish.yml` runs `npm publish --workspace apps/cli`.
 
 ## Library input validation
@@ -731,7 +731,23 @@ file and no half-written or temporary file; an existing file without `--force` a
 directory are refused before any request; `/dev/null` and a FIFO are written in place; `--force`
 through a dangling link creates the file it names; a signal leaves no claim and no temporary
 file; stdout redirected to a file and cut short is exit 1; runs the built bin with a test token as a flag, so no credentials file is
-read). `apps/cli/test/helpers.ts`'s `parity` also takes the kit's positional form, and its
+read), P28 hostile error answers (the number scan and the cleaning of server text linear and
+memory-bounded — a 16 MB error detail and six million lone surrogate escapes under a 128 MB heap,
+the bin started, 30 s — and a credential scrubbed from decoded error text, from a value quoted from
+a 2xx error envelope and from a redirect), P29 base-URL credentials (a backslash and a scheme
+without `//` and the host refused, never echoing the password; requests to the parsed host;
+stdout's redaction linear), P30 `-o` links (`--force` follows no other user's link in a shared
+directory; EACCES isn't "exists"; a stream is checked on its descriptor; the owners injected
+through `nodeFilesFor`, the adapter maps the body's `files` onto CliIO's `-o` members and writes a
+`data tablefile` download, whose bytes are written as they came) and P31 the release pipeline
+(three jobs, the SBOM tool locked in `tools/sbom`). The kit puts the credential of P28 and P29 in
+the base URL's userinfo, which this client refuses: their adapters move it to the login it stands
+for (`withLogin`, `argvWithLogin` in `apps/cli/test/helpers.ts`: `https://alice:pw@host` is the
+user alice with the password pw, `https://TOKEN@host` the token; without one a made-up token,
+`SOME_TOKEN`, since this client has no guest mode), so the scrub they check is the one of the
+`username`/`password` headers. Three P29 cases are about the userinfo itself and are skipped with
+their reason (the token is never sent as Basic; stdout replaces a bare secret only as a whole JSON
+value, 03-1; there is no pattern pass over stdout). `apps/cli/test/helpers.ts`'s `parity` also takes the kit's positional form, and its
 `LibOutcome.error` is an `Error`, as the shared bodies read it.
 
 ## Verified live (2026-07-13, without an account)

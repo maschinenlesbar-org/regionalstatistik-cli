@@ -124,3 +124,55 @@ export function requestKey(req: HttpRequest): string {
   const creds = ["username", "password"].map((h) => `${h}:${req.headers?.[h] ?? "-"}`);
   return `${req.method} ${req.url} [${body.join("&")}] ${creds.join(" ")}`;
 }
+
+// ---- P28/P29: the kit's base-URL credential as a GENESIS login ------------------
+
+/** A GENESIS login: a token, or a user name and password. */
+export type Login = { token: string } | { username: string; password: string };
+
+/**
+ * The kit's shared bodies (P28, P29) put a credential in the base URL's userinfo
+ * (`https://alice:pw@host`, a token as `https://TOKEN@host`). GENESIS takes it in the
+ * `username`/`password` headers, and this client refuses a base URL with a userinfo, so their
+ * adapters move it there: `https://alice:pw@host/x` is the base URL `https://host/x` and the login
+ * alice/pw (decoded), `https://TOKEN@host` (or `TOKEN:@host`) the token. Only a URL spelled
+ * `http(s)://<userinfo>@…` without a backslash is moved; anything else is left for the client's
+ * base-URL rules to refuse, as typed.
+ */
+export function loginOfBaseUrl(baseUrl: string): { baseUrl: string; login: Login } | undefined {
+  const m = /^(https?:\/\/)([^/?#@\\]*)@([^\\]*)$/i.exec(baseUrl);
+  if (m === null) return undefined;
+  const [, scheme = "", userinfo = "", rest = ""] = m;
+  const colon = userinfo.indexOf(":");
+  try {
+    const user = decodeURIComponent(colon < 0 ? userinfo : userinfo.slice(0, colon));
+    const password = colon < 0 ? "" : decodeURIComponent(userinfo.slice(colon + 1));
+    return { baseUrl: scheme + rest, login: password === "" ? { token: user } : { username: user, password } };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The login of a run whose base URL carries none: a made-up token. GENESIS serves `find` and the
+ * other account endpoints only to a login, and this client has no guest mode.
+ */
+export const SOME_TOKEN = "0123456789abcdef0123456789abcdef";
+
+/** Library options with the base URL's credential moved to a login (`loginOfBaseUrl`); without one, `SOME_TOKEN`. */
+export function withLogin<T extends { baseUrl?: string | undefined }>(options: T): T & Login {
+  const moved = options.baseUrl === undefined ? undefined : loginOfBaseUrl(options.baseUrl);
+  if (moved === undefined) return { token: SOME_TOKEN, ...options };
+  return { ...options, baseUrl: moved.baseUrl, ...moved.login };
+}
+
+/** CLI argv with the `--base-url` value's credential moved to `--token` or `--username`/`--password`; without one, `--token SOME_TOKEN`. */
+export function argvWithLogin(argv: readonly string[]): string[] {
+  const at = argv.indexOf("--base-url");
+  const moved = at === -1 ? undefined : loginOfBaseUrl(argv[at + 1] ?? "");
+  if (moved === undefined) return ["--token", SOME_TOKEN, ...argv];
+  const rest = [...argv];
+  rest[at + 1] = moved.baseUrl;
+  const flags = "token" in moved.login ? ["--token", moved.login.token] : ["--username", moved.login.username, "--password", moved.login.password];
+  return [...flags, ...rest];
+}
