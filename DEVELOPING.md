@@ -591,7 +591,10 @@ for every transport (P5):
   transport passes on) and the engine rejects with `RegionalstatistikNetworkError` at the
   deadline whether the transport stops or not.
 - **`maxResponseBytes`** — checked again on the body the transport hands back
-  (`sizeLimitMessage` names the option and `--max-response-bytes`).
+  (`sizeLimitMessage` names the option and `--max-response-bytes`). The default transport
+  joins small chunks as they arrive (`COALESCE_CHUNKS`, 1024, or `COALESCE_BYTES`, 64 KiB), so
+  the memory an answer holds follows its bytes, not the number of transfer-encoding chunks a
+  server splits it into (a Buffer per one-byte chunk held about 210 bytes of heap).
 - **Response shape** — `headers` may be a `Headers` object, a `Map` or a record with
   names in any case (`plainHeaders`), so `Retry-After` and `Content-Type` are read;
   `body` may be any `ArrayBuffer` view or `ArrayBuffer`, from any realm (`bodyBytes`).
@@ -720,7 +723,8 @@ are text inputs and the id list is empty), P25
 (`conformance-p25-response-corpus`: a number JSON can't carry exactly, or an empty answer, is
 a parse error, exit 1, read from a `find` envelope), P27 (`conformance-p27-big-and-odd-answers`:
 a large flat answer prints with `--compact` under a small heap, an answer full of DEL characters
-prints escaped or, past V8's longest string, is an ERROR record of `regstat.output`; it starts
+prints escaped or, past V8's longest string, is an ERROR record of `regstat.output`, an answer
+in two million one-byte chunks is read within a 256 MB heap; it starts
 the built bin with `--max-old-space-size`, 30 s) and P26
 (`conformance-p26-output-integrity`: `regstat find x -o …` under `ulimit -f` leaves the old
 file and no half-written or temporary file; an existing file without `--force` and a missing
