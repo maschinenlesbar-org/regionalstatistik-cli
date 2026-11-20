@@ -25,6 +25,62 @@ npm install -g @maschinenlesbar.org/regionalstatistik-cli
 
 The command is **`regstat`**. Requires **Node.js 22.12+**.
 
+### Docker
+
+From 0.9.0 every release is also a container image for linux/amd64 and linux/arm64 on the
+GitHub Container Registry, made from the same tarball as the npm package. It needs no Node.js and no
+install. Pass the login through the environment (the image has no credentials file):
+
+```bash
+docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
+  -e REGIONALSTATISTIK_API_TOKEN ghcr.io/maschinenlesbar-org/regionalstatistik-cli:latest \
+  data table 12411-01-01-4 --region-key 08221 --start-year 2015
+```
+
+The image's entrypoint is the program, so the command follows the image name directly;
+`… regionalstatistik-cli:latest regstat data table …` works too.
+
+In a container with a memory limit (`--memory`) the default `--max-response-bytes` is an eighth
+of that limit (at most the usual 100 MiB), so an oversized answer is refused with a clear
+error instead of the container being killed for memory. The CLI needs at least 12 processes and
+threads (`--pids-limit 12`): below that it refuses with an error, and with 4 or fewer Node.js
+itself hangs before the CLI can check.
+
+`latest` is the newest release. For scripts, name a release and pin its digest, which the
+[release notes](https://github.com/maschinenlesbar-org/regionalstatistik-cli/releases) give:
+`…/regionalstatistik-cli:0.9.0@sha256:<digest>`. Each image carries signed build provenance;
+check it with
+
+```bash
+gh attestation verify oci://ghcr.io/maschinenlesbar-org/regionalstatistik-cli:latest \
+  --repo maschinenlesbar-org/regionalstatistik-cli
+```
+
+### MCP server
+
+From 0.9.0 the Regionaldatenbank is also an [MCP](https://modelcontextprotocol.io/) server for AI
+agents, `@maschinenlesbar.org/regionalstatistik-mcp` (command `regstat-mcp`, image
+`ghcr.io/maschinenlesbar-org/regionalstatistik-mcp`): five read-only tools, to fetch a table's
+figures for the regions asked for (AGS keys like `08221`, `08*`), narrowed by years and classifying
+variables and decoded from GENESIS's German number format, turn a topic into object codes with each
+table's regional depth, get a table as flat, spreadsheet-ready rows, describe an object's
+dimensions and time span, and browse codes by pattern, on stdio or Streamable HTTP. The tools
+handle the skills' traps: "nothing found" answered as success (the tools say whether the code
+doesn't exist or the selection excluded everything), region keys that must stay text (`08221`),
+value symbols that are not 0, tables too large for a direct fetch. The server takes your login from
+`REGIONALSTATISTIK_API_TOKEN` (or `REGIONALSTATISTIK_USERNAME` and `REGIONALSTATISTIK_PASSWORD`),
+else the one stored with `regstat config set`, never from its command line; over HTTP it requires a
+bearer token (`--auth-token-file`), so your account never becomes an open endpoint. Setup for
+Claude Code, Claude Desktop and VS Code:
+[MCP.md](https://github.com/maschinenlesbar-org/regionalstatistik-cli/blob/main/MCP.md).
+
+```bash
+npm i -g @maschinenlesbar.org/regionalstatistik-mcp
+claude mcp add regstat -- regstat-mcp
+```
+
+Every result carries the data licence (dl-de/by-2-0) and the source label to quote.
+
 ## Credentials
 
 The Regionaldatenbank requires a **free registered account** for API use
@@ -249,3 +305,4 @@ npm run typecheck
 ```
 
 See [DEVELOPING.md](https://github.com/maschinenlesbar-org/regionalstatistik-cli/blob/main/DEVELOPING.md) for architecture and API specifics.
+[MCP.md](https://github.com/maschinenlesbar-org/regionalstatistik-cli/blob/main/MCP.md) covers the same use cases as the tools of the MCP server, for any MCP client.

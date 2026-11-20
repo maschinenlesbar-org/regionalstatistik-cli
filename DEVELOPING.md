@@ -23,14 +23,18 @@ apps/cli/            # @maschinenlesbar.org/regionalstatistik-cli — the publis
   test/              # CLI tests and every conformance-*.test.ts
 packages/client/     # @maschinenlesbar.org/regionalstatistik-client — private, shipped inside the CLI's tarball
   src/               # the API client (below)
-  test/              # tests that only touch the client, + the transport helpers and fixtures
-tools/pack/          # prepack/postpack: ship the client (dist/node_modules) and commander in the tarball
-tools/bump.mjs       # version bump + commit + tag (npm run bump)
+  test/              # tests that only touch the client, + the transport helpers and fixtures (recorded.ts)
+apps/mcp/            # @maschinenlesbar.org/regionalstatistik-mcp — the MCP server, released with the CLI
+packages/log/        # the log records (text/jsonl) of the MCP server
+tools/image/         # the container images of both apps (build, push, smoke, SBOM)
+tools/interop/       # the built MCP server against the official MCP client (own lockfile)
+tools/pack/          # prepack/postpack: ship the client (dist/node_modules) and the bundled dependencies in each tarball
+tools/bump.mjs       # version bump + commit + tag of every published app (npm run bump)
 tools/sbom/          # the CycloneDX SBOM tool, own lockfile (release.yml's sbom job only)
 tsconfig.docs.json   # TypeDoc only: the package entry, with the client read from its sources
 ```
 
-- **The client is its own package** so a later MCP app can share it with the CLI. It is
+- **The client is its own package** so the MCP app shares it with the CLI. It is
   never published on its own: `apps/cli`'s `prepack` copies it into
   `apps/cli/dist/node_modules/`, where the CLI's imports find it, and the tarball ships it
   as plain files — so npm lists only commander (bundled) as a dependency, never the
@@ -44,10 +48,12 @@ tsconfig.docs.json   # TypeDoc only: the package entry, with the client read fro
   fixtures from the CLI's tests (not bundled). Only `"."` is part of the library.
 - **Dependencies point one way:** the app depends on the client, the client on nothing
   in the workspace. The login rules (token or username/password, guest access) are the
-  client's; the `config` command and the credentials file are the CLI's.
-- **The version lives in `apps/cli/package.json`.** The root has none; a plain
-  `npm version` at the root is refused. Release with `npm run bump -- <patch|minor|major>`,
-  which bumps the app, commits (the bare version as the message) and tags `vX.Y.Z`.
+  client's; the `config` command is the CLI's, and the credentials file's store is client code
+  (`packages/client/src/credentials.ts`, internal), which both apps read.
+- **The version lives in `apps/cli/package.json`** (and, the same, in `apps/mcp/package.json`).
+  The root has none; a plain `npm version` at the root is refused. Release with
+  `npm run bump -- <patch|minor|major>`, which bumps every published app together, commits (the
+  bare version as the message) and tags `vX.Y.Z`.
 - **TypeScript:** `tsconfig.base.json` holds the compiler options; every workspace has a
   `tsconfig.json` (`src/`) and a `tsconfig.test.json` (`test/`), and the root
   `tsconfig.json`/`tsconfig.test.json` reference them, built with `tsc -b`.
@@ -64,10 +70,15 @@ packages/client/src/
     engine.ts    # URL building, retry, Status.Code logical-error mapping, URL redaction
     errors.ts    # Regionalstatistik{Error,ApiError,NetworkError,UsageError,ValidationError,ParseError}
     client.ts    # RegionalstatistikClient — helloworld/find + catalogue/metadata/data groups
+    operations.ts # the skills' use cases: fetchData / findStatistics / getFlatTable / describeObject / browseCatalogue
+    zip.ts       # the files of a download's ZIP (node:zlib; bounded, no ZIP64)
+    credentials.ts # CredentialStore — the credentials file behind `regstat config` (internal)
     index.ts     # the client's public surface (the library entry re-exports it)
 apps/cli/src/cli/
     io.ts        # injectable I/O + env seam (CliDeps / CliIO), the logger and the clock
     log.ts       # the stderr log: records with ts, level, topic; --log-format text|jsonl
+    credentials.ts # re-exports the client's CredentialStore
+    limits.ts    # the container's cgroup limits (memory -> response cap, pids)
     shared.ts    # option parsers, credential resolution, option->client mapping, render
     commands/    # hello, find, catalogue, metadata, data
     program.ts   # assembles the commander program; seeds credential flags from env
@@ -90,9 +101,11 @@ npm run bump -- <patch|minor|major>  # bump apps/cli, commit, tag vX.Y.Z
 node --test apps/cli/dist/test/cli.test.js   # one file, after a build
 ```
 
-CI (`ci.yml`) type-checks, builds and tests on Node 22/24/26, then packs the real tarball,
-checks the pack left nothing behind, installs it globally with the registry out of reach and
-runs the bin. `release.yml` (on a `v*` tag, made by `npm run bump`) has three jobs. **pack**
+CI (`ci.yml`) type-checks, builds and tests on Node 22/24/26, then packs each published app
+(the CLI and the MCP server), checks the pack left nothing behind, installs it globally with the
+registry out of reach and runs its bins; its `interop` job runs the MCP server against the
+official client. `images.yml` builds, smoke-tests and scans both container images on every push
+and weekly (see [Container image](#container-image)). `release.yml` (on a `v*` tag, made by `npm run bump`) has three jobs. **pack**
 (read-only): verify the tag against `apps/cli/package.json`, test, `npm pack --workspace
 apps/cli`, record the tarball's and the notes' sha256 as job outputs. **sbom** (read-only):
 `npm ci --ignore-scripts`, then the CycloneDX tool from the isolated, lockfile-pinned
@@ -104,7 +117,11 @@ code runs where the tarball is built or where the write token is. Update the too
 its version in `tools/sbom/package.json` and running `npm install --package-lock-only
 --ignore-scripts` there; don't chain its install into an npm script.
 The shared conformance test P31 (`conformance-p31-release-pipeline`) reads the workflow and the lockfile and checks it.
-`publish.yml` runs `npm publish --workspace apps/cli`.
+The release also carries both apps' tarballs, both image archives, their SBOMs, `SHA256SUMS` and
+signed provenance (P32 checks the image pipeline). `publish.yml` (manual dispatch from the release
+tag) publishes the release's own files, each checked first against the immutable release and the
+provenance `release.yml` signed: both tarballs to npm via OIDC Trusted Publishing, both images to
+ghcr.io.
 
 ## Library input validation
 
@@ -377,9 +394,11 @@ commander takes the next argument as the value of an option that needs one and
 argv is where the ambiguity is, the library and the env var take any password). No
 credential is ever bundled.
 
-The third source is the **credentials file**, the CLI's, not the library's:
-`apps/cli/src/cli/credentials.ts` (`CredentialStore`, the same mechanism as openka-cli's `ka
-config` and dip-bundestag-cli's `dip config`) and `regstat config set|get|unset|list`
+The third source is the **credentials file**, written by the CLI only; its store lives with the
+client as an internal module, so the MCP server can read it too:
+`packages/client/src/credentials.ts` (`CredentialStore`, the same mechanism as openka-cli's `ka
+config` and dip-bundestag-cli's `dip config`, not part of the library's public surface;
+`apps/cli/src/cli/credentials.ts` re-exports it) and `regstat config set|get|unset|list`
 (`apps/cli/src/cli/commands/config.ts`, names `token`, `username`, `password`). The file is
 `$XDG_CONFIG_HOME/regionalstatistik/credentials` (else
 `$HOME/.config/regionalstatistik/credentials`): JSON, mode 0600 in a 0700 directory,
@@ -774,6 +793,119 @@ value, 03-1; there is no pattern pass over stdout). `apps/cli/test/helpers.ts`'s
 - Whether this installation issues API tokens in its web UI (the engine
   supports token mode regardless; username/password is the documented default).
 - Full `Status.Code` catalogue for finer exit-code mapping.
+- The MCP server's answers with an account: the metadata `Structure` layout (Head, Columns, Rows)
+  `describeObject` reads, the `datencsv` lines `fetchData` decodes (the region key column, the
+  thousands dots), the ZIP and the `ffcsv` columns of a `tablefile` download and its encoding,
+  the catalogue lookup behind an empty answer, Status 98 on a big table (see below).
+
+## MCP server (apps/mcp)
+
+`apps/mcp` is the second published app, `@maschinenlesbar.org/regionalstatistik-mcp` (bin
+`regstat-mcp`), released in lockstep with the CLI: `npm run bump` bumps every published app
+under `apps/` together, one version, one tag. Its npm README is the root `MCP.md` (prepack packs
+`<APP>.md` for an app that has one). It is the GENESIS server of destatis-genesis-cli on this
+host's paths (lowercase `/genesisws/rest/2020`), with the regional dimension added.
+
+**The login.** The kit's credentials hook (`apps/mcp/src/mcp/credentials.ts`) asks `api.ts`'s
+`findCredentials` once, at the first tool call that needs the client, and builds the client with
+what it returns. `findCredentials` takes the login from the server's environment
+(`REGIONALSTATISTIK_API_TOKEN`, or `REGIONALSTATISTIK_USERNAME` and `REGIONALSTATISTIK_PASSWORD`),
+else (only when the server runs from its bin, never in a test) from the credentials file through
+the client's `CredentialStore`. Each source is used whole: half a pair, or a half from each place
+is the call's error naming the fix, as in the CLI; a token together with a username or password is
+refused too, where the CLI lets the token win (the server is configured once; one login, never a
+silent pick). A value no header can carry (the library's `credentialProblem`) is an error naming
+where it came from, never the value; passwords are used as given (inner spaces kept). No login is
+an error naming every way to give one, and the next call looks again. Not at start: the
+handshake, the tool list, the image's smoke test and the tests that start the bin need no login.
+One INFO record of `regstat-mcp.config` names the source, never a value; the token, username and
+password are secrets from then on, replaced with `***` in every record the server logs, every
+result and every error message. The server has no option for the login (argv shows in `ps`), and
+the Regionaldatenbank has no guest access to data. A login it refuses (HTTP 404 with GENESIS code
+2, 401 with code 15) is a tool error that says to check the login and restart, never "not found"
+(`withHints` in `tools.ts`; the client's `isAuthError` is checked first, so the CLI's exit-code
+rule for wrong credentials, exit 1 and not 4, holds for the server too).
+
+**HTTP needs a bearer token.** The server calls the Regionaldatenbank with a personal account, so
+`api.ts` exports `HTTP_NEEDS_AUTH_TOKEN = true`, and the kit (`apps/mcp/src/mcp/auth.ts`) refuses
+`--transport http` without `--auth-token-file <path>` (exit 2). The file is read once, at start,
+with the credentials file's rules (no link, owned by the server's user, mode 600, one token of at
+least 32 characters a header can carry); every POST /mcp must send `Authorization: Bearer
+<token>`, compared in constant time (SHA-256 digests and `timingSafeEqual`), else 401 with
+`WWW-Authenticate: Bearer` and no detail. The Host and Origin checks come first; `/healthz` needs
+no token. The token is never logged. stdio needs none (and refuses the option).
+
+| Module | Role |
+|---|---|
+| `packages/client/src/operations.ts` | The skills' use cases as library functions, with their traps built in. `fetchData`: one data request narrowed by region key (alone, without its variable, as the skills use it), years, time slices and up to five classifying variables, `Object.Content` decoded line by line (`splitCsvLine`, `germanNumber`: thousands dots and a decimal comma become numbers; without dots at most four digits, so 11000 or 14612000 is a key; a leading zero, a date or a plain-dot decimal stays text; a column with a key like 08221 stays text whole; value symbols kept and named in `symbols`), paged by line; an empty answer (Status 104, or 90) is checked against the catalogue (`whyEmpty`: metadata answers 104 for an unknown code too): no such code, or the selection excluded everything, with the region key's format (a saved result is in no catalogue: both named). `findStatistics`: `find`, every list collected (null lists are "nothing of that type"), titles on one line with the regional depth they state (`regionalDepth`), counts as numbers; no hit is `empty`. `browseCatalogue`: a catalogue by code or title pattern, `complete` false when the list reached the limit (no paging in GENESIS). `describeObject`: metadata, title, regional depth, time span and the variables found in `Structure` (Head, Columns, Rows). `getFlatTable`: a `*file` download as `ffcsv`, unpacked (`zip.ts`) and decoded (UTF-8, else Latin-1), columns and rows as text. Codes with `*` and a sixth classifying variable are refused before any request. |
+| `packages/client/src/zip.ts` | The files of a ZIP through its central directory, stored or deflated (`inflateRawSync` with `maxOutputLength`), 32 MiB per file, no ZIP64 or encryption (a `RegionalstatistikParseError`). |
+| `src/mcp/tools.ts` | This repo's: the five tools (flat input schemas with limits; one object output schema each; descriptions under 2000 characters), the instructions, the licence (dl-de/by-2-0 and the source label to quote), `withHints` (a refused login; status 98 with this server's arguments instead of the CLI's options, region key first). |
+| `src/mcp/api.ts` | This repo's: how the kit reaches the client (`RegionalstatistikClient` as `Client`, `RegionalstatistikError` as `ClientError`, `RegionalstatistikNetworkError` as `NetworkError`, `apiBase` with `/genesisws/rest/2020`), `findCredentials` (the login, above) and `HTTP_NEEDS_AUTH_TOKEN`. |
+| `src/mcp/auth.ts` | The kit's bearer token: `readAuthTokenFile`, `bearerMatches`, `AUTH_TOKEN_REQUIRED` (read from `api.ts`). |
+| `src/mcp/credentials.ts` | The kit's credentials hook: `findCredentials` read from `api.ts`, `Secrets`, `redactingLog`. |
+| `src/mcp/server.ts`, `result.ts`, `limiter.ts`, `http.ts`, `config.ts`, `run.ts`, `index.ts` | The kit: the McpServer factory and `callTool` (deadline, cancellation, cleaned, redacted and fitted answers, failures as tool errors), the upstream limiter (2 in flight, 120 a minute, pause on 429), Streamable HTTP on node:http (POST /mcp, /healthz, Host, Origin, the token, limits), the options, argv -> exit code, the bin. |
+
+**The kit.** Everything in `apps/mcp` but `tools.ts`, `api.ts`, `test/helpers.ts`,
+`test/tools.test.ts` and the conformance tests' adapter blocks, plus `packages/log`,
+`apps/cli/src/cli/limits.ts`, `tools/image/` (but `smoke.json`), `tools/interop/` (but
+`interop.json`), `tools/bump.mjs`, `tools/pack/` and the workflows `ci.yml`, `images.yml`,
+`release.yml` and `publish.yml`, is the kit of `create-cli-template` (in the api-cli workspace),
+the same in every repository with an MCP server: a fix lands there first and comes here with
+`npm run sync-kit -- ../regionalstatistik-cli` (run in create-cli-template; `--check` lists the drift).
+
+Tests (`apps/mcp/test`) run in-process over the SDK's InMemoryTransport with raw JSON-RPC (the
+kit's `harness.ts`, which gives every server `helpers.ts`'s `TEST_ENV`, a test token, and every
+client `TEST_CLIENT_OPTIONS`; it starts every HTTP server with a test token file, since this one
+requires one). The rules every server follows are the shared conformance tests
+`conformance-m1-…` to `conformance-m12-…`, each with an adapter block naming this repo's calls and
+mock answers; M11 covers the login (nothing looked up before the first call, one INFO record, the
+token in no record, result or error even when the upstream echoes it), M12 the bearer token
+(required here; the file's rules, 401 without it, read once, never logged). `tools.test.ts` holds
+this server's own tools and the login's rules (a username and password, the credentials file in a
+scratch `XDG_CONFIG_HOME`, mixed and half logins, a file others can read). The mock
+(`mockGenesis` in `helpers.ts`) answers GENESIS's paths with the client's `test/recorded.ts`. This
+host serves nothing without an account (`find` without one was answered HTTP 401 with code 15,
+recorded live on 2026-11-20), so the find, catalogue, metadata, data and download answers are built
+from GENESIS's documented shapes and the answers recorded on the sibling GENESIS-Online host, with
+this database's codes and region keys (**a live check with an account is still open**).
+`tools/interop/` checks the built server against the official client 2.4.0 (stdio and HTTP; legacy,
+auto and pinned 2026-07-28) in ci.yml's `interop` job; `interop.json` gives both servers a test
+token (`env`) and starts the HTTP server with a bearer token (`authToken`), checking that a request
+without it is 401.
+
+## Container image
+
+`tools/image/` builds both apps' images (Dockerfile targets `cli` and `mcp`) from their release
+tarballs (`npm pack` output), never from source: `ADD` unpacks it onto distroless Node 24 (Debian
+13, `nonroot`, uid 65532), so the image holds exactly the files npm users get. The base,
+BuildKit, the test registry, skopeo (local runs only), syft and grype are pinned in `pins.json`;
+bump them in the deps round. A Node or Debian security fix reaches the image only through a new
+base digest, so it means a patch release.
+
+| Script | What it does |
+|---|---|
+| `build.mjs` | Multi-arch OCI archive (amd64, arm64), reproducible: no provenance or SBOM attestation, timestamps from `SOURCE_DATE_EPOCH` (default: the HEAD commit's time). Two builds give the same index digest; compare index digests, not files. |
+| `push.mjs` | Copies the archive to a registry with skopeo (`--all --preserve-digests`) and checks the digest the registry serves. Used for the local test registry and for ghcr.io. |
+| `smoke.mjs` | Runs the image read-only, without capabilities, as an arbitrary uid: `--version`, `--help`, a network error (exit 1, one ERROR record), one request to a mock upstream (`smoke.json`: the connectivity check `hello`, helloworld/whoami, which sends no login: the Regionaldatenbank serves no data without an account), and `docker stop`, which must end a waiting call with 143 in under 5 s. The MCP image's checks make no tool call, so the server looks up no login; its HTTP checks run with a bearer token (`"authToken": true`: a token file of mode 600 mounted read-only, the container run as the file's owner) and check that a request without it is 401. |
+| `sbom.mjs` | One CycloneDX SBOM per platform with syft, and with `--gate true` grype over them: a fixable high or critical finding fails. Accepted findings go into `.grype.yaml` with a reason. CI only. |
+
+Locally (colima; the scripts never read your docker config, so no credential helper is asked;
+on macOS port 5000 is often taken by the AirPlay receiver, hence 5055):
+
+```bash
+export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
+npm pack --workspace apps/cli --pack-destination dist-artifacts
+node tools/image/build.mjs --app cli --tarball dist-artifacts/<tarball>.tgz --out dist-artifacts/cli.oci.tar
+docker run -d -p 127.0.0.1:5055:5000 <registry pin from pins.json>
+node tools/image/push.mjs --archive dist-artifacts/cli.oci.tar --to 127.0.0.1:5055/regionalstatistik-cli:dev
+node tools/image/smoke.mjs --app cli --image 127.0.0.1:5055/regionalstatistik-cli@<index digest>
+```
+
+In CI: `images.yml` does all of it on every push and weekly, with the arm64 image smoke-tested on
+an arm64 runner and the vulnerability gate. In `release.yml` the job `image` builds from the
+checked tarball and records the archive's digest, `image-sbom` makes the SBOMs (no gate: the
+scanner's database changes daily), `attest` signs build provenance for the tarball, the archive
+and the image index, and the release attaches the archive, the image SBOMs and `SHA256SUMS`.
 
 ## Website
 
