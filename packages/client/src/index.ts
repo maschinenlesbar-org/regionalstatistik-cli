@@ -60,3 +60,43 @@ export type { Problem } from "./validate.js";
 
 export * from "./params.js";
 export * from "./types.js";
+
+export {
+  browseCatalogue,
+  CATALOGUE_KINDS,
+  DATA_KINDS,
+  describeObject,
+  fetchData,
+  findStatistics,
+  germanNumber,
+  getFlatTable,
+  METADATA_KINDS,
+  splitCsvLine,
+  VALUE_SYMBOLS,
+} from "./operations.js";
+export type {
+  BrowseCatalogueInput,
+  CatalogueBrowse,
+  CatalogueKind,
+  Cell,
+  ClassFilter,
+  DataFetch,
+  DataKind,
+  DataSelection,
+  DescribeObjectInput,
+  Dimension,
+  FetchDataInput,
+  FindStatisticsInput,
+  FlatTable,
+  FlatTableInput,
+  FoundObject,
+  MetadataKind,
+  ObjectDescription,
+  OperationStatus,
+  Searched,
+  StatisticsSearch,
+  StatusNote,
+} from "./operations.js";
+
+export * from "./params.js";
+export * from "./types.js";
