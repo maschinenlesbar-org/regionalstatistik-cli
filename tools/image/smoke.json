@@ -1,0 +1,11 @@
+{
+  "comment": "What tools/image/smoke.mjs needs that is particular to this repo: the bin (its log topic), a command that makes one request, the exit code of a network error, the mock's answer to that request (by path, under --base-url http://mock:8080; the shape recorded live on www.regionalstatistik.de, which gives whoami only the User-Agent), and a string the printed answer contains. The Regionaldatenbank serves no data without an account, so the command is the connectivity check `hello` (helloworld/whoami), which sends no login. authToken: the MCP server serves HTTP only with a bearer token (it uses a personal account), so its HTTP checks get a token file.",
+  "bin": "regstat",
+  "command": ["--compact", "hello"],
+  "networkErrorExit": 1,
+  "answers": {
+    "/genesisws/rest/2020/helloworld/whoami": { "User-Agent": "regionalstatistik-cli-smoke" }
+  },
+  "expectStdout": "regionalstatistik-cli-smoke",
+  "authToken": true
+}
