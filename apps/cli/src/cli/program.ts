@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { Command, InvalidArgumentError, Option } from "commander";
 import type { CliDeps } from "./io.js";
 import { defaultIO } from "./io.js";
+import { readContainerLimits } from "./limits.js";
 import { RegionalstatistikClient } from "@maschinenlesbar.org/regionalstatistik-client/internal/client";
 import { MAX_TIMEOUT_MS } from "@maschinenlesbar.org/regionalstatistik-client/internal/http";
 import { MAX_RETRIES, MAX_RETRY_AFTER_MS } from "@maschinenlesbar.org/regionalstatistik-client/internal/engine";
@@ -54,6 +55,8 @@ export const defaultDeps: CliDeps = {
   createClient: (options) => new RegionalstatistikClient(options),
   env: process.env,
   credentials: () => CredentialStore.fromEnv(process.env),
+  // In a container: the memory and pids limits (cgroup), for action()'s checks.
+  limits: () => readContainerLimits(),
 };
 
 /**

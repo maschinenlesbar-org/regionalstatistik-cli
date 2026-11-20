@@ -7,9 +7,11 @@ import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
 import { OutputError, OutputRefusedError, isDirectoryMessage, logOf, reasonOf, refuseOverwrite, type CliDeps, type FileState } from "./io.js";
 import { CredentialsFileError, type CredentialStore } from "./credentials.js";
+import { pidsProblem, responseCapFor } from "./limits.js";
 import { cleartextProblem, DEFAULT_BASE_URL, isBidiControl, type RawResponse, type RetryEvent } from "@maschinenlesbar.org/regionalstatistik-client/internal/engine";
 import type { RegionalstatistikClientOptions } from "@maschinenlesbar.org/regionalstatistik-client/internal/client";
 import {
+  RegionalstatistikError,
   RegionalstatistikUsageError,
   RegionalstatistikValidationError,
   cutForMessage,
@@ -31,6 +33,9 @@ import {
   type Problem,
 } from "@maschinenlesbar.org/regionalstatistik-client/internal/validate";
 import type { Language } from "@maschinenlesbar.org/regionalstatistik-client/internal/params";
+
+/** The container can't run the CLI as it is limited (limits.ts): an ERROR record of the cli area and exit 1. */
+export class EnvironmentError extends RegionalstatistikError {}
 
 /** The names the login is stored under in the credentials file (`regstat config set token`). */
 export const CREDENTIAL_NAMES = ["token", "username", "password"] as const;
@@ -753,6 +758,14 @@ export function action(
     // download (and no wait up to --timeout). writeOutputFile checks again at write
     // time with an exclusive create, which also catches a file that appears meanwhile.
     checkOutputTarget(deps, global);
+    // In a container: under a pids limit Node can't work with, refuse before any request; under a
+    // memory limit the 100 MiB default can't be held, so cap by the memory instead (an oversized
+    // answer is then the cap's error, not an OOM kill). An explicit --max-response-bytes wins.
+    const limits = deps.limits?.() ?? {};
+    const problem = pidsProblem(limits);
+    if (problem !== undefined) throw new EnvironmentError(problem);
+    const givenCap = command.getOptionValueSourceWithGlobals("maxResponseBytes");
+    const memory = givenCap === undefined || givenCap === "default" ? limits.memoryBytes : undefined;
     // A command that takes no credentials (`hello`) never sends any, so they are
     // not resolved at all: a half-configured or malformed env login must not fail
     // the very connectivity check used to debug it.
@@ -785,6 +798,7 @@ export function action(
     }
     // A half username/password pair gets the library's pair error, reworded.
     const clientOptions = toClientOptions(global, creds);
+    if (memory !== undefined) clientOptions.maxResponseBytes = responseCapFor(memory);
     clientOptions.onRetry = (event) => logOf(deps).warn("http", retryMessage(event));
     // Text of an answer replaced with U+FFFD (invalid bytes, a lone surrogate) is never silent.
     clientOptions.onWarning = (message) => logOf(deps).warn("api", message);
