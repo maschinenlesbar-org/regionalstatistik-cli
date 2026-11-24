@@ -845,7 +845,7 @@ const FILE_METHODS = { table: "tableFile", cube: "cubeFile", timeseries: "timese
 /**
  * The flat CSV ("ffcsv": one row per value, every dimension a column, English column names) of an
  * object, as GENESIS's download delivers it: the ZIP unpacked, the file decoded (UTF-8, else
- * Latin-1), split into columns and rows. The cells are text as in the file. Nothing found is
+ * Windows-1252), split into columns and rows. The cells are text as in the file. Nothing found is
  * `empty` with the reason, as for {@link fetchData}.
  */
 export async function getFlatTable(client: RegionalstatistikClient, input: FlatTableInput): Promise<FlatTable> {
@@ -910,11 +910,15 @@ export async function getFlatTable(client: RegionalstatistikClient, input: FlatT
   };
 }
 
-/** UTF-8 when the bytes are valid UTF-8, else Latin-1 (older GENESIS files). */
+/**
+ * UTF-8 when the bytes are valid UTF-8, else Windows-1252 (older GENESIS files): it is Latin-1 with
+ * printable characters where Latin-1 has C1 controls (0x80 €, 0x84 „, 0x93 “), which Latin-1 turned
+ * into controls that the MCP server's cleaning then removed.
+ */
 function decodeText(bytes: Buffer): string {
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
-    return bytes.toString("latin1");
+    return new TextDecoder("windows-1252").decode(bytes);
   }
 }

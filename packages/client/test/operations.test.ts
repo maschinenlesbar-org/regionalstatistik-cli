@@ -417,6 +417,15 @@ test("getFlatTable: a quote that never closes doesn't swallow the rest of the fi
   assert.deepEqual(result.rows[2], ["3", "c"]);
 });
 
+test("getFlatTable: a file that isn't UTF-8 is read as Windows-1252, so the euro sign and German quotes survive", async () => {
+  const bytes = Buffer.concat([Buffer.from("code;label\n1;", "latin1"), Buffer.from([0x84, 0x47, 0x72, 0xf6, 0xdf, 0x65, 0x93, 0x20, 0x80])]);
+  const { client } = clientFor(() => rawResponse(zipOf({ "t.csv": bytes }), "application/zip"));
+  const result = await getFlatTable(client, { code: "12411-01-01-4" });
+  assert.equal(result.status, "ok");
+  if (result.status !== "ok") return;
+  assert.deepEqual(result.rows[0], ["1", "\u201eGröße\u201c \u20ac"]);
+});
+
 test("getFlatTable: a Latin-1 file is decoded; a stored (uncompressed) entry and paging work", async () => {
   const latin1 = Buffer.from("code;label\n1;Bevölkerung\n2;Größe\n", "latin1");
   const { client } = clientFor(() => rawResponse(zipOf({ "t.csv": latin1 }, { stored: true }), "application/zip"));
