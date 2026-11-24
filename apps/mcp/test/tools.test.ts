@@ -249,6 +249,17 @@ test("an HTML 404 on every endpoint (a moved path, a proxy) is a tool error sayi
   await connection.close();
 });
 
+test("an HTTP 403 without a GENESIS status reads as blocked on the way, not as a refused login", async () => {
+  const connection = await connect({ transport: makeMockTransport(() => ({ status: 403, headers: { "content-type": "text/html" }, body: Buffer.from("<html>Forbidden</html>") })) });
+  const result = await connection.call("findStatistics", { term: "Bevölkerung" });
+  assert.equal(result.isError, true);
+  const text = result.content[0]?.text ?? "";
+  assert.match(text, /HTTP 403/);
+  assert.match(text, /blocked/);
+  assert.doesNotMatch(text, /refused the server's login/);
+  await connection.close();
+});
+
 test("a refused login (HTTP 404 with GENESIS code 2) is a tool error saying what to check, never 'not found'", async () => {
   const bad = jsonResponse(BAD_LOGIN, 404);
   const connection = await connect({ transport: mockGenesis({ "data/table": () => bad, "metadata/table": () => bad }) });

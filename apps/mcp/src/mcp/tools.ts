@@ -180,7 +180,13 @@ async function withHints<T>(work: () => Promise<T>, narrow: string = NARROW_DATA
   try {
     return await work();
   } catch (err) {
-    if (err instanceof RegionalstatistikApiError && err.isAuthError) {
+    if (err instanceof RegionalstatistikApiError && err.httpStatus === 403 && err.code === undefined && !err.loginRejected) {
+      // GENESIS refuses a login with its own code (15, or 2 on HTTP 404/200); a bare 403 comes
+      // from something on the way (a proxy, a firewall, a rate block), so the login isn't blamed.
+      err.message =
+        `${err.message}. The request was blocked before GENESIS answered (HTTP 403 without a GENESIS status: a proxy, a firewall or a rate block), ` +
+        "not a refused login. Don't retry at once: tell the user the server's requests are being blocked; `regstat logincheck` tells a login problem apart.";
+    } else if (err instanceof RegionalstatistikApiError && err.isAuthError) {
       err.message =
         `${err.message.replace(/ for POST \S+/, "")}. The Regionaldatenbank refused the server's login. Don't retry: tell the user to check it (REGIONALSTATISTIK_API_TOKEN, or REGIONALSTATISTIK_USERNAME and REGIONALSTATISTIK_PASSWORD, ` +
         "or the login stored with regstat config; `regstat logincheck` checks it) and to restart the server.";
