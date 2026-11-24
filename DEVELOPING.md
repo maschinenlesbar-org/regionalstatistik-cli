@@ -153,8 +153,9 @@ What the library rejects:
     control or format character at all (a zero-width space, a soft hyphen, a bidi control only
     ever make a code match nothing — GENESIS then answers Status 104, "nothing found"); inner
     spaces are fine;
-  - `contents` is a comma-separated list (`splitList` + `listProblem`, CLI `parseList`): each
-    item is a code, and an empty item (`A,,B`, `A,`) refuses the whole list, naming the item.
+  - `contents`, `regionalkey` and `classifyingkey1..5` are comma-separated lists (`splitList` +
+    `listProblem`, CLI `parseList`): each item is a code, sent trimmed (`08221, 08222` goes out
+    as `08221,08222`), and an empty item (`A,,B`, `A,`) refuses the whole list, naming the item.
   A non-string `term` or `name` from a JavaScript caller is `Expected a string.`, as for every
   other parameter (it read "Expected a non-empty value." before; 01-1 of 2026-10-21).
   GENESIS reads an empty parameter as "no filter", so a blank one would silently return
@@ -319,7 +320,7 @@ What the library rejects:
 Every value is sent without surrounding whitespace and in Unicode NFC (P11, D8; `canonical` in
 `client.ts`): the `find` term by `normalizeText`, the object `name` and every other string
 parameter by `normalizeToken` (both exported: `trim()` then NFC; inner whitespace kept), and
-`contents` item by item (`A , B` goes out as `A,B`). A term or a code pasted with a trailing
+`contents`, `regionalkey` and `classifyingkey1..5` item by item (`A , B` goes out as `A,B`). A term or a code pasted with a trailing
 space or newline matched nothing (a code answered Status 104); until the 2026-10-21 round codes,
 selections, regional keys and dates went out as given. A decomposed umlaut (macOS clipboards, file names) looks the same but matches
 nothing: live on the sibling destatis host (same GENESIS software, 2026-10-06), `find`
@@ -740,7 +741,7 @@ From the kit rollout of 2026-10-21: P24 (`conformance-p24-input-corpus`: a corpu
 values through every text filter, code and list, on the CLI and in the library — here the `find`
 term, the object codes and the filter values, sent trimmed and in NFC or refused (a value of only
 invisible characters or with a control, format or half character included, its refusal showing
-the character escaped), and `--contents` item by item; GENESIS takes its parameters in the form
+the character escaped), and `--contents`, `--region-key` and `--class-key1` item by item; GENESIS takes its parameters in the form
 body, so the adapter reads them from the bodies the CLI and the library sent, with a test token
 from `REGIONALSTATISTIK_API_TOKEN` on the CLI side; no value goes into a request path, so the codes
 are text inputs and the id list is empty), P25

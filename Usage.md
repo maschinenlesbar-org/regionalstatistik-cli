@@ -161,10 +161,10 @@ before any request:
 
 | Flag | GENESIS param |
 |---|---|
-| `--region-var <code>` · `--region-key <key>` | `regionalvariable` / `regionalkey` — the regional level (e.g. `KREISE`, `GEMEIN`) and the region(s) by AGS/ARS key; `*` wildcard ok (`08*` = all Kreise in Baden-Württemberg) |
+| `--region-var <code>` · `--region-key <key>` | `regionalvariable` / `regionalkey` — the regional level (e.g. `KREISE`, `GEMEIN`) and the region(s) by AGS/ARS key, comma-separated (each key trimmed, an empty one a usage error); `*` wildcard ok (`08*` = all Kreise in Baden-Württemberg) |
 | `--start-year <YYYY>` · `--end-year <YYYY>` | `startyear` / `endyear` |
 | `--timeslices <n>` | `timeslices` (from the latest period back) |
-| `--class-var1..5 <code>` · `--class-key1..5 <key>` | `classifyingvariable{n}` / `classifyingkey{n}` |
+| `--class-var1..5 <code>` · `--class-key1..5 <key>` | `classifyingvariable{n}` / `classifyingkey{n}` (keys comma-separated, like `--contents`) |
 | `--contents <labels>` | `contents` (comma-separated; each label is trimmed, an empty one is a usage error) |
 | `--stand <DD.MM.YYYY>` | `stand` (only newer data) |
 | `--structure` · `--transpose` · `--compress` | `structureinformation` / `transpose` / `compress` |

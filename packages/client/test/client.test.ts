@@ -224,6 +224,20 @@ test("codes and filter values go out trimmed and in NFC, a list item by item; an
   assert.equal(mt.calls.length, 2);
 });
 
+test("region and class keys are lists like contents: each item trimmed, an empty item refused, never sent", async () => {
+  const mt = makeMockTransport(() => jsonResponse(fx.dataTable));
+  const c = new RegionalstatistikClient({ token: "0123456789abcdef0123456789abcdef", transport: mt.transport });
+  await c.data.table("12411-01-01-4", { regionalkey: "08221, 08222", classifyingvariable1: "GES", classifyingkey1: " GESM , GESW ", classifyingvariable5: "ALTX17", classifyingkey5: "ALT000B03,\tALT003B06" });
+  const body = bodyOf(mt.calls[0]!);
+  assert.equal(body.get("regionalkey"), "08221,08222");
+  assert.equal(body.get("classifyingkey1"), "GESM,GESW");
+  assert.equal(body.get("classifyingkey5"), "ALT000B03,ALT003B06");
+  for (const params of [{ regionalkey: "08221,,08222" }, { regionalkey: "08221," }, { classifyingkey2: "," }, { classifyingkey3: "GESM, " }]) {
+    await assert.rejects(c.data.table("12411-01-01-4", params), (err: Error) => err instanceof RegionalstatistikValidationError && /item \d of \d/.test(err.message), JSON.stringify(params));
+  }
+  assert.equal(mt.calls.length, 1);
+});
+
 test("a non-string term or object code is called a wrong type, not empty (01-1)", async () => {
   // A JavaScript caller passing a number (a year as term, a numeric code as name) was told the
   // value was empty; every other parameter already said "Expected a string.".

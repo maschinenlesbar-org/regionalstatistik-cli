@@ -77,14 +77,14 @@ const textInputs: Input[] = [
   { name: "data table --start-year", argv: (v) => ["data", "table", "x", "--start-year", v], lib: (c, v) => c.data.table("x", { startyear: v }), sent: () => sentParam("startyear") },
   { name: "data table --stand", argv: (v) => ["data", "table", "x", "--stand", v], lib: (c, v) => c.data.table("x", { stand: v }), sent: () => sentParam("stand") },
   { name: "data table --region-var", argv: (v) => ["data", "table", "x", "--region-var", v], lib: (c, v) => c.data.table("x", { regionalvariable: v }), sent: () => sentParam("regionalvariable") },
-  { name: "data table --region-key", argv: (v) => ["data", "table", "x", "--region-key", v], lib: (c, v) => c.data.table("x", { regionalkey: v }), sent: () => sentParam("regionalkey") },
-  { name: "data table --class-key1", argv: (v) => ["data", "table", "x", "--class-key1", v], lib: (c, v) => c.data.table("x", { classifyingkey1: v }), sent: () => sentParam("classifyingkey1") },
 ];
 /** Every token that goes into a request path: none (see above). */
 const idInputs: Input[] = [];
 /** Every comma-separated list option; `sent` gives the items as they went out. */
 const listInputs: Array<Input<string[] | null>> = [
   { name: "data table --contents", argv: (v) => ["data", "table", "x", "--contents", v], lib: (c, v) => c.data.table("x", { contents: v }), sent: () => sentParam("contents")?.split(",") ?? null },
+  { name: "data table --region-key", argv: (v) => ["data", "table", "x", "--region-key", v], lib: (c, v) => c.data.table("x", { regionalkey: v }), sent: () => sentParam("regionalkey")?.split(",") ?? null },
+  { name: "data table --class-key1", argv: (v) => ["data", "table", "x", "--class-key1", v], lib: (c, v) => c.data.table("x", { classifyingkey1: v }), sent: () => sentParam("classifyingkey1")?.split(",") ?? null },
 ];
 /** A code as the repo sends it (trimmed, NFC). */
 const canonicalId = (value: string): string => value.trim().normalize("NFC");
