@@ -97,6 +97,25 @@ test("fetchData: a Land key column stays text whole: Berlin's 11 is a key where 
   assert.deepEqual(result.lines.slice(1), [["Baden-Württemberg", "08", 11280257], ["Berlin", "11", 3878100]]);
 });
 
+test("fetchData: Land keys 10 to 16 stay text when no key in the column has a leading zero: the keys asked for mark the column", async () => {
+  const content = "Land;Schlüssel;Hochschulen;Einwohner\nSaarland;10;10;992.666\nBerlin;11;12;3.878.100\nThüringen;16;14;2.114.870\n";
+  const laender = { ...DATA_SYMBOLS, Object: { Code: "12411-01-01-2", Content: content } };
+  for (const regionKey of ["1*", "10,11,16", " 10 , 11 , 16 "]) {
+    const { client } = clientFor(() => jsonResponse(laender));
+    const result = await fetchData(client, { code: "12411-01-01-2", regionKey });
+    assert.equal(result.status, "ok");
+    if (result.status !== "ok") return;
+    assert.deepEqual(result.lines.slice(1), [["Saarland", "10", 10, 992666], ["Berlin", "11", 12, 3878100], ["Thüringen", "16", 14, 2114870]], regionKey);
+  }
+  // Three-digit Regierungsbezirk keys the same; a pattern full of stars stays quick.
+  const bezirke = { ...DATA_SYMBOLS, Object: { Code: "12411-01-01-3", Content: "31.12.2023;111;Bezirk;1.000\n31.12.2023;112;Bezirk;2.000\n" } };
+  const { client } = clientFor(() => jsonResponse(bezirke));
+  const result = await fetchData(client, { code: "12411-01-01-3", regionKey: `11*,${"1*".repeat(200)}` });
+  assert.equal(result.status, "ok");
+  if (result.status !== "ok") return;
+  assert.deepEqual(result.lines.map((line) => line[1]), ["111", "112"]);
+});
+
 test("fetchData: value symbols stay text and are named, never 0; a Gemeinde key stays text", async () => {
   const { client } = clientFor(() => jsonResponse(DATA_SYMBOLS));
   const result = await fetchData(client, { code: "82111-01-03-5" });

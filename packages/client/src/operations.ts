@@ -332,10 +332,7 @@ export async function fetchData(client: RegionalstatistikClient, input: FetchDat
     return { status: "empty", kind, code, searched, reason: await whyEmpty(client, kind, code, searched), copyright: answer.Copyright };
   }
   const all = csvLines(content).map((line) => splitCsvLine(line));
-  // A column with a region key that has a leading zero (08221) is a key column: every cell of it
-  // stays text, so Berlin's 11000 is not a number where Heidelberg's 08221 is a key.
-  const keyColumns = new Set<number>();
-  for (const cells of all) cells.forEach((cell, i) => /^0\d+$/.test(cell.trim()) && keyColumns.add(i));
+  const keyColumns = keyColumnsOf(all, input.regionKey);
   const lines = all.slice(offset, offset + limit).map((cells) => cells.map((cell, i): Cell => (keyColumns.has(i) ? cell : (germanNumber(cell) ?? cell))));
   const symbols: Record<string, string> = {};
   for (const line of lines) for (const cell of line) if (typeof cell === "string" && VALUE_SYMBOLS[cell.trim()] !== undefined) symbols[cell.trim()] = VALUE_SYMBOLS[cell.trim()] as string;
@@ -354,6 +351,71 @@ export async function fetchData(client: RegionalstatistikClient, input: FetchDat
     copyright: answer.Copyright,
     ...(note === undefined ? {} : { statusNote: note }),
   };
+}
+
+/**
+ * The columns that hold region keys, whose cells stay text. A column with a key that has a leading
+ * zero (08221, 08) is one: so Berlin's 11000 is not a number where Heidelberg's 08221 is a key.
+ * Keys without one (the Länder 10 to 16, their Regierungsbezirke 101 to 160) are found by the keys
+ * asked for (`regionKey`): the leftmost column whose numbers are all plain digits matching one of
+ * them is the key column, so a Länder table for "1*" doesn't give its keys as numbers.
+ */
+function keyColumnsOf(rows: readonly string[][], regionKey: string | undefined): Set<number> {
+  const keyColumns = new Set<number>();
+  for (const cells of rows) cells.forEach((cell, i) => /^0\d+$/.test(cell.trim()) && keyColumns.add(i));
+  const asked = regionKeyTest(regionKey);
+  if (asked === undefined) return keyColumns;
+  const width = rows.reduce((most, cells) => Math.max(most, cells.length), 0);
+  for (let i = 0; i < width; i += 1) {
+    let matched = false;
+    let other = false;
+    for (const cells of rows) {
+      const cell = (cells[i] ?? "").trim();
+      if (/^\d{1,12}$/.test(cell) && asked(cell)) matched = true;
+      else if (germanNumber(cell) !== undefined || /^\d+$/.test(cell)) other = true;
+      if (other) break;
+    }
+    if (matched && !other) {
+      keyColumns.add(i);
+      break;
+    }
+  }
+  return keyColumns;
+}
+
+/**
+ * Whether a cell of digits is one of the region keys asked for: `regionKey` comma-separated, `*`
+ * any characters. Checked without a regular expression, so a pattern full of stars stays linear.
+ */
+function regionKeyTest(regionKey: string | undefined): ((cell: string) => boolean) | undefined {
+  if (regionKey === undefined) return undefined;
+  const patterns = regionKey.split(",").map((item) => item.trim()).filter((item) => item !== "");
+  if (patterns.length === 0) return undefined;
+  return (cell) => patterns.some((pattern) => wildcardMatch(pattern, cell));
+}
+
+/** `*` matches any run of characters; everything else itself. Greedy with one backtrack point: linear in practice. */
+function wildcardMatch(pattern: string, text: string): boolean {
+  let p = 0;
+  let t = 0;
+  let star = -1;
+  let mark = 0;
+  while (t < text.length) {
+    if (p < pattern.length && pattern[p] !== "*" && pattern[p] === text[t]) {
+      p += 1;
+      t += 1;
+    } else if (p < pattern.length && pattern[p] === "*") {
+      star = p;
+      mark = t;
+      p += 1;
+    } else if (star >= 0) {
+      p = star + 1;
+      mark += 1;
+      t = mark;
+    } else return false;
+  }
+  while (p < pattern.length && pattern[p] === "*") p += 1;
+  return p === pattern.length;
 }
 
 /** The object's title, when the data answer names one apart from its content. */
