@@ -141,8 +141,9 @@ table without one is huge); this server, like the CLI, doesn't run GENESIS's bat
   `Origin` (only the origins given with `--allowed-origins`, matched exactly) against DNS rebinding
   and other web pages. Exposed beyond localhost (it logs a warning then), it belongs behind a TLS
   proxy.
-- **Gentle with the upstream.** One server process sends at most 2 requests at a time (the host
-  ends requests beyond about 10 in parallel per account) and 120 a minute to the API, pauses on HTTP 429, and stops a tool call after its deadline.
+- **Gentle with the upstream.** One server process sends at most 2 requests at a time (the host ends
+  requests beyond about 10 in parallel per account) and 120 a minute to the API, pauses on HTTP 429
+  (as long as its Retry-After asks, at most 30 s), and stops a tool call after its deadline.
 - **Results are data.** Text from the API is cleaned (control, bidi and zero-width characters
   removed), but it is still other people's text: a model can be told things in it. The server
   can't act on that (it has no tool that writes), but other tools in the same session could.
