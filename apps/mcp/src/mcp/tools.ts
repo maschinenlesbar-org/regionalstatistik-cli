@@ -64,6 +64,7 @@ const whole = (description: string, min: number, max: number): JsonSchema => ({ 
 const input = (properties: Record<string, JsonSchema>, required: string[] = []): JsonSchema => ({ type: "object", properties, required, additionalProperties: false });
 const year = (description: string): JsonSchema => ({ type: "string", pattern: "^[0-9]{4}$", description });
 const LANGUAGE: JsonSchema = { type: "string", enum: ["de", "en"], description: "Labels in German (default) or English (partly translated)." };
+const DATA_LANGUAGE: JsonSchema = { ...LANGUAGE, description: "Labels in German (default) or English (partly translated). With en, fetchData leaves the figures as text: GENESIS's English number format isn't known." };
 
 /** How every data tool is narrowed. */
 const SELECTION: Record<string, JsonSchema> = {
@@ -79,7 +80,7 @@ const SELECTION: Record<string, JsonSchema> = {
     ]),
   ),
   contents: text("Only these value columns (codes, comma-separated, as describeObject lists them).", 200),
-  language: LANGUAGE,
+  language: DATA_LANGUAGE,
 };
 
 /** One object schema: the fields every answer has, plus the tool's own. */

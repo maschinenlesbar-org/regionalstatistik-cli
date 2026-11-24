@@ -116,6 +116,18 @@ test("fetchData: Land keys 10 to 16 stay text when no key in the column has a le
   assert.deepEqual(result.lines.map((line) => line[1]), ["111", "112"]);
 });
 
+test("fetchData: with language en the figures stay text as sent: GENESIS's English number format isn't known, so none is guessed", async () => {
+  const english = { ...DATA_SYMBOLS, Object: { Code: "12411-01-01-4", Content: "31.12.2023;08221;Heidelberg;162,273\n31.12.2023;11000;Berlin;3,878,100\n31.12.2023;08222;Mannheim;.\n" } };
+  const { client } = clientFor(() => jsonResponse(english));
+  const result = await fetchData(client, { code: "12411-01-01-4", language: "en" });
+  assert.equal(result.status, "ok");
+  if (result.status !== "ok") return;
+  assert.deepEqual(result.lines.map((line) => line[3]), ["162,273", "3,878,100", "."]);
+  assert.equal(result.symbols["."], "unknown or kept secret");
+  const german = await fetchData(clientFor(() => jsonResponse(DATA_12411_01_01_4)).client, { code: "12411-01-01-4", language: "de" });
+  assert.equal(german.status === "ok" && german.lines[5]?.[3], 162273);
+});
+
 test("fetchData: value symbols stay text and are named, never 0; a Gemeinde key stays text", async () => {
   const { client } = clientFor(() => jsonResponse(DATA_SYMBOLS));
   const result = await fetchData(client, { code: "82111-01-03-5" });
