@@ -177,6 +177,16 @@ test("fetchData: a catalogue that lists only other codes (12411-01-01-4 for 1241
   assert.equal(result.status === "empty" && /no table with the code 12411-01-01 /.test(result.reason), true);
 });
 
+test("fetchData: an empty answer for a code the catalogue lists in other case names the listed code", async () => {
+  const cubes = genesis("catalogue", "cubes", { List: [{ Code: "12411BJ001", Content: "Bevölkerungsstand", Time: "" }] });
+  const { client } = clientFor((endpoint) => (endpoint === "catalogue/cubes" ? jsonResponse(cubes) : jsonResponse(EMPTY_104("data", "cube"))));
+  const result = await fetchData(client, { code: "12411bj001", kind: "cube" });
+  assert.equal(result.status, "empty");
+  if (result.status !== "empty") return;
+  assert.match(result.reason, /no cube with the code 12411bj001/);
+  assert.match(result.reason, /lists 12411BJ001/);
+});
+
 test("fetchData: a saved result is in no catalogue: an empty one says both reasons, with no second request", async () => {
   const { client, upstream } = clientFor(() => jsonResponse(EMPTY_104("data", "result")));
   const result = await fetchData(client, { kind: "result", code: "MYRESULT" });

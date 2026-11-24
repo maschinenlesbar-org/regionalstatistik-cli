@@ -174,12 +174,19 @@ async function whyEmpty(client: RegionalstatistikClient, kind: DataKind, code: s
     return "GENESIS found nothing: the saved result does not exist under this name (results are per account), or the selection excluded every value.";
   }
   let exists: boolean;
+  let otherCase: string | undefined;
   try {
     const listed = await client.catalogue[CATALOGUE_OF[kind]]({ selection: code, searchcriterion: "Code", pagelength: 5 });
-    exists = !isEmpty(listed) && Array.isArray(listed.List) && (listed.List as unknown as Record<string, unknown>[]).some((item) => item["Code"] === code);
+    const codes = !isEmpty(listed) && Array.isArray(listed.List) ? (listed.List as unknown as Record<string, unknown>[]).map((item) => item["Code"]) : [];
+    exists = codes.includes(code);
+    // Whether GENESIS matches codes in any case is not verified: a code listed in other case is named.
+    otherCase = codes.find((listedCode): listedCode is string => typeof listedCode === "string" && listedCode !== code && listedCode.toUpperCase() === code.toUpperCase());
   } catch (err) {
     if (noSuchObject(err)) exists = false;
     else throw err;
+  }
+  if (!exists && otherCase !== undefined) {
+    return `There is no ${kind} with the code ${code}, but the catalogue lists ${otherCase}: codes are exact, case included. Ask for ${otherCase} as listed.`;
   }
   if (!exists) return `There is no ${kind} with the code ${code} (the catalogue doesn't list it). Search for the right code by topic; don't guess codes.`;
   return filtered
