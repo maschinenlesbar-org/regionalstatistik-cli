@@ -18,6 +18,7 @@ import {
   FIND_ALL,
   FIND_NONE,
   FIND_TABLES,
+  genesis,
   METADATA_12411_01_01_4,
   NOT_AUTHORIZED,
   TABLES_12411,
@@ -310,6 +311,31 @@ test("getFlatTable: the ffcsv download is unpacked from its ZIP and split into c
   assert.equal(body.get("regionalkey"), "08221");
   assert.equal(body.get("startyear"), "2022");
   assert.deepEqual(endpoints(upstream.calls), ["data/tablefile"]);
+});
+
+test("getFlatTable and fetchData: a line break inside a quoted cell stays in the cell, the row whole", async () => {
+  const csv = 'time;1_variable_attribute_code;1_variable_attribute_label;value\r\n31.12.2023;08221;"Heidelberg,\nStadtkreis";162.273\r\n31.12.2023;08222;"Mannheim";315.554\r\n';
+  const flat = clientFor(() => rawResponse(zipOf({ "t.csv": csv }), "application/zip"));
+  const table = await getFlatTable(flat.client, { code: "12411-01-01-4" });
+  assert.equal(table.status, "ok");
+  if (table.status !== "ok") return;
+  assert.equal(table.total, 2);
+  assert.deepEqual(table.rows, [["31.12.2023", "08221", "Heidelberg,\nStadtkreis", "162.273"], ["31.12.2023", "08222", "Mannheim", "315.554"]]);
+  const data = clientFor(() => jsonResponse(genesis("data", "table", { Object: { Code: "12411-01-01-4", Content: csv } })));
+  const lines = await fetchData(data.client, { code: "12411-01-01-4" });
+  assert.equal(lines.status, "ok");
+  if (lines.status !== "ok") return;
+  assert.equal(lines.total, 3);
+  assert.deepEqual(lines.lines[1], ["31.12.2023", "08221", "Heidelberg,\nStadtkreis", 162273]);
+});
+
+test("getFlatTable: a quote that never closes doesn't swallow the rest of the file: the lines are split as they come", async () => {
+  const { client } = clientFor(() => rawResponse(zipOf({ "t.csv": 'code;label\n1;"open\n2;b\n3;c\n' }), "application/zip"));
+  const result = await getFlatTable(client, { code: "12411-01-01-4" });
+  assert.equal(result.status, "ok");
+  if (result.status !== "ok") return;
+  assert.equal(result.total, 3);
+  assert.deepEqual(result.rows[2], ["3", "c"]);
 });
 
 test("getFlatTable: a Latin-1 file is decoded; a stored (uncompressed) entry and paging work", async () => {

@@ -229,9 +229,41 @@ export function splitCsvLine(line: string, delimiter = ";"): string[] {
   return cells;
 }
 
-/** The lines of a CSV text (CRLF or LF; a trailing empty line dropped; a byte-order mark removed). */
-function csvLines(text: string): string[] {
-  const lines = text.replace(/^﻿/, "").split(/\r?\n/);
+/**
+ * The lines of a CSV text (CRLF or LF; a trailing empty line dropped; a byte-order mark removed).
+ * A line break inside a quoted cell (a quote at the start of a cell, as {@link splitCsvLine} reads
+ * it) belongs to the cell, not a new line. One linear pass; a quote that never closes would make
+ * the rest of the file one cell, so then the text is split at every line break instead.
+ */
+function csvLines(text: string, delimiter = ";"): string[] {
+  const body = text.replace(/^\ufeff/, "");
+  const lines: string[] = [];
+  let start = 0;
+  let quoted = false;
+  let cellStart = true;
+  for (let i = 0; i < body.length; i += 1) {
+    const ch = body[i];
+    if (quoted) {
+      if (ch === '"') {
+        if (body[i + 1] === '"') i += 1;
+        else quoted = false;
+      }
+    } else if (ch === '"' && cellStart) {
+      quoted = true;
+      cellStart = false;
+    } else if (ch === "\n") {
+      lines.push(body.slice(start, i > start && body[i - 1] === "\r" ? i - 1 : i));
+      start = i + 1;
+      cellStart = true;
+    } else cellStart = ch === delimiter;
+  }
+  if (quoted) return trimEnd(body.split(/\r?\n/));
+  lines.push(body.slice(start));
+  return trimEnd(lines);
+}
+
+/** The lines without the empty ones at the end. */
+function trimEnd(lines: string[]): string[] {
   while (lines.length > 0 && lines[lines.length - 1]?.trim() === "") lines.pop();
   return lines;
 }
@@ -674,10 +706,13 @@ export async function getFlatTable(client: RegionalstatistikClient, input: FlatT
     file = entry.name;
     bytes = entry.data;
   }
-  const lines = csvLines(decodeText(bytes));
+  const text = decodeText(bytes);
+  // The delimiter is the header's (the first line: column names hold no line break).
+  const first = text.replace(/^\ufeff/, "").split(/\r?\n/, 1)[0] ?? "";
+  const delimiter = (first.match(/;/g)?.length ?? 0) >= (first.match(/,/g)?.length ?? 0) ? ";" : ",";
+  const lines = csvLines(text, delimiter);
   if (lines.length === 0) return { status: "empty", kind, code, searched, reason: `The file ${file} GENESIS sent is empty.` };
   const header = lines[0] as string;
-  const delimiter = (header.match(/;/g)?.length ?? 0) >= (header.match(/,/g)?.length ?? 0) ? ";" : ",";
   const columns = splitCsvLine(header, delimiter);
   const body = lines.slice(1);
   return {
