@@ -112,10 +112,11 @@ For scripts and shared configs, pin a release and its digest from the
 | `browseCatalogue` | The tables, statistics, cubes, time series, variables or values whose code (or title) matches a pattern (`12411*`: a statistic's tables at every depth, `…-4` Kreise, `…-5` Gemeinden). |
 
 Every tool only reads. An answer is JSON (`structuredContent` and the same as text), with the
-`source` it came from (the endpoint and its parameters, never the login), the data licence and
-GENESIS's own `copyright`. A failure is a tool error that says what to change. A table too large
-for a direct fetch is refused by GENESIS (status 98): narrow it, by region key first (a Gemeinde
-table without one is huge); this server, like the CLI, doesn't run GENESIS's batch jobs.
+`source` it came from (the endpoint and its parameters, never the login; an answer a redirect
+fetched from another host would say so there), the data licence and GENESIS's own `copyright`. A
+failure is a tool error that says what to change. A table too large for a direct fetch is refused by
+GENESIS (status 98): narrow it, by region key first (a Gemeinde table without one is huge); this
+server, like the CLI, doesn't run GENESIS's batch jobs.
 
 ## Options
 
