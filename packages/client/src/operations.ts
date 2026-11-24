@@ -25,7 +25,7 @@
 // catalogue; counts come as strings ("9") and are numbers here.
 
 import type { RegionalstatistikClient } from "./client.js";
-import { RegionalstatistikApiError, RegionalstatistikValidationError } from "./errors.js";
+import { RegionalstatistikApiError, RegionalstatistikParseError, RegionalstatistikValidationError } from "./errors.js";
 import type { CatalogueParams, DataFileParams, DataTableParams, FindCategory, Language } from "./params.js";
 import type { GenesisEnvelope, JsonObject, JsonValue } from "./types.js";
 import { assertValid, normalizeText, normalizeToken, textProblem, tokenProblem } from "./validate.js";
@@ -141,6 +141,22 @@ function isEmpty(answer: GenesisEnvelope): boolean {
  */
 function noSuchObject(err: unknown): err is RegionalstatistikApiError {
   return err instanceof RegionalstatistikApiError && !err.isAuthError && (err.code === 90 || err.code === 104);
+}
+
+/**
+ * An answer that isn't "nothing matched" (104) but lacks a key every success of its endpoint has
+ * (`Tables` and the other lists of a search, `Object.Content` of data, a table's `Structure`, a
+ * catalogue's `List`): a shape this client doesn't know, so an error, never read as "nothing".
+ * The shapes come from GENESIS's documentation; a renamed key would otherwise make every answer a
+ * confident "no hits" or "the selection excluded everything".
+ */
+function unexpectedShape(endpoint: string, missing: string): RegionalstatistikParseError {
+  return new RegionalstatistikParseError(`GENESIS's answer to ${endpoint} has no ${missing}: a shape this client doesn't know (the API may have changed), so nothing is read from it.`);
+}
+
+/** True for a JSON object (not null, not a list). */
+function isObject(value: unknown): value is Record<string, JsonValue | undefined> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 /** The catalogue that lists the objects of a kind, by code. */
@@ -337,6 +353,7 @@ export async function fetchData(client: RegionalstatistikClient, input: FetchDat
     }
     throw err;
   }
+  if (!isEmpty(answer) && !(isObject(answer.Object) && "Content" in answer.Object)) throw unexpectedShape(`data/${kind}`, "Object.Content");
   const content = answer.Object?.Content;
   if (isEmpty(answer) || typeof content !== "string" || content.trim() === "") {
     return { status: "empty", kind, code, searched, reason: await whyEmpty(client, kind, code, searched), copyright: answer.Copyright };
@@ -498,6 +515,7 @@ export async function findStatistics(client: RegionalstatistikClient, input: Fin
   const limit = assertValid("limit", input.limit ?? 20, (v: number) => (Number.isSafeInteger(v) && v >= 1 && v <= 100 ? undefined : "Expected a whole number from 1 to 100."));
   const searched = { term, category };
   const answer = await client.find({ term, category, pagelength: limit, ...(input.language === undefined ? {} : { language: input.language }) });
+  if (!isEmpty(answer) && !Object.keys(FIND_LISTS).some((list) => list in answer)) throw unexpectedShape("find/find", `any of its lists (${Object.keys(FIND_LISTS).join(", ")})`);
   const matches: FoundObject[] = [];
   let complete = true;
   for (const [list, type] of Object.entries(FIND_LISTS) as [keyof typeof FIND_LISTS, FoundObject["type"]][]) {
@@ -593,6 +611,7 @@ export async function browseCatalogue(client: RegionalstatistikClient, input: Br
   };
   const searched = { kind, selection, searchIn };
   const answer = await client.catalogue[kind](params);
+  if (!isEmpty(answer) && !("List" in answer)) throw unexpectedShape(`catalogue/${kind}`, "List");
   const list = Array.isArray(answer.List) ? (answer.List as unknown as Record<string, unknown>[]) : [];
   if (isEmpty(answer) || list.length === 0) {
     return {
@@ -666,6 +685,8 @@ export async function describeObject(client: RegionalstatistikClient, input: Des
     throw err;
   }
   const object = answer.Object;
+  if (!isEmpty(answer) && !isObject(object)) throw unexpectedShape(`metadata/${kind}`, "Object");
+  if (!isEmpty(answer) && kind === "table" && !("Structure" in (object as object))) throw unexpectedShape("metadata/table", "Object.Structure");
   if (isEmpty(answer) || object === undefined || object === null || typeof object !== "object") {
     return { status: "empty", kind, code, reason: notFoundReason(kind, code), copyright: answer.Copyright };
   }

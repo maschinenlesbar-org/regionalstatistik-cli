@@ -414,6 +414,25 @@ test("an HTML 404 without a GENESIS status (a moved path, a proxy) is the client
   await assert.rejects(fetchData(client, { code: "12411-01-01-4", regionKey: "08221" }), isBare404);
 });
 
+test("an answer without the keys every success has (a changed shape) is a parse error, never 'nothing found'", async () => {
+  const drifted = (endpoint: string) => {
+    if (endpoint === "find/find") return jsonResponse(genesis("find", "find", { Tabellen: [{ Code: "12411-01-01-4", Content: "x" }] }));
+    if (endpoint === "data/table") return jsonResponse(genesis("data", "table", { Object: { Code: "12411-01-01-4", Inhalt: "a;b\n1;2\n" } }));
+    if (endpoint === "metadata/table") return jsonResponse(genesis("metadata", "table", { Object: { Code: "12411-01-01-4", Content: "x", Struktur: {} } }));
+    if (endpoint === "catalogue/tables") return jsonResponse(genesis("catalogue", "tables", { Liste: [{ Code: "12411-01-01-4", Content: "x" }] }));
+    return jsonResponse(EMPTY_104("data", "table"));
+  };
+  const parseError = (key: string) => (err: unknown) => err instanceof RegionalstatistikParseError && err.message.includes(key);
+  await assert.rejects(findStatistics(clientFor(drifted).client, { term: "Bevölkerung" }), parseError("Tables"));
+  await assert.rejects(fetchData(clientFor(drifted).client, { code: "12411-01-01-4", regionKey: "08221" }), parseError("Content"));
+  await assert.rejects(describeObject(clientFor(drifted).client, { code: "12411-01-01-4" }), parseError("Structure"));
+  await assert.rejects(browseCatalogue(clientFor(drifted).client, { selection: "12411*" }), parseError("List"));
+  // The real empty shapes stay empty: every find list null, 104 without an Object or a List.
+  assert.equal((await findStatistics(clientFor(() => jsonResponse(FIND_NONE)).client, { term: "x" })).status, "empty");
+  assert.equal((await describeObject(clientFor(() => jsonResponse(EMPTY_104("metadata", "table"))).client, { code: "12411-01-01-4" })).status, "empty");
+  assert.equal((await browseCatalogue(clientFor(() => jsonResponse(EMPTY_104("catalogue", "tables"))).client, { selection: "9*" })).status, "empty");
+});
+
 test("a refused login is never 'nothing found': wrong credentials (HTTP 404 with GENESIS code 2) stay the client's auth error", async () => {
   const { client } = clientFor(() => jsonResponse(BAD_LOGIN, 404));
   for (const run of [
