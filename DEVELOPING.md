@@ -613,8 +613,12 @@ for every transport (P5):
 
 - **`timeoutMs`** — the call runs under an overall deadline: the request carries an
   `AbortSignal` (`HttpRequest.signal`, which the default transport honours and a fetch
-  transport passes on) and the engine rejects with `RegionalstatistikNetworkError` at the
-  deadline whether the transport stops or not.
+  transport passes on; the engine aborts it with its timeout error as the reason) and the
+  engine rejects with `RegionalstatistikNetworkError` at the deadline whether the transport
+  stops or not. The default transport stops on that signal with its reason, and on a signal
+  another caller aborted (the MCP server's limiter adds a tool call's deadline and
+  cancellation) with "Request aborted by its caller before it finished": never a timeout that
+  didn't fire.
 - **`maxResponseBytes`** — checked again on the body the transport hands back
   (`sizeLimitMessage` names the option and `--max-response-bytes`). The default transport
   joins small chunks as they arrive (`COALESCE_CHUNKS`, 1024, or `COALESCE_BYTES`, 64 KiB), so
