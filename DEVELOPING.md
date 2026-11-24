@@ -830,10 +830,11 @@ rule for wrong credentials, exit 1 and not 4, holds for the server too).
 `api.ts` exports `HTTP_NEEDS_AUTH_TOKEN = true`, and the kit (`apps/mcp/src/mcp/auth.ts`) refuses
 `--transport http` without `--auth-token-file <path>` (exit 2). The file is read once, at start,
 with the credentials file's rules (no link, owned by the server's user, mode 600, one token of at
-least 32 characters a header can carry); every POST /mcp must send `Authorization: Bearer
-<token>`, compared in constant time (SHA-256 digests and `timingSafeEqual`), else 401 with
-`WWW-Authenticate: Bearer` and no detail. The Host and Origin checks come first; `/healthz` needs
-no token. The token is never logged. stdio needs none (and refuses the option).
+least 32 characters a header can carry; a regular file: it is opened non-blocking, so a FIFO is
+refused at once instead of blocking the start, signals included); every POST /mcp must send
+`Authorization: Bearer <token>`, compared in constant time (SHA-256 digests and `timingSafeEqual`),
+else 401 with `WWW-Authenticate: Bearer` and no detail. The Host and Origin checks come first;
+`/healthz` needs no token. The token is never logged. stdio needs none (and refuses the option).
 
 | Module | Role |
 |---|---|
