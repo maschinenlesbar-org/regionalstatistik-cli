@@ -47,6 +47,15 @@ test("germanNumber: thousands dots and a decimal comma; region keys, dates and p
   }
 });
 
+test("germanNumber: a figure with more digits than a number holds exactly stays text, never other digits", () => {
+  assert.equal(germanNumber("9.007.199.254.740.991"), 9007199254740991, "the largest exact whole number");
+  assert.equal(germanNumber("9.007.199.254.740.993"), undefined);
+  assert.equal(germanNumber("123.456.789.012.345.678"), undefined);
+  assert.equal(germanNumber("123.456.789.012,345"), 123456789012.345, "15 digits are exact");
+  assert.equal(germanNumber("1.234.567.890.123,4567"), undefined, "17 digits with a fraction are not");
+  assert.equal(germanNumber("0,000000000000000012345"), 1.2345e-17, "leading zeros of a fraction aren't digits of the figure");
+});
+
 test("splitCsvLine: semicolons, quoted cells with the delimiter and doubled quotes", () => {
   assert.deepEqual(splitCsvLine(";Insgesamt;"), ["", "Insgesamt", ""]);
   assert.deepEqual(splitCsvLine('a;"b;c";"say ""hi"""'), ["a", "b;c", 'say "hi"']);
