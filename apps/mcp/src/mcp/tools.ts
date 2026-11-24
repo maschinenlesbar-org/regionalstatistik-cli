@@ -27,6 +27,7 @@ import {
   type Language,
   type MetadataKind,
 } from "@maschinenlesbar.org/regionalstatistik-client";
+import { canonical } from "@maschinenlesbar.org/regionalstatistik-client/internal/client";
 import { RegionalstatistikApiError, RegionalstatistikValidationError } from "@maschinenlesbar.org/regionalstatistik-client/internal/errors";
 import type { JsonSchema, ToolDefinition } from "./server.js";
 
@@ -123,10 +124,13 @@ function selection(args: Record<string, unknown>): DataSelection {
   };
 }
 
-/** A request as GENESIS sees it, for `source`: the endpoint and its parameters (never the login). */
+/**
+ * A request as GENESIS sees it, for `source`: the endpoint and its parameters (never the login),
+ * each value as the client sends it (trimmed and composed, `canonical`), not as the arguments had it.
+ */
 function sourceOf(endpoint: string, params: Record<string, string | number | undefined>): string {
   const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== "") query.set(key, String(value));
+  for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== "") query.set(key, typeof value === "string" ? canonical(key, value) : String(value));
   const text = query.toString().replace(/\+/g, "%20");
   return text === "" ? endpoint : `${endpoint}?${text}`;
 }

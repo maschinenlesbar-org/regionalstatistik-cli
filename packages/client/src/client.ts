@@ -122,7 +122,7 @@ function paramsOf(params: unknown, keys: readonly string[], options: unknown = {
  * list `null`, composed 80 tables — and a code pasted with a trailing newline answered Status
  * 104, "nothing found".
  */
-function canonical(key: string, value: string): string {
+export function canonical(key: string, value: string): string {
   if (key === "term") return normalizeText(value);
   if (LIST_PARAM_KEYS.includes(key)) return splitList(value).map(normalizeToken).join(",");
   return normalizeToken(value);

@@ -112,7 +112,7 @@ For scripts and shared configs, pin a release and its digest from the
 | `browseCatalogue` | The tables, statistics, cubes, time series, variables or values whose code (or title) matches a pattern (`12411*`: a statistic's tables at every depth, `…-4` Kreise, `…-5` Gemeinden). |
 
 Every tool only reads. An answer is JSON (`structuredContent` and the same as text), with the
-`source` it came from (the endpoint and its parameters, whole, never the login; an answer a redirect
+`source` it came from (the endpoint and its parameters as GENESIS got them, trimmed and composed, whole, never the login; an answer a redirect
 fetched from another host would say so there), the data licence and GENESIS's own `copyright`. A
 text over 2000 characters is cut and ends in `…[cut, N characters in all]`, and the answer says
 `truncated`. An answer over `--max-result-chars` first loses entries from the end of its page (then
