@@ -97,6 +97,26 @@ test("fetchData: too large (Status 98) is a tool error that names this tool's ar
   await connection.close();
 });
 
+test("too large (Status 98) on a search or a catalogue names what that tool can narrow, not the data tools' selection", async () => {
+  const status = { Code: 98, Content: "Das Ergebnis ist zu groß.", Type: "Information" };
+  const connection = await connect({ transport: mockGenesis({ "find/find": genesis("find", "find", {}, status), "catalogue/tables": genesis("catalogue", "tables", {}, status) }) });
+  const found = await connection.call("findStatistics", { term: "Bevölkerung" });
+  assert.equal(found.isError, true);
+  const foundText = found.content[0]?.text ?? "";
+  assert.match(foundText, /GENESIS status 98/);
+  assert.match(foundText, /term/);
+  assert.match(foundText, /limit/);
+  assert.doesNotMatch(foundText, /startYear|regionKey|classKey|--pagelength/);
+  const browsed = await connection.call("browseCatalogue", { selection: "1*", limit: 500 });
+  assert.equal(browsed.isError, true);
+  const browsedText = browsed.content[0]?.text ?? "";
+  assert.match(browsedText, /GENESIS status 98/);
+  assert.match(browsedText, /pattern/);
+  assert.match(browsedText, /limit/);
+  assert.doesNotMatch(browsedText, /startYear|regionKey|classKey|--pagelength/);
+  await connection.close();
+});
+
 test("fetchData: a class key without its variable and a wildcard code are tool errors before any request", async () => {
   const upstream = mockGenesis();
   const connection = await connect({ transport: upstream });

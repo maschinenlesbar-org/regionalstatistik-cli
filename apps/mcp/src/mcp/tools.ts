@@ -157,12 +157,17 @@ function dataParams(args: Record<string, unknown>): Record<string, string | numb
   return params;
 }
 
+/** How each kind of tool narrows an answer GENESIS calls too large (Status 98): its own arguments. */
+const NARROW_DATA = "regionKey first (a Gemeinde table without one is huge; 08221 one Kreis, 08* one Land's Kreise), then startYear and endYear or timeslices, classVariableN with classKeyN (describeObject lists the variables)";
+const NARROW_SEARCH = "a more specific term, a category other than all, or a lower limit";
+const NARROW_CATALOGUE = "a longer code pattern (12411* instead of 12*), or a lower limit";
+
 /**
  * GENESIS's errors as a model can act on them: a refused login (never retried: the server's login
- * must be fixed), a table too large for a direct fetch (narrow it; the CLI's option names don't
- * apply here), an object GENESIS doesn't know.
+ * must be fixed), an answer too large for a direct fetch (narrow it by the tool's own arguments,
+ * `narrow`; the CLI's option names don't apply here), an object GENESIS doesn't know.
  */
-async function withHints<T>(work: () => Promise<T>): Promise<T> {
+async function withHints<T>(work: () => Promise<T>, narrow: string = NARROW_DATA): Promise<T> {
   try {
     return await work();
   } catch (err) {
@@ -173,7 +178,7 @@ async function withHints<T>(work: () => Promise<T>): Promise<T> {
     } else if (err instanceof RegionalstatistikApiError && err.code === 98) {
       err.message =
         `GENESIS status 98: the object is too large for a direct fetch${err.detail === undefined ? "" : ` (${err.detail.replace(/ — .*$/, "")})`}. This server doesn't run GENESIS's batch jobs. ` +
-        "Narrow it: regionKey first (a Gemeinde table without one is huge; 08221 one Kreis, 08* one Land's Kreise), then startYear and endYear or timeslices, classVariableN with classKeyN (describeObject lists the variables); don't retry unchanged.";
+        `Narrow it: ${narrow}; don't retry unchanged.`;
     }
     throw err;
   }
@@ -247,6 +252,7 @@ export const TOOLS: readonly ToolDefinition[] = [
             limit: num(args, "limit"),
             language: str(args, "language") as Language | undefined,
           }),
+          NARROW_SEARCH,
         )),
       };
     },
@@ -347,6 +353,7 @@ export const TOOLS: readonly ToolDefinition[] = [
             limit: num(args, "limit"),
             language: str(args, "language") as Language | undefined,
           }),
+          NARROW_CATALOGUE,
         )),
       };
     },
