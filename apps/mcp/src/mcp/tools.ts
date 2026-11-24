@@ -29,7 +29,7 @@ import {
   type MetadataKind,
 } from "@maschinenlesbar.org/regionalstatistik-client";
 import { canonical } from "@maschinenlesbar.org/regionalstatistik-client/internal/client";
-import { RegionalstatistikApiError, RegionalstatistikValidationError } from "@maschinenlesbar.org/regionalstatistik-client/internal/errors";
+import { RegionalstatistikApiError, RegionalstatistikNetworkError, RegionalstatistikValidationError } from "@maschinenlesbar.org/regionalstatistik-client/internal/errors";
 import type { JsonSchema, ToolDefinition } from "./server.js";
 
 /** The service, as results and messages name it. */
@@ -194,6 +194,11 @@ async function withHints<T>(work: () => Promise<T>, narrow: string = NARROW_DATA
       err.message =
         `GENESIS status 98: the object is too large for a direct fetch${err.detail === undefined ? "" : ` (${err.detail.replace(/ — .*$/, "")})`}. This server doesn't run GENESIS's batch jobs. ` +
         `Narrow it: ${narrow}; don't retry unchanged.`;
+    } else if (
+      (err instanceof RegionalstatistikApiError && (err.httpStatus === 502 || err.httpStatus === 503 || err.httpStatus === 504)) ||
+      (err instanceof RegionalstatistikNetworkError && /timed out/.test(err.message))
+    ) {
+      err.message = `${err.message}. GENESIS is sometimes slow or down for a while: try again shortly, unchanged; if it keeps failing, tell the user.`;
     } else if (err instanceof RegionalstatistikApiError && err.httpStatus === 404 && err.code === undefined) {
       err.message =
         `${err.message}. The API answered HTTP 404 without a GENESIS status: its endpoint wasn't found (a moved path, or a proxy in the way), ` +

@@ -249,6 +249,16 @@ test("an HTML 404 on every endpoint (a moved path, a proxy) is a tool error sayi
   await connection.close();
 });
 
+test("GENESIS down or slow (a 502, 503 or 504 after the retries, a request timeout) is a tool error that says to try again shortly", async () => {
+  // A 502 is not retried, so no test waits for a backoff; a 503 ends the same way after its retries.
+  const down = await connect({ transport: makeMockTransport(() => ({ status: 502, headers: { "content-type": "text/html" }, body: Buffer.from("<html>bad gateway</html>") })) });
+  const busy = await down.call("findStatistics", { term: "Bevölkerung" });
+  assert.equal(busy.isError, true);
+  assert.match(busy.content[0]?.text ?? "", /HTTP 502/);
+  assert.match(busy.content[0]?.text ?? "", /try again shortly/);
+  await down.close();
+});
+
 test("an HTTP 403 without a GENESIS status reads as blocked on the way, not as a refused login", async () => {
   const connection = await connect({ transport: makeMockTransport(() => ({ status: 403, headers: { "content-type": "text/html" }, body: Buffer.from("<html>Forbidden</html>") })) });
   const result = await connection.call("findStatistics", { term: "Bevölkerung" });
