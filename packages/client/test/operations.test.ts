@@ -403,6 +403,17 @@ test("fetchData: GENESIS's 'object not found' (Status 90) is empty too, naming t
   assert.match(result.reason, /no table with the code 12411-99-99-4/);
 });
 
+test("an HTML 404 without a GENESIS status (a moved path, a proxy) is the client's error, never 'no such object'", async () => {
+  const page = () => rawResponse("<!DOCTYPE html><html><body><h1>HTTP Status 404 – Not Found</h1></body></html>", "text/html", 404);
+  const isBare404 = (err: unknown) => err instanceof RegionalstatistikApiError && err.httpStatus === 404 && err.code === undefined;
+  await assert.rejects(fetchData(clientFor(page).client, { code: "12411-01-01-4", regionKey: "08221" }), isBare404);
+  await assert.rejects(getFlatTable(clientFor(page).client, { code: "12411-01-01-4" }), isBare404);
+  await assert.rejects(describeObject(clientFor(page).client, { code: "12411-01-01-4" }), isBare404);
+  // The data answered "nothing" (104), but the catalogue that tells why is not found itself.
+  const { client } = clientFor((endpoint) => (endpoint.startsWith("catalogue/") ? page() : jsonResponse(EMPTY_104("data", "table"))));
+  await assert.rejects(fetchData(client, { code: "12411-01-01-4", regionKey: "08221" }), isBare404);
+});
+
 test("a refused login is never 'nothing found': wrong credentials (HTTP 404 with GENESIS code 2) stay the client's auth error", async () => {
   const { client } = clientFor(() => jsonResponse(BAD_LOGIN, 404));
   for (const run of [

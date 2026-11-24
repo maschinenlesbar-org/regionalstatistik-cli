@@ -133,6 +133,16 @@ function isEmpty(answer: GenesisEnvelope): boolean {
   return answer.Status?.Code === 104;
 }
 
+/**
+ * True for GENESIS's own "no such object": status 90 (object not found), or 104 on a download. Not
+ * for an HTTP 404 without a GENESIS status (`isNotFound` counts one, for the CLI's exit code): that
+ * is a moved path or a proxy page, the endpoint not found rather than the object, and stays the
+ * client's error; nor for a refused login (this host sends one as HTTP 404 with code 2).
+ */
+function noSuchObject(err: unknown): err is RegionalstatistikApiError {
+  return err instanceof RegionalstatistikApiError && !err.isAuthError && (err.code === 90 || err.code === 104);
+}
+
 /** The catalogue that lists the objects of a kind, by code. */
 const CATALOGUE_OF = { table: "tables", cube: "cubes", timeseries: "timeseries" } as const;
 
@@ -152,7 +162,7 @@ async function whyEmpty(client: RegionalstatistikClient, kind: DataKind, code: s
     const listed = await client.catalogue[CATALOGUE_OF[kind]]({ selection: code, searchcriterion: "Code", pagelength: 5 });
     exists = !isEmpty(listed) && Array.isArray(listed.List) && (listed.List as unknown as Record<string, unknown>[]).some((item) => item["Code"] === code);
   } catch (err) {
-    if (err instanceof RegionalstatistikApiError && err.isNotFound && !err.isAuthError) exists = false;
+    if (noSuchObject(err)) exists = false;
     else throw err;
   }
   if (!exists) return `There is no ${kind} with the code ${code} (the catalogue doesn't list it). Search for the right code by topic; don't guess codes.`;
@@ -322,7 +332,7 @@ export async function fetchData(client: RegionalstatistikClient, input: FetchDat
     answer = await client.data[kind](code, params);
   } catch (err) {
     // GENESIS's "object not found" (Status 90), rarer than 104 for a wrong code.
-    if (err instanceof RegionalstatistikApiError && err.isNotFound && !err.isAuthError) {
+    if (noSuchObject(err)) {
       return { status: "empty", kind, code, searched, reason: `GENESIS knows no ${kind} with the code ${code} (${err.message.replace(/ for POST \S+/, "")}). Search for the right code by topic; don't guess codes.`, copyright: "" };
     }
     throw err;
@@ -650,7 +660,7 @@ export async function describeObject(client: RegionalstatistikClient, input: Des
   try {
     answer = await client.metadata[kind](code, input.language === undefined ? {} : { language: input.language });
   } catch (err) {
-    if (err instanceof RegionalstatistikApiError && err.isNotFound && !err.isAuthError) {
+    if (noSuchObject(err)) {
       return { status: "empty", kind, code, reason: notFoundReason(kind, code), copyright: "" };
     }
     throw err;
@@ -765,7 +775,7 @@ export async function getFlatTable(client: RegionalstatistikClient, input: FlatT
     raw = await client.data[FILE_METHODS[kind]](code, { ...(params as DataFileParams), format: "ffcsv" });
   } catch (err) {
     // A download that finds nothing is GENESIS's Status 104 instead of a file: the client throws it.
-    if (err instanceof RegionalstatistikApiError && err.isNotFound && !err.isAuthError) {
+    if (noSuchObject(err)) {
       return { status: "empty", kind, code, searched, reason: await whyEmpty(client, kind, code, searched) };
     }
     throw err;

@@ -15,7 +15,7 @@ import { listTools } from "../src/mcp/server.js";
 import { DEADLINE_HINT, INSTRUCTIONS, LICENCE, SIZE_HINT, TOOLS } from "../src/mcp/tools.js";
 import { PROGRAM } from "../src/mcp/version.js";
 import { connect, noUpstream, recorder } from "./harness.js";
-import { BAD_LOGIN, bodyOf, endpointOf, EMPTY_104, FIND_ALL, FIND_NONE, genesis, jsonResponse, mockGenesis, TEST_TOKEN } from "./helpers.js";
+import { BAD_LOGIN, bodyOf, endpointOf, EMPTY_104, FIND_ALL, FIND_NONE, genesis, jsonResponse, makeMockTransport, mockGenesis, TEST_TOKEN } from "./helpers.js";
 
 const records = (lines: string[]) => lines.join("\n");
 
@@ -227,6 +227,25 @@ test("browseCatalogue: a code pattern; nothing matched is empty with the hint to
   const none = await connection.call("browseCatalogue", { selection: "99999", kind: "statistics" });
   assert.equal(none.structuredContent?.["status"], "empty");
   assert.match(String(none.structuredContent?.["reason"]), /99999\*/);
+  await connection.close();
+});
+
+test("an HTML 404 on every endpoint (a moved path, a proxy) is a tool error saying the endpoint wasn't found, never 'no such table'", async () => {
+  const page = () => ({ status: 404, headers: { "content-type": "text/html" }, body: Buffer.from("<!DOCTYPE html><html><body><h1>HTTP Status 404 – Not Found</h1></body></html>") });
+  const connection = await connect({ transport: makeMockTransport(page) });
+  for (const [tool, args] of [
+    ["fetchData", { code: "12411-01-01-4", regionKey: "08221" }],
+    ["getFlatTable", { code: "12411-01-01-4", regionKey: "08221" }],
+    ["describeObject", { code: "12411-01-01-4" }],
+    ["findStatistics", { term: "Bevölkerung" }],
+  ] as const) {
+    const result = await connection.call(tool, args);
+    assert.equal(result.isError, true, `${tool}: ${result.content[0]?.text}`);
+    const text = result.content[0]?.text ?? "";
+    assert.match(text, /HTTP 404/, tool);
+    assert.match(text, /endpoint wasn't found/, tool);
+    assert.doesNotMatch(text, /There is no|knows no/, tool);
+  }
   await connection.close();
 });
 

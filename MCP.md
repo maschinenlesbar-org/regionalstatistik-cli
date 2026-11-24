@@ -124,7 +124,9 @@ tool error that says to ask for less. A failure is a tool error that says what t
 5000 characters loses its middle, never its end, where the reason is). A table too large for a
 direct fetch is refused by GENESIS (status 98): narrow it, by region key first (a Gemeinde table
 without one is huge; the error names the tool's own arguments: region key, years or class keys for
-the data tools, the term or the code pattern and `limit` for a search or a catalogue); this server, like the CLI, doesn't run GENESIS's batch jobs.
+the data tools, the term or the code pattern and `limit` for a search or a catalogue); this server, like the CLI, doesn't run GENESIS's batch jobs. An HTTP 404 without a GENESIS
+status (a moved path, a proxy) is a tool error saying the API's endpoint wasn't found, never "no
+such table".
 
 ## Options
 

@@ -170,7 +170,8 @@ const NARROW_CATALOGUE = "a longer code pattern (12411* instead of 12*), or a lo
 /**
  * GENESIS's errors as a model can act on them: a refused login (never retried: the server's login
  * must be fixed), an answer too large for a direct fetch (narrow it by the tool's own arguments,
- * `narrow`; the CLI's option names don't apply here), an object GENESIS doesn't know.
+ * `narrow`; the CLI's option names don't apply here), an HTTP 404 without a GENESIS status (the
+ * endpoint not found, not the object: a moved path or a proxy).
  */
 async function withHints<T>(work: () => Promise<T>, narrow: string = NARROW_DATA): Promise<T> {
   try {
@@ -184,6 +185,10 @@ async function withHints<T>(work: () => Promise<T>, narrow: string = NARROW_DATA
       err.message =
         `GENESIS status 98: the object is too large for a direct fetch${err.detail === undefined ? "" : ` (${err.detail.replace(/ — .*$/, "")})`}. This server doesn't run GENESIS's batch jobs. ` +
         `Narrow it: ${narrow}; don't retry unchanged.`;
+    } else if (err instanceof RegionalstatistikApiError && err.httpStatus === 404 && err.code === undefined) {
+      err.message =
+        `${err.message}. The API answered HTTP 404 without a GENESIS status: its endpoint wasn't found (a moved path, or a proxy in the way), ` +
+        "not the object, which GENESIS reports with a status of its own. Don't read it as 'no such table' and don't retry: tell the user the server can't reach GENESIS's API.";
     }
     throw err;
   }
