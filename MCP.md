@@ -113,7 +113,8 @@ For scripts and shared configs, pin a release and its digest from the
 
 Every tool only reads. An answer is JSON (`structuredContent` and the same as text), with the
 `source` it came from (the endpoint and its parameters as GENESIS got them, trimmed and composed, whole, never the login; an answer a redirect
-fetched from another host would say so there), the data licence and GENESIS's own `copyright`. A
+fetched from another host would say so there), the data licence and, where
+GENESIS's answer has one, its own `copyright` (`getFlatTable`'s download has none). A
 text over 2000 characters is cut and ends in `…[cut, N characters in all]`, and the answer says
 `truncated`. An answer over `--max-result-chars` first loses entries from the end of its page (then
 `nextOffset` says where to go on), then has its longest texts cut further (each with that mark) or,

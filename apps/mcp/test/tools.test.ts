@@ -187,6 +187,24 @@ test("getFlatTable: the flat CSV unpacked from the download's ZIP, as columns an
   await connection.close();
 });
 
+test("copyright: where GENESIS sends one; the flat download carries none and says so, and no answer has a blank one", async () => {
+  const notFound = () => jsonResponse({ Code: 90, Content: "Das Objekt wurde nicht gefunden.", Type: "ERROR" }, 404);
+  const connection = await connect({ transport: mockGenesis({ "data/table": notFound, "metadata/table": notFound }) });
+  const flat = await connection.call("getFlatTable", { code: "12411-01-01-4" });
+  assert.equal(flat.structuredContent?.["status"], "ok", flat.content[0]?.text);
+  assert.equal("copyright" in (flat.structuredContent ?? {}), false);
+  const missing = await connection.call("fetchData", { code: "99999-99-99-4" });
+  assert.equal(missing.structuredContent?.["status"], "empty", missing.content[0]?.text);
+  assert.equal("copyright" in (missing.structuredContent ?? {}), false, "no copyright: \"\"");
+  const described = await connection.call("describeObject", { code: "99999-99-99-4" });
+  assert.equal(described.structuredContent?.["status"], "empty", described.content[0]?.text);
+  assert.equal("copyright" in (described.structuredContent ?? {}), false);
+  await connection.close();
+  const getFlatTable = listTools().find((tool) => tool.name === "getFlatTable");
+  assert.match(getFlatTable?.description ?? "", /no copyright line/);
+  assert.match(INSTRUCTIONS, /where GENESIS sends one, its copyright/);
+});
+
 test("describeObject: the dimensions and the time span; a missing code is empty", async () => {
   const connection = await connect({ transport: mockGenesis() });
   const result = await connection.call("describeObject", { code: "12411-01-01-4" });
