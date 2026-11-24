@@ -115,13 +115,14 @@ Every tool only reads. An answer is JSON (`structuredContent` and the same as te
 `source` it came from (the endpoint and its parameters, whole, never the login; an answer a redirect
 fetched from another host would say so there), the data licence and GENESIS's own `copyright`. A
 text over 2000 characters is cut and ends in `…[cut, N characters in all]`, and the answer says
-`truncated`. An answer over `--max-result-chars` loses entries from the end of its lists, each down
-to its first entry (so a page's `nextOffset` always moves on), then has its longest texts cut
-further (each with that mark), and says `truncated`; one that can't be cut down so far is a tool
-error that says to ask for less. A failure is a tool error that says what to change (one over 5000
-characters loses its middle, never its end, where the reason is). A table too large for a direct
-fetch is refused by GENESIS (status 98): narrow it, by region key first (a Gemeinde table without
-one is huge); this server, like the CLI, doesn't run GENESIS's batch jobs.
+`truncated`. An answer over `--max-result-chars` first loses entries from the end of its page
+(`nextOffset` says where to go on), then has its longest texts cut further (each with that mark) or,
+when that isn't enough, its other lists shortened; a list keeps its first entry, `notes` stay whole,
+and the answer says `truncated`. One that can't be cut down so far is a tool error that says to ask
+for less. A failure is a tool error that says what to change (one over 5000 characters loses its
+middle, never its end, where the reason is). A table too large for a direct fetch is refused by
+GENESIS (status 98): narrow it, by region key first (a Gemeinde table without one is huge); this
+server, like the CLI, doesn't run GENESIS's batch jobs.
 
 ## Options
 
