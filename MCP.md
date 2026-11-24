@@ -40,13 +40,14 @@ at the first tool call, from:
 
 One login from one place: a token together with a username or password, half a pair, or one part
 from the environment and the other from the file is refused, naming what to change (the CLI lets a
-token win over a username and password; the server, configured once, asks for one). One INFO
-record on stderr says where the login came from, never a value; the token, username and password
-are replaced with `***` in every log record, result and error. The server takes no login on its
-command line. Without one, every tool call is an error that says what to set (and the next call
-looks again); a login GENESIS refuses is an error that says to check it (`regstat logincheck`)
-and restart the server. The Regionaldatenbank serves nothing without an account, so there is no
-guest mode.
+token win over a username and password; the server, configured once, asks for one). One INFO record
+on stderr says where the login came from, never a value; the token, username and password are
+replaced with `***` in every log record, result and error (a value shorter than 16 characters, such
+as a username, only where it stands whole: the username `Bund` leaves "Bundesländer" in the data
+alone). The server takes no login on its command line. Without one, every tool call is an error that
+says what to set (and the next call looks again); a login GENESIS refuses is an error that says to
+check it (`regstat logincheck`) and restart the server. The Regionaldatenbank serves nothing without
+an account, so there is no guest mode.
 
 ## Connect a client
 
