@@ -151,11 +151,12 @@ without one is huge); this server, like the CLI, doesn't run GENESIS's batch job
   and other web pages; a page on one of those origins gets CORS (its preflight answered, the answers
   readable). Exposed beyond localhost (it logs a warning then), it belongs behind a TLS proxy.
 - **Gentle with the upstream.** One server process sends at most 2 requests at a time (the host ends
-  requests beyond about 10 in parallel per account) and 120 a minute to the API, pauses on HTTP 429
-  (as long as its Retry-After asks, at most 30 s), and stops a tool call after its deadline (a tool
-  that has read part of its answer by then may answer with that part, and says so). A request those
-  limits would hold longer than it or its call may wait is not sent: the call fails at once, naming
-  the limit and when to ask again (and the log says so).
+  requests beyond about 10 in parallel per account) and 120 a minute to the API, pauses the requests
+  to a host that answers HTTP 429 (as long as its Retry-After asks, at most 30 s; those to another
+  host go on), and stops a tool call after its deadline (a tool that has read part of its answer by
+  then may answer with that part, and says so). A request those limits would hold longer than it or
+  its call may wait is not sent: the call fails at once, naming the limit and when to ask again (and
+  the log says so).
 - **Results are data.** Text from the API, keys included, is cleaned (control, bidi, zero-width, tag
   and other invisible characters removed, but an emoji keeps its joiners; a credential echoed with
   one inside is still replaced; a key that cleaning makes equal to another stays, as `name~2`), but
