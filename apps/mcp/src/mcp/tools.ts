@@ -242,7 +242,7 @@ export const TOOLS: readonly ToolDefinition[] = [
     description: [
       'Turn a regional topic into Regionaldatenbank object codes. Use it for "welche Tabelle hat die Einwohner je Kreis?", "Statistik zu Arbeitslosen je Gemeinde finden", "Regionalstatistik zur Bevölkerung", "which table has population by district?", "find regional statistics on unemployment", "is there Gemeinde-level data on births?".',
       "GENESIS's full-text search: matches lists type (table, statistic, cube, timeseries, variable), code, title and, for a table, its regionalDepth (Kreise und krfr. St\u00e4dte, Gemeinden, as the title states it). category tables (the default) gives the usable 2-D views; statistics gives the statistics (12411) whose tables browseCatalogue lists (12411*); all searches every type. The codes are what fetchData, getFlatTable and describeObject take.",
-      "Traps: match the regional depth to the question: \"Einwohner von Heidelberg\" needs a Kreis table (\u2026-4), a Gemeinde question \u2026-5; the same statistic has both. Search in German for the best hits (Bev\u00f6lkerung, Arbeitslose, Kreise). No hit is status empty, not an error: broaden the word or use category all. Confirm the right table with describeObject before fetching. limit caps each type's list.",
+      "Traps: match the regional depth to the question: \"Einwohner von Heidelberg\" needs a Kreis table (\u2026-4), a Gemeinde question \u2026-5; the same statistic has both. Search in German for the best hits (Bev\u00f6lkerung, Arbeitslose, Kreise). No hit is status empty, not an error: broaden the word or use category all. Confirm the right table with describeObject before fetching. limit caps each type's list: complete false means a list reached it and more may exist (raise limit or narrow the term).",
       RULES,
     ].join("\n\n"),
     inputSchema: input(
@@ -254,7 +254,7 @@ export const TOOLS: readonly ToolDefinition[] = [
       },
       ["term"],
     ),
-    outputSchema: output({ matches: arr, perTypeLimit: int }),
+    outputSchema: output({ matches: arr, perTypeLimit: int, complete: { type: "boolean" } }),
     source: (args) => sourceOf("find/find", { term: str(args, "term"), category: str(args, "category") ?? "tables", pagelength: num(args, "limit") ?? 20, language: str(args, "language") }),
     async run(args, context) {
       return cited(

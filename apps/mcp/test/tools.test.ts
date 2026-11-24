@@ -164,6 +164,7 @@ test("findStatistics: codes and titles; no hit is empty with what was searched",
   assert.equal(matches.length, 5);
   assert.deepEqual(matches.slice(0, 2).map((m) => m.regionalDepth), ["Kreise und krfr. Städte", "Gemeinden"], "each table's regional depth, to match the question");
   assert.equal(found.structuredContent?.["source"], "https://www.regionalstatistik.de/genesisws/rest/2020/find/find?term=Bev%C3%B6lkerungsstand&category=all&pagelength=2");
+  assert.equal(found.structuredContent?.["complete"], false, "a type's list reached the limit of 2");
   const none = await connection.call("findStatistics", { term: "Xyzzyquux" });
   assert.equal(none.structuredContent?.["status"], "empty");
   assert.deepEqual(none.structuredContent?.["searched"], { term: "Xyzzyquux", category: "tables" });

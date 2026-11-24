@@ -465,12 +465,21 @@ export interface FindStatisticsInput {
 
 /** The answer of {@link findStatistics}. */
 export type StatisticsSearch =
-  | { status: "ok"; searched: { term: string; category: FindCategory }; matches: FoundObject[]; perTypeLimit: number; copyright: string }
+  | {
+      status: "ok";
+      searched: { term: string; category: FindCategory };
+      matches: FoundObject[];
+      perTypeLimit: number;
+      /** False when a type's list reached `perTypeLimit`: more of that type may exist (raise the limit, or narrow the term). */
+      complete: boolean;
+      copyright: string;
+    }
   | { status: "empty"; searched: { term: string; category: FindCategory }; reason: string; copyright: string };
 
 /**
  * The objects GENESIS's full-text search finds for a topic: their codes and titles, tables first.
- * No hit is `empty` with what was searched (GENESIS answers it with success and every list null,
+ * `complete` is false when a type's list reached `limit` (GENESIS gives no total). No hit is
+ * `empty` with what was searched (GENESIS answers it with success and every list null,
  * not with an error or an empty list).
  */
 export async function findStatistics(client: RegionalstatistikClient, input: FindStatisticsInput): Promise<StatisticsSearch> {
@@ -480,9 +489,11 @@ export async function findStatistics(client: RegionalstatistikClient, input: Fin
   const searched = { term, category };
   const answer = await client.find({ term, category, pagelength: limit, ...(input.language === undefined ? {} : { language: input.language }) });
   const matches: FoundObject[] = [];
+  let complete = true;
   for (const [list, type] of Object.entries(FIND_LISTS) as [keyof typeof FIND_LISTS, FoundObject["type"]][]) {
     const items = answer[list];
     if (!Array.isArray(items)) continue;
+    if (items.length >= limit) complete = false;
     for (const item of items as unknown as Record<string, unknown>[]) matches.push(foundObject(type, item));
   }
   if (matches.length === 0 || isEmpty(answer)) {
@@ -496,7 +507,7 @@ export async function findStatistics(client: RegionalstatistikClient, input: Fin
       copyright: answer.Copyright,
     };
   }
-  return { status: "ok", searched, matches, perTypeLimit: limit, copyright: answer.Copyright };
+  return { status: "ok", searched, matches, perTypeLimit: limit, complete, copyright: answer.Copyright };
 }
 
 /** A list item as a found object: the title on one line, counts as numbers. */

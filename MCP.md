@@ -106,7 +106,7 @@ For scripts and shared configs, pin a release and its digest from the
 | Tool | What it answers |
 |---|---|
 | `fetchData` | The figures of a table, cube, time series or saved result for the regions asked for (official AGS keys: `08221` Heidelberg, `08*` every Kreis of Baden-Württemberg), narrowed further by years and up to five classifying variables; GENESIS's German-format CSV decoded line by line (numbers as numbers, a figure with more digits than a number holds exactly as text, region keys as text with their leading zeros, value symbols kept and named). An empty answer says whether the code doesn't exist or the selection excluded everything. |
-| `findStatistics` | A topic to object codes: GENESIS's full-text search over tables (default), statistics, cubes, time series and variables, with each table's regional depth (Kreise, Gemeinden). |
+| `findStatistics` | A topic to object codes: GENESIS's full-text search over tables (default), statistics, cubes, time series and variables, with each table's regional depth (Kreise, Gemeinden); `complete` is false when a type's list reached `limit`. |
 | `getFlatTable` | A table as GENESIS's flat CSV ("ffcsv": one row per value, every dimension a column), unpacked from the download's ZIP, as columns and rows a page at a time. The server writes no file. |
 | `describeObject` | An object's title, regional depth, time span and dimensions (the variable codes `fetchData` filters by), from its metadata. |
 | `browseCatalogue` | The tables, statistics, cubes, time series, variables or values whose code (or title) matches a pattern (`12411*`: a statistic's tables at every depth, `…-4` Kreise, `…-5` Gemeinden). |

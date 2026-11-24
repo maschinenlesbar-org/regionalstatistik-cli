@@ -231,6 +231,17 @@ test("findStatistics: tables by default; titles on one line with their regional 
   assert.equal(body.get("pagelength"), "3");
 });
 
+test("findStatistics: a type's list as long as the limit is not complete, as in browseCatalogue; under it, complete", async () => {
+  const at = await findStatistics(clientFor(() => jsonResponse(FIND_TABLES)).client, { term: "Bevölkerung", limit: 3 });
+  assert.equal(at.status, "ok");
+  if (at.status !== "ok") return;
+  assert.equal(at.complete, false);
+  const under = await findStatistics(clientFor(() => jsonResponse(FIND_TABLES)).client, { term: "Bevölkerung", limit: 20 });
+  assert.equal(under.status, "ok");
+  if (under.status !== "ok") return;
+  assert.equal(under.complete, true);
+});
+
 test("findStatistics: category all collects every list; counts that come as strings are numbers", async () => {
   const { client } = clientFor(() => jsonResponse(FIND_ALL));
   const result = await findStatistics(client, { term: "Bevölkerungsstand", category: "all", limit: 2 });
