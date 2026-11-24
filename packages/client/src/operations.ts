@@ -29,7 +29,7 @@ import { RegionalstatistikApiError, RegionalstatistikParseError, Regionalstatist
 import type { CatalogueParams, DataFileParams, DataTableParams, FindCategory, Language } from "./params.js";
 import type { GenesisEnvelope, JsonObject, JsonValue } from "./types.js";
 import { assertValid, normalizeText, normalizeToken, textProblem, tokenProblem } from "./validate.js";
-import { isZip, readZip } from "./zip.js";
+import { isZip, zipEntries } from "./zip.js";
 
 /** What every operation answers: ok, or empty (with the reason). */
 export type OperationStatus = "ok" | "empty";
@@ -833,11 +833,12 @@ export async function getFlatTable(client: RegionalstatistikClient, input: FlatT
   let file = `${code}.csv`;
   let bytes = raw.data;
   if (isZip(raw.data)) {
-    const entries = readZip(raw.data);
+    // Only the file read is unpacked: the archive's other entries are never inflated.
+    const entries = zipEntries(raw.data);
     const entry = entries.find((e) => /\.csv$/i.test(e.name)) ?? entries[0];
     if (entry === undefined) return { status: "empty", kind, code, searched, reason: "GENESIS sent an empty archive: no file in it." };
     file = entry.name;
-    bytes = entry.data;
+    bytes = entry.read();
   }
   const text = decodeText(bytes);
   // The delimiter is the header's (the first line: column names hold no line break).

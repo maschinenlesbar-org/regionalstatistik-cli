@@ -7,7 +7,7 @@ import { RegionalstatistikClient } from "../src/client.js";
 import { RegionalstatistikApiError, RegionalstatistikParseError, RegionalstatistikValidationError } from "../src/errors.js";
 import type { HttpRequest, HttpResponse } from "../src/http.js";
 import { browseCatalogue, describeObject, fetchData, findStatistics, germanNumber, getFlatTable, splitCsvLine } from "../src/operations.js";
-import { readZip } from "../src/zip.js";
+import { readZip, zipEntries } from "../src/zip.js";
 import { bodyOf, jsonResponse, makeMockTransport, rawResponse } from "./helpers.js";
 import {
   BAD_LOGIN,
@@ -384,6 +384,25 @@ test("getFlatTable: a download that finds nothing (Status 104 instead of a file)
   assert.equal(result.status, "empty");
   if (result.status !== "empty") return;
   assert.match(result.reason, /selection excluded every value/);
+});
+
+test("getFlatTable unpacks only the file it reads: another entry of the archive is never inflated, however big it says it is", async () => {
+  const archive = zipOf({ "junk.bin": "x".repeat(100), "12411-01-01-4_flat.csv": FFCSV_12411_01_01_4 });
+  // The first central-directory entry (junk.bin) now declares 4 GiB unpacked, and its packed bytes are garbage.
+  const centralOfJunk = archive.length - 22 - (46 + "junk.bin".length) - (46 + "12411-01-01-4_flat.csv".length);
+  archive.writeUInt32LE(0xf0000000, centralOfJunk + 24);
+  archive.fill(0xff, 30 + "junk.bin".length, 30 + "junk.bin".length + 4);
+  const { client } = clientFor(() => rawResponse(archive, "application/zip"));
+  const result = await getFlatTable(client, { code: "12411-01-01-4" });
+  assert.equal(result.status, "ok");
+  if (result.status !== "ok") return;
+  assert.equal(result.file, "12411-01-01-4_flat.csv");
+  assert.equal(result.total, 2);
+  // Listing reads names only; a file is unpacked (and checked against the cap) when read.
+  const entries = zipEntries(archive);
+  assert.deepEqual(entries.map((entry) => entry.name), ["junk.bin", "12411-01-01-4_flat.csv"]);
+  assert.throws(() => entries[0]?.read(), (err: unknown) => err instanceof RegionalstatistikParseError && /more than this client reads/.test(err.message));
+  assert.match(entries[1]?.read().toString("utf8") ?? "", /^statistics_code;/);
 });
 
 test("readZip: an entry larger than the cap, an encrypted entry and something that isn't a ZIP are parse errors", () => {
