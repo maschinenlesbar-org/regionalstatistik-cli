@@ -832,9 +832,14 @@ export async function getFlatTable(client: RegionalstatistikClient, input: FlatT
   let bytes = raw.data;
   if (isZip(raw.data)) {
     // Only the file read is unpacked: the archive's other entries are never inflated.
+    // The flat file (GENESIS names it <code>_flat.csv), else the first CSV; an archive with files
+    // but no CSV is no table at all.
     const entries = zipEntries(raw.data);
-    const entry = entries.find((e) => /\.csv$/i.test(e.name)) ?? entries[0];
-    if (entry === undefined) return { status: "empty", kind, code, searched, reason: "GENESIS sent an empty archive: no file in it." };
+    if (entries.length === 0) return { status: "empty", kind, code, searched, reason: "GENESIS sent an empty archive: no file in it." };
+    const entry = entries.find((e) => /_flat\.csv$/i.test(e.name)) ?? entries.find((e) => /\.csv$/i.test(e.name));
+    if (entry === undefined) {
+      throw new RegionalstatistikParseError(`The download holds no CSV file (${entries.map((e) => e.name).slice(0, 5).join(", ")}): not the flat table asked for.`);
+    }
     file = entry.name;
     bytes = entry.read();
   }
@@ -845,6 +850,15 @@ export async function getFlatTable(client: RegionalstatistikClient, input: FlatT
   const lines = csvLines(text, delimiter);
   if (lines.length === 0) return { status: "empty", kind, code, searched, reason: `The file ${file} GENESIS sent is empty.` };
   const header = lines[0] as string;
+  if (lines.length === 1) {
+    return {
+      status: "empty",
+      kind,
+      code,
+      searched,
+      reason: `The file ${file} GENESIS sent has its header but no rows: the selection excluded every value. Check the region key (a Kreis has 5 digits like 08221, a Gemeinde 8) and the table's regional depth, then loosen the years or class keys.`,
+    };
+  }
   const columns = splitCsvLine(header, delimiter);
   const body = lines.slice(1);
   return {

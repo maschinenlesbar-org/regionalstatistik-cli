@@ -405,6 +405,22 @@ test("getFlatTable unpacks only the file it reads: another entry of the archive 
   assert.match(entries[1]?.read().toString("utf8") ?? "", /^statistics_code;/);
 });
 
+test("getFlatTable: the flat CSV is the file read, an archive without a CSV is an error, and a header without rows is empty with a reason", async () => {
+  const flatOf = async (archive: Buffer) => getFlatTable(clientFor(() => rawResponse(archive, "application/zip")).client, { code: "12411-01-01-4", regionKey: "08221" });
+  await assert.rejects(flatOf(zipOf({ "readme.txt": "hello\n" })), (err: unknown) => err instanceof RegionalstatistikParseError && /no CSV file/.test(err.message) && /readme\.txt/.test(err.message));
+  const two = await flatOf(zipOf({ "a.csv": "x;y\n1;2\n", "12411-01-01-4_flat.csv": FFCSV_12411_01_01_4 }));
+  assert.equal(two.status, "ok");
+  if (two.status !== "ok") return;
+  assert.equal(two.file, "12411-01-01-4_flat.csv");
+  assert.equal(two.total, 2);
+  const header = FFCSV_12411_01_01_4.split("\n")[0] as string;
+  const none = await flatOf(zipOf({ "12411-01-01-4_flat.csv": `${header}\n` }));
+  assert.equal(none.status, "empty");
+  if (none.status !== "empty") return;
+  assert.match(none.reason, /no rows/);
+  assert.match(none.reason, /region key/);
+});
+
 test("readZip: an entry larger than the cap, an encrypted entry and something that isn't a ZIP are parse errors", () => {
   assert.throws(() => readZip(zipOf({ "big.csv": "x".repeat(2000) }), 1000), (err: unknown) => err instanceof RegionalstatistikParseError && /more than this client reads/.test(err.message));
   const encrypted = zipOf({ "a.csv": "a" });
