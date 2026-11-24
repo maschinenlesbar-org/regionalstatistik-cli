@@ -553,7 +553,7 @@ function foundObject(type: FoundObject["type"], item: Record<string, unknown>): 
     const value = text(key);
     return value !== undefined && /^-?\d+$/.test(value.trim()) ? Number(value) : undefined;
   };
-  const found: FoundObject = { type, code: text("Code") ?? "", title: (text("Content") ?? "").replace(/\s*\n\s*/g, " ") };
+  const found: FoundObject = { type, code: text("Code") ?? "", title: oneLine(text("Content") ?? "") };
   const time = text("Time");
   if (time !== undefined) found.time = time;
   const depth = regionalDepthOf(found.title);
@@ -564,10 +564,33 @@ function foundObject(type: FoundObject["type"], item: Record<string, unknown>): 
   return found;
 }
 
-/** The regional depth a Regionaldatenbank title states at its end ("… - regionale Tiefe: Kreise und krfr. Städte"). */
+/**
+ * The regional depth a Regionaldatenbank title states at its end ("… - regionale Tiefe: Kreise und
+ * krfr. Städte"): the rest of the title after the first "regionale Tiefe:", trimmed, on one line.
+ * Found with a search and trim: the old lazy pattern was quadratic in a run of spaces.
+ */
 function regionalDepthOf(title: string): string | undefined {
-  const depth = /regionale Tiefe:\s*(.+?)\s*$/i.exec(title)?.[1];
-  return depth === undefined || depth === "" ? undefined : depth;
+  const at = title.search(/regionale Tiefe:/i);
+  if (at < 0) return undefined;
+  const depth = title.slice(at + "regionale Tiefe:".length).trim();
+  return depth === "" || /[\n\r\u2028\u2029]/.test(depth) ? undefined : depth;
+}
+
+/**
+ * A title on one line: every line break, with the whitespace around it, becomes one space (GENESIS
+ * breaks long titles). One pass over the lines: the old replace pattern (whitespace, a line break,
+ * whitespace) was quadratic in a long run of whitespace without a line break (80 000 spaces: 10 s).
+ */
+function oneLine(text: string): string {
+  if (!text.includes("\n")) return text;
+  const parts = text.split("\n");
+  const last = parts.length - 1;
+  const kept: string[] = [];
+  parts.forEach((part, i) => {
+    const piece = i === 0 ? part.trimEnd() : i === last ? part.trimStart() : part.trim();
+    if (piece !== "" || i === 0 || i === last) kept.push(piece);
+  });
+  return kept.join(" ");
 }
 
 // --- browseCatalogue -----------------------------------------------------------------------
@@ -716,7 +739,7 @@ export async function describeObject(client: RegionalstatistikClient, input: Des
   if (isEmpty(answer) || object === undefined || object === null || typeof object !== "object") {
     return { status: "empty", kind, code, reason: notFoundReason(kind, code), copyright: answer.Copyright };
   }
-  const title = typeof object["Content"] === "string" ? object["Content"].replace(/\s*\n\s*/g, " ") : undefined;
+  const title = typeof object["Content"] === "string" ? oneLine(object["Content"]) : undefined;
   const time = object["Time"];
   const timeSpan =
     time !== null && typeof time === "object" && !Array.isArray(time)
@@ -758,7 +781,7 @@ function dimensionsOf(structure: JsonValue | undefined): Dimension[] {
       const values = typeof node["Values"] === "string" && /^-?\d+$/.test(node["Values"]) ? Number(node["Values"]) : undefined;
       found.set(code, {
         code,
-        title: typeof node["Content"] === "string" ? node["Content"].replace(/\s*\n\s*/g, " ") : "",
+        title: typeof node["Content"] === "string" ? oneLine(node["Content"]) : "",
         ...(role === undefined ? {} : { role }),
         ...(typeof type === "string" && type !== "" ? { type } : {}),
         ...(values === undefined ? {} : { values }),

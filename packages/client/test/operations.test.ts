@@ -271,6 +271,25 @@ test("findStatistics: a decomposed umlaut is sent composed (NFC) and trimmed", a
   assert.equal(bodyOf(upstream.last()).get("term"), "Bevölkerung");
 });
 
+test("titles from long runs of whitespace are put on one line in linear time, the same as before", async () => {
+  const spaces = " ".repeat(60_000); // took seconds through the old patterns, quadratic in the run
+  const items = [
+    { Code: "12411-01-01-4", Content: `Bevölkerung${spaces}x`, Time: "" },
+    { Code: "12411-01-01-5", Content: `Bevölkerung - regionale Tiefe: x${spaces}y`, Time: "" },
+    { Code: "12411-02-03-4", Content: "a \n \n b\n - regionale Tiefe:\n Gemeinden \n", Time: "" },
+  ];
+  const answer = { ...TABLES_12411, List: items };
+  const started = Date.now();
+  const result = await browseCatalogue(clientFor(() => jsonResponse(answer)).client, { selection: "12411*" });
+  assert.ok(Date.now() - started < 1000, `${Date.now() - started} ms`);
+  assert.equal(result.status, "ok");
+  if (result.status !== "ok") return;
+  assert.equal(result.items[0]?.title, `Bevölkerung${spaces}x`);
+  assert.equal(result.items[1]?.regionalDepth, `x${spaces}y`);
+  assert.equal(result.items[2]?.title, "a b - regionale Tiefe: Gemeinden ");
+  assert.equal(result.items[2]?.regionalDepth, "Gemeinden");
+});
+
 test("browseCatalogue: a code pattern lists the tables of a statistic at every depth; complete when under the limit", async () => {
   const { client, upstream } = clientFor(() => jsonResponse(TABLES_12411));
   const result = await browseCatalogue(client, { selection: "12411*" });
