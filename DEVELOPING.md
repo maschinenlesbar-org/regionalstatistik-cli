@@ -810,21 +810,21 @@ host's paths (lowercase `/genesisws/rest/2020`), with the regional dimension add
 `findCredentials` once, at the first tool call that needs the client, and builds the client with
 what it returns. `findCredentials` takes the login from the server's environment
 (`REGIONALSTATISTIK_API_TOKEN`, or `REGIONALSTATISTIK_USERNAME` and `REGIONALSTATISTIK_PASSWORD`),
-else (only when the server runs from its bin, never in a test) from the credentials file through
-the client's `CredentialStore`. Each source is used whole: half a pair, or a half from each place
-is the call's error naming the fix, as in the CLI; a token together with a username or password is
-refused too, where the CLI lets the token win (the server is configured once; one login, never a
-silent pick). A value no header can carry (the library's `credentialProblem`) is an error naming
-where it came from, never the value; passwords are used as given (inner spaces kept). No login is
-an error naming every way to give one, and the next call looks again. Not at start: the
-handshake, the tool list, the image's smoke test and the tests that start the bin need no login.
-One INFO record of `regstat-mcp.config` names the source, never a value; the token, username and
-password are secrets from then on, replaced with `***` in every record the server logs, every
-result and every error message. The server has no option for the login (argv shows in `ps`), and
-the Regionaldatenbank has no guest access to data (the client is built without a login all the
-same, so `api.ts` exports no `CHECK_CLIENT_OPTIONS`: the kit's `config.ts` builds one at start to
-check `--base-url`, so a value the client's constructor refuses is a usage error, exit 2). A login
-it refuses (HTTP 404 with GENESIS code 2, 401 with code 15) is a tool error that says to check the
+else (only when the server runs from its bin, never in a test) from the credentials file through the
+client's `CredentialStore`. Each source is used whole: half a pair, or a half from each place is the
+call's error naming the fix, as in the CLI; a token together with a username or password is refused
+too, where the CLI lets the token win (the server is configured once; one login, never a silent
+pick). A value no header can carry (the library's `credentialProblem`) is an error naming where it
+came from, never the value; passwords are used as given (inner spaces kept). No login is an error
+naming every way to give one, and the next call looks again. Not at start: the handshake, the tool
+list, the image's smoke test and the tests that start the bin need no login. One INFO record of
+`regstat-mcp.config` names the source, never a value; the token, username and password are secrets
+from then on, replaced with `***` in every record the server logs, every result and every error
+message. The server has no option for the login (argv shows in `ps`), and the Regionaldatenbank has
+no guest access to data (the client is built without a login all the same, so `api.ts` exports no
+`CHECK_CLIENT_OPTIONS`: the kit's `config.ts` builds one at start to check `--base-url` and
+`--user-agent`, so a value the client's constructor refuses is a usage error, exit 2). A login it
+refuses (HTTP 404 with GENESIS code 2, 401 with code 15) is a tool error that says to check the
 login and restart, never "not found" (`withHints` in `tools.ts`; the client's `isAuthError` is
 checked first, so the CLI's exit-code rule for wrong credentials, exit 1 and not 4, holds for the
 server too).
