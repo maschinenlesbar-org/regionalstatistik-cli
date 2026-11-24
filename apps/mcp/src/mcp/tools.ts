@@ -83,7 +83,7 @@ const output = (properties: Record<string, JsonSchema>): JsonSchema => ({
     status: { type: "string", enum: ["ok", "empty"], description: "ok: the answer; empty: nothing matched (see reason)." },
     source: { type: "string" },
     licence: { type: "string" },
-    truncated: { type: "boolean", description: "True when the answer holds only part (size cap); continue at nextOffset where given." },
+    truncated: { type: "boolean", description: "True when the answer holds only part (size cap; continue at nextOffset where given), or a text cut at its end (it ends in \"…[cut, N characters in all]\")." },
     nextOffset: { type: "integer", description: "Where the next slice starts." },
     reason: { type: "string" },
     searched: { type: "object" },
