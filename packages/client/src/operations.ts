@@ -497,9 +497,10 @@ export type StatisticsSearch =
       searched: { term: string; category: FindCategory };
       matches: FoundObject[];
       perTypeLimit: number;
-      /** False when a type's list reached `perTypeLimit`: more of that type may exist (raise the limit, or narrow the term). */
+      /** False when a type's list reached `perTypeLimit`, or GENESIS changed a parameter (`statusNote`): more may exist (raise the limit, or narrow the term). */
       complete: boolean;
       copyright: string;
+      statusNote?: StatusNote;
     }
   | { status: "empty"; searched: { term: string; category: FindCategory }; reason: string; copyright: string };
 
@@ -535,7 +536,16 @@ export async function findStatistics(client: RegionalstatistikClient, input: Fin
       copyright: answer.Copyright,
     };
   }
-  return { status: "ok", searched, matches, perTypeLimit: limit, complete, copyright: answer.Copyright };
+  const note = statusNote(answer);
+  return {
+    status: "ok",
+    searched,
+    matches,
+    perTypeLimit: limit,
+    complete: complete && note === undefined,
+    copyright: answer.Copyright,
+    ...(note === undefined ? {} : { statusNote: note }),
+  };
 }
 
 /** A list item as a found object: the title on one line, counts as numbers. */
@@ -580,7 +590,15 @@ export interface BrowseCatalogueInput {
 
 /** The answer of {@link browseCatalogue}. */
 export type CatalogueBrowse =
-  | { status: "ok"; searched: { kind: CatalogueKind; selection: string; searchIn: "code" | "title" }; items: FoundObject[]; complete: boolean; copyright: string }
+  | {
+      status: "ok";
+      searched: { kind: CatalogueKind; selection: string; searchIn: "code" | "title" };
+      items: FoundObject[];
+      /** False when the list reached `limit`, or GENESIS changed a parameter (`statusNote`, a shortened page). */
+      complete: boolean;
+      copyright: string;
+      statusNote?: StatusNote;
+    }
   | { status: "empty"; searched: { kind: CatalogueKind; selection: string; searchIn: "code" | "title" }; reason: string; copyright: string };
 
 const CATALOGUE_TYPES: Record<CatalogueKind, FoundObject["type"]> = {
@@ -595,7 +613,8 @@ const CATALOGUE_TYPES: Record<CatalogueKind, FoundObject["type"]> = {
 /**
  * The objects of one catalogue whose code (or title) matches a pattern, `*` as the wildcard:
  * `12411*` lists every table of statistic 12411. Nothing matched (Status 104) is `empty`.
- * `complete` is false when the list reached `limit` (GENESIS has no paging: ask for more).
+ * `complete` is false when the list reached `limit` (GENESIS has no paging: ask for more) or GENESIS
+ * changed a parameter (its status 22, kept as `statusNote`, may have shortened the page).
  */
 export async function browseCatalogue(client: RegionalstatistikClient, input: BrowseCatalogueInput): Promise<CatalogueBrowse> {
   const kind = input.kind ?? "tables";
@@ -624,7 +643,15 @@ export async function browseCatalogue(client: RegionalstatistikClient, input: Br
       copyright: answer.Copyright,
     };
   }
-  return { status: "ok", searched, items: list.map((item) => foundObject(CATALOGUE_TYPES[kind], item)), complete: list.length < limit, copyright: answer.Copyright };
+  const note = statusNote(answer);
+  return {
+    status: "ok",
+    searched,
+    items: list.map((item) => foundObject(CATALOGUE_TYPES[kind], item)),
+    complete: list.length < limit && note === undefined,
+    copyright: answer.Copyright,
+    ...(note === undefined ? {} : { statusNote: note }),
+  };
 }
 
 // --- describeObject (regionalstatistik-statistics-finder, step 3) -----------------------------------
@@ -664,6 +691,7 @@ export type ObjectDescription =
       /** The metadata as GENESIS sent it. */
       metadata: JsonObject;
       copyright: string;
+      statusNote?: StatusNote;
     }
   | { status: "empty"; kind: MetadataKind; code: string; reason: string; copyright: string };
 
@@ -709,6 +737,7 @@ export async function describeObject(client: RegionalstatistikClient, input: Des
     dimensions: dimensionsOf(object["Structure"]),
     metadata: object,
     copyright: answer.Copyright,
+    ...(statusNote(answer) === undefined ? {} : { statusNote: statusNote(answer) as StatusNote }),
   };
 }
 

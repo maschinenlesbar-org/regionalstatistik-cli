@@ -127,7 +127,9 @@ without one is huge; the error names the tool's own arguments: region key, years
 the data tools, the term or the code pattern and `limit` for a search or a catalogue); this server, like the CLI, doesn't run GENESIS's batch jobs. An HTTP 404 without a GENESIS
 status (a moved path, a proxy) is a tool error saying the API's endpoint wasn't found, never "no
 such table"; nor is an answer whose shape this server doesn't know (a renamed key) ever "nothing
-found": it is a tool error.
+found": it is a tool error. A request GENESIS changed (its status 22, "erfolgreich mit
+Parameteranpassung") keeps GENESIS's note as `statusNote` in every tool's answer, and a list it may
+have shortened is not `complete`.
 
 ## Options
 
