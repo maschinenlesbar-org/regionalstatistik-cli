@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { findCredentials, type HttpRequest } from "../src/mcp/api.js";
 import { listTools } from "../src/mcp/server.js";
-import { INSTRUCTIONS, LICENCE } from "../src/mcp/tools.js";
+import { DEADLINE_HINT, INSTRUCTIONS, LICENCE, SIZE_HINT, TOOLS } from "../src/mcp/tools.js";
 import { PROGRAM } from "../src/mcp/version.js";
 import { connect, noUpstream, recorder } from "./harness.js";
 import { BAD_LOGIN, bodyOf, endpointOf, EMPTY_104, FIND_ALL, FIND_NONE, genesis, jsonResponse, mockGenesis, TEST_TOKEN } from "./helpers.js";
@@ -25,6 +25,22 @@ test("five tools: the use cases first, then the generic ones; descriptions and i
   assert.ok(INSTRUCTIONS.length <= 2000, String(INSTRUCTIONS.length));
   assert.match(LICENCE, /dl-de\/by-2-0/);
   assert.match(LICENCE, /Statistische Ämter des Bundes und der Länder, Regionaldatenbank Deutschland/);
+});
+
+test("the deadline and size advice fit every tool: each argument named is taken by every tool named with it", () => {
+  const schemas = new Map(TOOLS.map((tool) => [tool.name, Object.keys((tool.inputSchema as { properties: Record<string, unknown> }).properties)]));
+  const allArguments = new Set([...schemas.values()].flat());
+  for (const hint of [DEADLINE_HINT, SIZE_HINT]) {
+    // Each clause names tools and the arguments they share; a clause without a tool names none.
+    for (const clause of hint.split(/; |\. /)) {
+      const tools = [...schemas.keys()].filter((name) => new RegExp(`\\b${name}\\b`).test(clause));
+      const named = (clause.match(/\b[a-z]\w*\b/g) ?? []).filter((word) => allArguments.has(word));
+      if (named.length === 0) continue;
+      assert.ok(tools.length > 0, `arguments without their tools: ${clause}`);
+      for (const tool of tools) for (const option of named) assert.ok(schemas.get(tool)?.includes(option), `${tool} takes no ${option}: ${clause}`);
+    }
+  }
+  assert.match(DEADLINE_HINT, /try again shortly/);
 });
 
 test("fetchData: the CSV decoded, German numbers as numbers, region keys as text; source names the request, never the login", async () => {
