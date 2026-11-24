@@ -105,6 +105,9 @@ function selectionParams(selection: DataSelection): { params: DataTableParams; s
     (params as Record<string, unknown>)[key] = value;
     searched[name] = value;
   };
+  if (selection.startYear !== undefined && selection.endYear !== undefined && /^\d{4}$/.test(selection.startYear.trim()) && /^\d{4}$/.test(selection.endYear.trim()) && Number(selection.startYear) > Number(selection.endYear)) {
+    throw new RegionalstatistikValidationError(`Invalid years: startYear ${selection.startYear.trim()} is after endYear ${selection.endYear.trim()}; give the earlier year first.`);
+  }
   set("startyear", "startYear", selection.startYear);
   set("endyear", "endYear", selection.endYear);
   set("timeslices", "timeslices", selection.timeslices);

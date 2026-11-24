@@ -187,6 +187,14 @@ test("fetchData: an empty answer for a code the catalogue lists in other case na
   assert.match(result.reason, /lists 12411BJ001/);
 });
 
+test("fetchData and getFlatTable: a start year after the end year is refused before any request", async () => {
+  const { client, upstream } = clientFor(() => jsonResponse(DATA_12411_01_01_4));
+  await assert.rejects(fetchData(client, { code: "12411-01-01-4", startYear: "2023", endYear: "2015" }), (err: unknown) => err instanceof RegionalstatistikValidationError && /startYear 2023 is after endYear 2015/.test(err.message));
+  await assert.rejects(getFlatTable(client, { code: "12411-01-01-4", startYear: "2023", endYear: "2015" }), RegionalstatistikValidationError);
+  assert.equal(upstream.calls.length, 0);
+  assert.equal((await fetchData(client, { code: "12411-01-01-4", startYear: "2015", endYear: "2015" })).status, "ok");
+});
+
 test("fetchData: a saved result is in no catalogue: an empty one says both reasons, with no second request", async () => {
   const { client, upstream } = clientFor(() => jsonResponse(EMPTY_104("data", "result")));
   const result = await fetchData(client, { kind: "result", code: "MYRESULT" });
