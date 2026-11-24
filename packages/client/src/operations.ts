@@ -358,9 +358,10 @@ export async function fetchData(client: RegionalstatistikClient, input: FetchDat
   if (isEmpty(answer) || typeof content !== "string" || content.trim() === "") {
     return { status: "empty", kind, code, searched, reason: await whyEmpty(client, kind, code, searched), copyright: answer.Copyright };
   }
-  const all = csvLines(content).map((line) => splitCsvLine(line));
+  // Only the page's lines are kept as cells: a 15 MiB table split whole held 200 MiB more.
+  const all = csvLines(content);
   const keyColumns = keyColumnsOf(all, input.regionKey);
-  const lines = all.slice(offset, offset + limit).map((cells) => cells.map((cell, i): Cell => (keyColumns.has(i) ? cell : (germanNumber(cell) ?? cell))));
+  const lines = all.slice(offset, offset + limit).map((line) => splitCsvLine(line).map((cell, i): Cell => (keyColumns.has(i) ? cell : (germanNumber(cell) ?? cell))));
   const symbols: Record<string, string> = {};
   for (const line of lines) for (const cell of line) if (typeof cell === "string" && VALUE_SYMBOLS[cell.trim()] !== undefined) symbols[cell.trim()] = VALUE_SYMBOLS[cell.trim()] as string;
   const title = titleOf(answer.Object);
@@ -387,26 +388,23 @@ export async function fetchData(client: RegionalstatistikClient, input: FetchDat
  * asked for (`regionKey`): the leftmost column whose numbers are all plain digits matching one of
  * them is the key column, so a Länder table for "1*" doesn't give its keys as numbers.
  */
-function keyColumnsOf(rows: readonly string[][], regionKey: string | undefined): Set<number> {
+function keyColumnsOf(lines: readonly string[], regionKey: string | undefined): Set<number> {
   const keyColumns = new Set<number>();
-  for (const cells of rows) cells.forEach((cell, i) => /^0\d+$/.test(cell.trim()) && keyColumns.add(i));
   const asked = regionKeyTest(regionKey);
-  if (asked === undefined) return keyColumns;
-  const width = rows.reduce((most, cells) => Math.max(most, cells.length), 0);
-  for (let i = 0; i < width; i += 1) {
-    let matched = false;
-    let other = false;
-    for (const cells of rows) {
-      const cell = (cells[i] ?? "").trim();
-      if (/^\d{1,12}$/.test(cell) && asked(cell)) matched = true;
-      else if (germanNumber(cell) !== undefined || /^\d+$/.test(cell)) other = true;
-      if (other) break;
-    }
-    if (matched && !other) {
-      keyColumns.add(i);
-      break;
-    }
+  // Per column: a cell matched a key asked for; a cell was another number. One line split at a time.
+  const matched: boolean[] = [];
+  const other: boolean[] = [];
+  for (const line of lines) {
+    splitCsvLine(line).forEach((raw, i) => {
+      const cell = raw.trim();
+      if (/^0\d+$/.test(cell)) keyColumns.add(i);
+      if (asked === undefined || other[i] === true) return;
+      if (/^\d{1,12}$/.test(cell) && asked(cell)) matched[i] = true;
+      else if (germanNumber(cell) !== undefined || /^\d+$/.test(cell)) other[i] = true;
+    });
   }
+  const column = matched.findIndex((hit, i) => hit === true && other[i] !== true);
+  if (column >= 0) keyColumns.add(column);
   return keyColumns;
 }
 
