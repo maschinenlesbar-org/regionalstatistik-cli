@@ -404,7 +404,13 @@ test("the credentials file: where it is, what it refuses, and how it masks", () 
     mkdirSync(join(dir, "real"));
     writeFileSync(join(dir, "real", "credentials"), JSON.stringify({ token: TOKEN }), { mode: 0o600 });
     symlinkSync(join(dir, "real", "credentials"), join(dir, "link"));
-    assert.throws(() => new CredentialStore(join(dir, "link")).get("token"), /not a regular file/);
+    // A link is named as one, with the fix: the file itself in its place, or the login stored again.
+    assert.throws(() => new CredentialStore(join(dir, "link")).get("token"), (err: Error) => {
+      assert.match(err.message, /link is a symbolic link; a credentials file is never read through a link/);
+      assert.match(err.message, /replace the link with the file itself, or remove it and store the login again with `regstat config set token` \(or `username` and `password`\)/);
+      return true;
+    });
+    assert.throws(() => new CredentialStore(join(dir, "real")).get("token"), /real is not a regular file; it cannot be the credentials file/);
     const store = new CredentialStore(join(dir, "fresh", "credentials"));
     store.set("token", TOKEN);
     store.set("password", PASS);

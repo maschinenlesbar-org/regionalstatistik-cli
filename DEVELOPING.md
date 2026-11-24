@@ -405,7 +405,8 @@ config` and dip-bundestag-cli's `dip config`, not part of the library's public s
 `$HOME/.config/regionalstatistik/credentials`): JSON, mode 0600 in a 0700 directory,
 replaced atomically (temp file + rename) by one writer at a time (`set`/`unset` hold
 `credentials.lock`: exclusive create, retried for 2 s, taken over after 30 s); a link, another user's file or one others can
-read is refused with a `RegionalstatistikError` (exit 1) naming `chmod 600`. It reaches
+read is refused with a `RegionalstatistikError` (exit 1) naming the fix (`chmod 600`; for a link, the
+file itself in its place or `regstat config set` again). It reaches
 the CLI through `CliDeps.credentials`, which only `defaultDeps` sets, so a test that
 does not ask for one never reads the user's file. `action()` reads it only for a
 command that sends credentials (not `hello`) and only when **no** flag and no env var

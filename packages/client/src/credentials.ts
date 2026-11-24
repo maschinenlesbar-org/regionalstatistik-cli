@@ -238,6 +238,11 @@ export class CredentialStore {
         { cause: err },
       );
     }
+    if (stats.isSymbolicLink()) {
+      throw new CredentialsFileError(
+        `${this.path} is a symbolic link; a credentials file is never read through a link (it could point anywhere): replace the link with the file itself, or remove it and store the login again with \`regstat config set token\` (or \`username\` and \`password\`).`,
+      );
+    }
     if (!stats.isFile()) throw new CredentialsFileError(`${this.path} is not a regular file; it cannot be the credentials file.`);
     if (process.platform !== "win32") {
       if (typeof process.getuid === "function" && stats.uid !== process.getuid()) {
